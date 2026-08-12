@@ -32,6 +32,7 @@ export type ContributeState = {
   /** "pending" means the charge is accepted but the webhook hasn't landed. */
   status?: "pending" | "idle";
   charged?: string;
+  message?: string;
   error?: string;
 };
 

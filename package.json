@@ -14,7 +14,8 @@
     "db:migrate": "tsx scripts/migrate.mts",
     "db:reset": "node -e \"require('fs').rmSync('.data',{recursive:true,force:true})\" && pnpm db:migrate",
     "db:seed": "node --conditions=react-server --import tsx scripts/seed.mts",
-    "webhook:replay": "tsx scripts/replay-webhook.mts"
+    "webhook:replay": "tsx scripts/replay-webhook.mts",
+    "simulate": "node --conditions=react-server --import tsx scripts/simulate.mts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",

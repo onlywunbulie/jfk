@@ -9,6 +9,10 @@ import { ForbiddenError, assertCan, explain } from "@/lib/auth/policy";
 import { Money } from "@/lib/money";
 import * as groupsService from "@/modules/groups/service";
 import { chargeContribution } from "@/modules/payments/contribute";
+import {
+  simulateContribution,
+  SimulationNotAllowedError,
+} from "@/modules/payments/simulate";
 import type {
   ContributeState,
   CreateGroupState,
@@ -212,6 +216,56 @@ export async function contributeAction(
 
   revalidatePath(`/groups/${groupId}`);
   return { status: "pending", charged: result.charged.format() };
+}
+
+/**
+ * Development-only: put a contribution through the full pipeline without a
+ * live Paystack account. The service refuses to run in production or with a
+ * live key configured.
+ */
+export async function simulateContributionAction(
+  _prev: ContributeState,
+  formData: FormData,
+): Promise<ContributeState> {
+  const user = await requireUser();
+  const groupId = String(formData.get("groupId") ?? "");
+  const fail = formData.get("fail") === "1";
+
+  const membership = await groupsService.getMembership(groupId, user.id);
+  if (!membership || membership.role === null) {
+    return { status: "idle", error: "You're not a member of this group." };
+  }
+
+  try {
+    assertCan("group.contribute", membership);
+
+    const result = await simulateContribution({
+      groupId,
+      userId: user.id,
+      fail,
+    });
+
+    revalidatePath(`/groups/${groupId}`);
+    revalidatePath("/");
+
+    if (fail) {
+      return {
+        status: "idle",
+        error: `Simulated decline — the books are untouched (${result.outcome}).`,
+      };
+    }
+
+    return {
+      status: "idle",
+      error: undefined,
+      message: `Simulated ${result.charged.format()} — the group received ${result.net.format()}.`,
+    };
+  } catch (error) {
+    if (error instanceof SimulationNotAllowedError) {
+      return { status: "idle", error: error.message };
+    }
+    return { status: "idle", error: forbiddenMessage(error) };
+  }
 }
 
 /**

@@ -10,6 +10,8 @@ import { TransactionRow } from "@/components/transaction-row";
 import { previewContribution } from "@/modules/payments/contribute";
 import { listPaymentMethods } from "@/modules/payments/service";
 import { ContributePanel } from "./contribute-panel";
+import { simulationAvailable } from "@/modules/payments/simulate";
+import { SimulatePanel } from "./simulate-panel";
 
 export async function generateMetadata({
   params,
@@ -87,6 +89,8 @@ export default async function GroupPage({
           />
         </Card>
       )}
+
+      {simulationAvailable() && <SimulatePanel groupId={groupId} />}
 
       <Card inset={false}>
         <div className="px-5 pt-5">

@@ -49,6 +49,7 @@ on the sign-in screen. Nothing is emailed.
 | `pnpm db:reset` | Delete local data and re-migrate |
 | `pnpm db:seed` | Two realistic groups, four users, printed session cookies |
 | `pnpm webhook:replay <ref>` | Deliver a signed Paystack webhook to the running dev server, twice, plus a forged one |
+| `pnpm simulate` | Run contributions through the whole payment pipeline with no Paystack account (dev only) |
 
 ## Rules that are not negotiable
 
