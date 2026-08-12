@@ -9,10 +9,19 @@ export default defineConfig({
     include: ["src/**/*.test.ts"],
     exclude: ["**/node_modules/**", "**/.next/**"],
     setupFiles: ["./src/test/setup.ts"],
-    // Each DB-backed suite boots its own WASM Postgres, which is memory-hungry.
-    // Running files in parallel exhausts the heap once a few suites exist, so
-    // trade a little wall-clock for headroom.
+
+    /**
+     * Each DB-backed suite boots its own WASM Postgres, which costs far more
+     * memory than a normal test file. Left to its own devices Vitest runs
+     * several at once and a worker gets OOM-killed.
+     *
+     * One fork at a time, one file at a time: the process exits between files
+     * so the WASM heap is genuinely reclaimed rather than accumulating.
+     */
+    pool: "forks",
+    poolOptions: { forks: { minForks: 1, maxForks: 1 } },
     fileParallelism: false,
+
     testTimeout: 30_000,
     hookTimeout: 60_000,
   },

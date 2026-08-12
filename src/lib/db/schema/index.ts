@@ -5,3 +5,4 @@
  * tables (added in Phase 2) — see BLUEPRINT.md §12.
  */
 export * from "./identity";
+export * from "./groups";

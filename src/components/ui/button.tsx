@@ -1,4 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import Link from "next/link";
+import type { LinkProps } from "next/link";
 import { cn } from "@/lib/cn";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger";
@@ -19,6 +21,33 @@ const SIZES: Record<Size, string> = {
   lg: "h-14 px-6 text-base rounded-2xl",
 };
 
+/**
+ * Shared appearance, so a button and a link that look identical never drift.
+ * Preferred over an `asChild` slot: no runtime cloning, and a link stays a
+ * real anchor for middle-click, keyboard and screen readers.
+ */
+export function buttonClasses({
+  variant = "primary",
+  size = "md",
+  fullWidth = false,
+  className,
+}: {
+  variant?: Variant;
+  size?: Size;
+  fullWidth?: boolean;
+  className?: string;
+} = {}): string {
+  return cn(
+    "inline-flex items-center justify-center gap-2 font-medium",
+    "transition-[background-color,border-color,transform] duration-150",
+    "active:scale-[0.98] disabled:cursor-not-allowed disabled:active:scale-100",
+    VARIANTS[variant],
+    SIZES[size],
+    fullWidth && "w-full",
+    className,
+  );
+}
+
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
   size?: Size;
@@ -28,10 +57,10 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export function Button({
-  variant = "primary",
-  size = "md",
+  variant,
+  size,
   loading = false,
-  fullWidth = false,
+  fullWidth,
   className,
   disabled,
   children,
@@ -41,21 +70,35 @@ export function Button({
     <button
       {...props}
       disabled={disabled || loading}
-      // Announce the busy state rather than only showing a spinner.
       aria-busy={loading || undefined}
-      className={cn(
-        "inline-flex items-center justify-center gap-2 font-medium",
-        "transition-[background-color,border-color,transform] duration-150",
-        "active:scale-[0.98] disabled:cursor-not-allowed disabled:active:scale-100",
-        VARIANTS[variant],
-        SIZES[size],
-        fullWidth && "w-full",
-        className,
-      )}
+      className={buttonClasses({ variant, size, fullWidth, className })}
     >
       {loading && <Spinner />}
       {children}
     </button>
+  );
+}
+
+type ButtonLinkProps = LinkProps & {
+  variant?: Variant;
+  size?: Size;
+  fullWidth?: boolean;
+  className?: string;
+  children: ReactNode;
+};
+
+export function ButtonLink({
+  variant,
+  size,
+  fullWidth,
+  className,
+  children,
+  ...props
+}: ButtonLinkProps) {
+  return (
+    <Link {...props} className={buttonClasses({ variant, size, fullWidth, className })}>
+      {children}
+    </Link>
   );
 }
 

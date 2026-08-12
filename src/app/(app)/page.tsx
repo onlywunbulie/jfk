@@ -1,12 +1,19 @@
 import { requireUser } from "@/lib/auth/session";
-import { Money } from "@/lib/money";
+import { listGroupsForUser } from "@/modules/groups/service";
+import { Money, sumMoney } from "@/lib/money";
 import { Card } from "@/components/ui/card";
 import { Logo } from "@/components/logo";
+import { GroupCard } from "@/components/group-card";
+import { ButtonLink, Button } from "@/components/ui/button";
 import { signOutAction } from "./actions";
-import { Button } from "@/components/ui/button";
 
 export default async function HomePage() {
   const user = await requireUser();
+  const groups = await listGroupsForUser(user.id);
+
+  // Balances arrive with the ledger in Phase 2; until then every group is zero
+  // and the total is honestly zero rather than hidden.
+  const total = sumMoney(groups.map(() => Money.zero()));
 
   return (
     <main className="animate-rise space-y-8">
@@ -24,24 +31,43 @@ export default async function HomePage() {
           {greeting()}, {user.displayName.split(" ")[0]}
         </p>
         <h1 className="mt-1 text-[2.5rem] leading-tight font-semibold tracking-tight">
-          {Money.zero().format({ compact: true })}
+          {total.format({ compact: true })}
         </h1>
-        <p className="text-sm text-ink-faint">across all your groups</p>
+        <p className="text-sm text-ink-faint">
+          {groups.length === 0
+            ? "across all your groups"
+            : `across ${groups.length} group${groups.length === 1 ? "" : "s"}`}
+        </p>
       </section>
 
-      {/* Phase 1 replaces this with real group cards. */}
-      <Card className="border-dashed text-center" inset>
-        <div className="py-6">
-          <h2 className="font-medium text-ink">No groups yet</h2>
-          <p className="mx-auto mt-1.5 max-w-[28ch] text-sm text-ink-muted">
-            A group is where you and your people pool money and decide together.
-          </p>
-          <Button className="mt-5" size="sm" disabled>
-            Create a group
-          </Button>
-          <p className="mt-3 text-xs text-ink-faint">Coming in the next phase</p>
-        </div>
-      </Card>
+      {groups.length === 0 ? (
+        <Card className="border-dashed text-center" inset>
+          <div className="py-6">
+            <h2 className="font-medium text-ink">No groups yet</h2>
+            <p className="mx-auto mt-1.5 max-w-[28ch] text-sm text-ink-muted">
+              A group is where you and your people pool money and decide
+              together.
+            </p>
+            <ButtonLink href="/groups/new" className="mt-5" size="sm">
+              Create a group
+            </ButtonLink>
+          </div>
+        </Card>
+      ) : (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium tracking-wide text-ink-muted uppercase">
+              My groups
+            </h2>
+            <ButtonLink href="/groups/new" size="sm" variant="ghost">
+              New
+            </ButtonLink>
+          </div>
+          {groups.map((group) => (
+            <GroupCard key={group.id} group={group} />
+          ))}
+        </section>
+      )}
     </main>
   );
 }

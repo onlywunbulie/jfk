@@ -42,6 +42,7 @@ on the sign-in screen. Nothing is emailed.
 | `pnpm db:generate` | Generate a migration from schema changes |
 | `pnpm db:migrate` | Apply migrations |
 | `pnpm db:reset` | Delete local data and re-migrate |
+| `pnpm db:seed` | Two realistic groups, four users, printed session cookies |
 
 ## Rules that are not negotiable
 
@@ -85,8 +86,17 @@ These exist because this app moves real money between real friends.
 - Do not open database connections at module load: `next build` imports every
   module to collect page data. `src/lib/db` is lazy behind a proxy for this
   reason.
-- `LayoutProps<"/">` and friends are generated types — run `next typegen`
-  before `tsc` on a clean checkout.
+- `LayoutProps<"/">` and `PageProps<"/groups/[groupId]">` are generated types —
+  run `next typegen` before `tsc` on a clean checkout.
+- Packages that touch the filesystem or native addons must be listed in
+  `serverExternalPackages` (see `next.config.ts`). Bundling PGlite breaks its
+  Node built-in usage with a confusing
+  `ERR_INVALID_ARG_TYPE: Received an instance of URL`.
+- Standalone scripts that import server modules need the `react-server` export
+  condition, or `server-only` throws:
+  `node --conditions=react-server --import tsx scripts/x.mts`.
+- When asserting on SSR HTML, remember React separates adjacent text nodes with
+  `<!-- -->`. `payout #1` renders as `payout #<!-- -->1`.
 
 ## Testing
 

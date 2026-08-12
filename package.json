@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.mts",
-    "db:reset": "node -e \"require('fs').rmSync('.data',{recursive:true,force:true})\" && pnpm db:migrate"
+    "db:reset": "node -e \"require('fs').rmSync('.data',{recursive:true,force:true})\" && pnpm db:migrate",
+    "db:seed": "node --conditions=react-server --import tsx scripts/seed.mts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",

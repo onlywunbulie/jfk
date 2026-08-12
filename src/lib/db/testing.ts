@@ -22,6 +22,28 @@ export async function createTestDb() {
     client,
     /** Raw SQL escape hatch for asserting on constraints and triggers. */
     sql: (query: string) => client.query(query),
+
+    /**
+     * Empty every table between tests.
+     *
+     * TRUNCATE rather than DELETE because `audit_logs` refuses row-level
+     * DELETE — the append-only trigger is doing exactly its job. TRUNCATE
+     * does not fire row triggers, which is the standard escape hatch.
+     *
+     * Production's application role must therefore never hold TRUNCATE on
+     * `audit_logs` or the ledger; only migrations should.
+     */
+    reset: async () => {
+      const result = await client.query<{ tablename: string }>(
+        `select tablename from pg_tables where schemaname = 'public'`,
+      );
+      const tables = result.rows
+        .map((r) => `"${r.tablename}"`)
+        .filter((name) => !name.includes("__drizzle"));
+      if (tables.length === 0) return;
+      await client.query(`TRUNCATE ${tables.join(", ")} CASCADE`);
+    },
+
     close: () => client.close(),
   };
 }

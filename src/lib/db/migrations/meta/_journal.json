@@ -15,6 +15,13 @@
       "when": 1786468397234,
       "tag": "0001_audit_logs_append_only",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786471394337,
+      "tag": "0002_large_warbound",
+      "breakpoints": true
     }
   ]
 }
