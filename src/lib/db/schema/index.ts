@@ -7,3 +7,4 @@
 export * from "./identity";
 export * from "./groups";
 export * from "./ledger";
+export * from "./payments";

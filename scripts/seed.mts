@@ -35,8 +35,6 @@ const PEOPLE = [
   { email: "amaka@jfk.test", displayName: "Amaka Eze" },
 ];
 
-const bigIntMin = (a: bigint, b: bigint) => (a < b ? a : b);
-
 const created: { name: string; email: string; token: string }[] = [];
 
 for (const person of PEOPLE) {
@@ -113,13 +111,10 @@ const { reconcileLedger, describeReport } = await import(
   "../src/modules/ledger/reconcile.js"
 );
 
-const contribution = Money.fromMajor(50_000);
-const fee = Money.fromMinor(
-  bigIntMin(
-    contribution.percentage(150).plus(Money.fromMajor(100)).minor,
-    Money.fromMajor(2_000).minor,
-  ),
-);
+// Gross-up, matching the default group setting: the member's card carries the
+// fee so the treasury receives a clean ₦50,000 per contribution.
+const { planCharge } = await import("../src/modules/payments/fees.js");
+const empirePlan = planCharge(Money.fromMajor(50_000), true);
 
 const empireMembers = [geoffrey, chuka, tunde, amaka];
 for (let cycle = 1; cycle <= 2; cycle += 1) {
@@ -128,8 +123,8 @@ for (let cycle = 1; cycle <= 2; cycle += 1) {
       contributionId: `seed-empire-c${cycle}-m${index}`,
       groupId: empire.groupId,
       memberUserId: member,
-      charged: contribution,
-      fee,
+      charged: empirePlan.charged,
+      fee: empirePlan.fee,
       occurredAt: new Date(Date.now() - (3 - cycle) * 30 * 24 * 60 * 60 * 1000),
     });
   }
@@ -144,13 +139,14 @@ await lockFunds({
 });
 
 // One week of the rotating group.
+const ajoPlan = planCharge(Money.fromMajor(20_000), true);
 for (const [index, member] of [chuka, geoffrey, amaka].entries()) {
   await postContribution({
     contributionId: `seed-ajo-c1-m${index}`,
     groupId: ajo.groupId,
     memberUserId: member,
-    charged: Money.fromMajor(20_000),
-    fee: Money.fromMajor(400),
+    charged: ajoPlan.charged,
+    fee: ajoPlan.fee,
   });
 }
 

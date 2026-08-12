@@ -36,6 +36,13 @@
       "when": 1786501678673,
       "tag": "0004_ledger_invariants",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786505032036,
+      "tag": "0005_brainy_morg",
+      "breakpoints": true
     }
   ]
 }

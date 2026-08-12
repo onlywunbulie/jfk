@@ -5,10 +5,16 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/session";
-import { ForbiddenError, explain } from "@/lib/auth/policy";
+import { ForbiddenError, assertCan, explain } from "@/lib/auth/policy";
 import { Money } from "@/lib/money";
 import * as groupsService from "@/modules/groups/service";
-import type { CreateGroupState, InviteState, MemberActionState } from "./state";
+import { chargeContribution } from "@/modules/payments/contribute";
+import type {
+  ContributeState,
+  CreateGroupState,
+  InviteState,
+  MemberActionState,
+} from "./state";
 
 async function clientIp(): Promise<string | null> {
   const h = await headers();
@@ -170,6 +176,42 @@ export async function leaveGroupAction(formData: FormData): Promise<void> {
 
   revalidatePath("/");
   redirect("/groups");
+}
+
+/**
+ * Charge the member's saved card for their contribution.
+ *
+ * Returns a *pending* state, never a success: the money is not real until the
+ * webhook confirms it, and the UI says so rather than showing a balance that
+ * might evaporate.
+ */
+export async function contributeAction(
+  _prev: ContributeState,
+  formData: FormData,
+): Promise<ContributeState> {
+  const user = await requireUser();
+  const groupId = String(formData.get("groupId") ?? "");
+
+  // Membership is the authorization boundary; a non-member cannot pay in.
+  const membership = await groupsService.getMembership(groupId, user.id);
+  if (!membership || membership.role === null) {
+    return { status: "idle", error: "You're not a member of this group." };
+  }
+
+  try {
+    assertCan("group.contribute", membership);
+  } catch (error) {
+    return { status: "idle", error: forbiddenMessage(error) };
+  }
+
+  const result = await chargeContribution({ groupId, userId: user.id });
+
+  if (!result.ok) {
+    return { status: "idle", error: result.message };
+  }
+
+  revalidatePath(`/groups/${groupId}`);
+  return { status: "pending", charged: result.charged.format() };
 }
 
 /**

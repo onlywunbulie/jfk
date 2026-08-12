@@ -48,6 +48,7 @@ on the sign-in screen. Nothing is emailed.
 | `pnpm db:migrate` | Apply migrations |
 | `pnpm db:reset` | Delete local data and re-migrate |
 | `pnpm db:seed` | Two realistic groups, four users, printed session cookies |
+| `pnpm webhook:replay <ref>` | Deliver a signed Paystack webhook to the running dev server, twice, plus a forged one |
 
 ## Rules that are not negotiable
 
@@ -70,8 +71,14 @@ These exist because this app moves real money between real friends.
    (`0001_audit_logs_append_only.sql`), so it holds regardless of which role
    connects. Corrections are new rows.
 6. **Webhooks are the source of truth for money in**, never the API response.
-   Every provider event is deduplicated on a unique index.
-7. **Authorization lives at the data layer**, via `requireUser()` and (from
+   Starting a charge writes a `payments` row and nothing else; only a verified,
+   deduplicated event posts to the ledger. Signature verification runs on the
+   **raw request body** — parsing and re-serialising changes the whitespace and
+   invalidates the HMAC.
+7. **Fees**: `modules/payments/fees.ts` is the only place Paystack's pricing
+   appears. Gross-up is the default, so the treasury receives round numbers and
+   the member's card carries the awkward kobo.
+8. **Authorization lives at the data layer**, via `requireUser()` and (from
    Phase 1) a `can()` policy module. Layout redirects are convenience, not
    security.
 

@@ -7,6 +7,9 @@ import { groupAvailable, listEntries } from "@/modules/ledger/service";
 import { Card, CardHeader } from "@/components/ui/card";
 import { ButtonLink } from "@/components/ui/button";
 import { TransactionRow } from "@/components/transaction-row";
+import { previewContribution } from "@/modules/payments/contribute";
+import { listPaymentMethods } from "@/modules/payments/service";
+import { ContributePanel } from "./contribute-panel";
 
 export async function generateMetadata({
   params,
@@ -30,7 +33,11 @@ export default async function GroupPage({
   // those must be indistinguishable.
   if (!group) notFound();
 
-  const entries = await listEntries(groupAvailable(groupId), { limit: 20 });
+  const [entries, preview, methods] = await Promise.all([
+    listEntries(groupAvailable(groupId), { limit: 20 }),
+    previewContribution(groupId),
+    listPaymentMethods(user.id),
+  ]);
 
   return (
     <main className="animate-rise space-y-6">
@@ -66,6 +73,20 @@ export default async function GroupPage({
           Locked money can&rsquo;t be spent until the group votes to release it.
         </p>
       </Card>
+
+      {preview && (
+        <Card>
+          <CardHeader title="Contribute" />
+          <ContributePanel
+            groupId={groupId}
+            target={preview.target.format({ compact: true })}
+            charged={preview.charged.format()}
+            fee={preview.fee.format()}
+            grossUp={preview.grossUp}
+            hasCard={methods.length > 0}
+          />
+        </Card>
+      )}
 
       <Card inset={false}>
         <div className="px-5 pt-5">

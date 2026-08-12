@@ -1,15 +1,38 @@
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/auth/session";
+import { listPaymentMethods } from "@/modules/payments/service";
+import { listGroupsForUser } from "@/modules/groups/service";
 import { Card, CardHeader } from "@/components/ui/card";
+import { PaymentMethods } from "./payment-methods";
 
 export const metadata: Metadata = { title: "Wallet" };
 
-export default async function WalletPage() {
+export default async function WalletPage({
+  searchParams,
+}: PageProps<"/wallet">) {
   const user = await requireUser();
+  const { added } = await searchParams;
+
+  const [methods, groups] = await Promise.all([
+    listPaymentMethods(user.id),
+    listGroupsForUser(user.id),
+  ]);
 
   return (
     <main className="animate-rise space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">Wallet</h1>
+
+      {added === "1" && methods.length === 0 && (
+        <p className="rounded-xl border border-pending/30 bg-pending-soft px-4 py-3 text-sm text-pending">
+          Card setup finished, but the confirmation hasn&rsquo;t arrived yet.
+          It usually lands within a few seconds — refresh shortly.
+        </p>
+      )}
+
+      <Card>
+        <CardHeader title="Payment methods" />
+        <PaymentMethods methods={methods} />
+      </Card>
 
       <Card>
         <CardHeader title="Profile" />
@@ -24,15 +47,30 @@ export default async function WalletPage() {
         </dl>
       </Card>
 
-      <Card className="border-dashed text-center">
-        <div className="py-6">
-          <p className="mx-auto max-w-[30ch] text-sm text-ink-muted">
-            Payment methods and your contribution history land here once
-            payments are wired up.
-          </p>
-          <p className="mt-3 text-xs text-ink-faint">Phase 3 — Payments</p>
-        </div>
+      <Card>
+        <CardHeader title="Groups" />
+        {groups.length === 0 ? (
+          <p className="text-sm text-ink-muted">You&rsquo;re not in any group yet.</p>
+        ) : (
+          <dl className="space-y-3 text-sm">
+            {groups.map((group) => (
+              <Row
+                key={group.id}
+                label={group.name}
+                value={`${group.contributionAmount.format({ compact: true })} ${
+                  group.cadence === "MONTHLY" ? "monthly" : "weekly"
+                }`}
+              />
+            ))}
+          </dl>
+        )}
       </Card>
+
+      <p className="text-xs leading-relaxed text-ink-faint">
+        Your personal wallet is a view over your groups and payment methods.
+        JFK doesn&rsquo;t hold a personal balance — money goes straight from your
+        card into the group&rsquo;s treasury.
+      </p>
     </main>
   );
 }
@@ -48,14 +86,8 @@ function Row({
 }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
-      <dt className="text-ink-muted">{label}</dt>
-      <dd
-        className={
-          tone === "pending" ? "text-pending" : "truncate text-ink"
-        }
-      >
-        {value}
-      </dd>
+      <dt className="truncate text-ink-muted">{label}</dt>
+      <dd className={tone === "pending" ? "text-pending" : "text-ink"}>{value}</dd>
     </div>
   );
 }

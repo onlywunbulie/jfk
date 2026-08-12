@@ -17,6 +17,11 @@ export type AuditAction =
   | "member.role_changed"
   | "invite.created"
   | "invite.revoked"
+  | "payment.started"
+  | "payment.settled"
+  | "payment.failed"
+  | "payment_method.added"
+  | "payment_method.removed"
   | "session.created"
   | "session.revoked";
 

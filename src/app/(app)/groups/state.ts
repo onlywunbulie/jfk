@@ -27,3 +27,12 @@ export type MemberActionState = {
 };
 
 export const initialMemberActionState: MemberActionState = {};
+
+export type ContributeState = {
+  /** "pending" means the charge is accepted but the webhook hasn't landed. */
+  status?: "pending" | "idle";
+  charged?: string;
+  error?: string;
+};
+
+export const initialContributeState: ContributeState = { status: "idle" };
