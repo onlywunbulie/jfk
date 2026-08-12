@@ -19,7 +19,7 @@ export default defineConfig({
      * so the WASM heap is genuinely reclaimed rather than accumulating.
      */
     pool: "forks",
-    poolOptions: { forks: { minForks: 1, maxForks: 1 } },
+    maxWorkers: 1,
     fileParallelism: false,
 
     testTimeout: 30_000,

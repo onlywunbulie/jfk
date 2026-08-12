@@ -24,6 +24,15 @@ export async function createTestDb() {
     sql: (query: string) => client.query(query),
 
     /**
+     * Multi-statement SQL, including explicit BEGIN/COMMIT.
+     *
+     * `query` uses a prepared statement and rejects more than one command, so
+     * anything testing deferred constraints — which only fire at COMMIT — has
+     * to go through here.
+     */
+    exec: (script: string) => client.exec(script),
+
+    /**
      * Empty every table between tests.
      *
      * TRUNCATE rather than DELETE because `audit_logs` refuses row-level

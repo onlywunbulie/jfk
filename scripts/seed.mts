@@ -35,6 +35,8 @@ const PEOPLE = [
   { email: "amaka@jfk.test", displayName: "Amaka Eze" },
 ];
 
+const bigIntMin = (a: bigint, b: bigint) => (a < b ? a : b);
+
 const created: { name: string; email: string; token: string }[] = [];
 
 for (const person of PEOPLE) {
@@ -102,9 +104,66 @@ for (const member of [geoffrey, amaka]) {
   if (invite.ok) await acceptInvite(invite.code, member);
 }
 
+// Two months of contributions into JFK Empire, so the ledger has real history.
+// Paystack's local-card fee: 1.5% + ₦100, capped at ₦2,000.
+const { postContribution, lockFunds } = await import(
+  "../src/modules/ledger/operations.js"
+);
+const { reconcileLedger, describeReport } = await import(
+  "../src/modules/ledger/reconcile.js"
+);
+
+const contribution = Money.fromMajor(50_000);
+const fee = Money.fromMinor(
+  bigIntMin(
+    contribution.percentage(150).plus(Money.fromMajor(100)).minor,
+    Money.fromMajor(2_000).minor,
+  ),
+);
+
+const empireMembers = [geoffrey, chuka, tunde, amaka];
+for (let cycle = 1; cycle <= 2; cycle += 1) {
+  for (const [index, member] of empireMembers.entries()) {
+    await postContribution({
+      contributionId: `seed-empire-c${cycle}-m${index}`,
+      groupId: empire.groupId,
+      memberUserId: member,
+      charged: contribution,
+      fee,
+      occurredAt: new Date(Date.now() - (3 - cycle) * 30 * 24 * 60 * 60 * 1000),
+    });
+  }
+}
+
+// Lock most of it, the way a treasury group holding for a target would.
+await lockFunds({
+  groupId: empire.groupId,
+  amount: Money.fromMajor(300_000),
+  lockId: "seed-empire-lock-1",
+  reason: "Locked until the group votes to release",
+});
+
+// One week of the rotating group.
+for (const [index, member] of [chuka, geoffrey, amaka].entries()) {
+  await postContribution({
+    contributionId: `seed-ajo-c1-m${index}`,
+    groupId: ajo.groupId,
+    memberUserId: member,
+    charged: Money.fromMajor(20_000),
+    fee: Money.fromMajor(400),
+  });
+}
+
+const report = await reconcileLedger();
+if (!report.clean) {
+  console.error(describeReport(report));
+  process.exit(1);
+}
+
 console.log("\n✓ Seeded 2 groups and 4 users\n");
 console.log("  JFK Empire  (treasury, ₦50,000/month, 4 members)");
-console.log("  Family Ajo  (rotating, ₦20,000/week, 3 members)\n");
+console.log("  Family Ajo  (rotating, ₦20,000/week, 3 members)");
+console.log(`\n✓ ${describeReport(report)}\n`);
 console.log("Sign in as anyone by setting this cookie in your browser:\n");
 for (const person of created) {
   console.log(`  ${person.name.padEnd(15)} jfk_session=${person.token}`);

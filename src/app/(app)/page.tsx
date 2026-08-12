@@ -1,6 +1,6 @@
 import { requireUser } from "@/lib/auth/session";
 import { listGroupsForUser } from "@/modules/groups/service";
-import { Money, sumMoney } from "@/lib/money";
+import { sumMoney } from "@/lib/money";
 import { Card } from "@/components/ui/card";
 import { Logo } from "@/components/logo";
 import { GroupCard } from "@/components/group-card";
@@ -11,9 +11,7 @@ export default async function HomePage() {
   const user = await requireUser();
   const groups = await listGroupsForUser(user.id);
 
-  // Balances arrive with the ledger in Phase 2; until then every group is zero
-  // and the total is honestly zero rather than hidden.
-  const total = sumMoney(groups.map(() => Money.zero()));
+  const total = sumMoney(groups.map((group) => group.balance.total));
 
   return (
     <main className="animate-rise space-y-8">

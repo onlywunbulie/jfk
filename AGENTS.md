@@ -27,6 +27,11 @@ No database to install or start. `DATABASE_URL=file:./.data/jfk` runs **PGlite**
 — real Postgres compiled to WASM, in-process. Production points the same
 variable at a `postgresql://` server and `src/lib/db` switches drivers.
 
+> **PGlite is single-process.** Only one thing may hold `.data/` at a time, so
+> stop `pnpm dev` before running `db:migrate`, `db:reset` or `db:seed`. Running
+> both gives an out-of-memory crash rather than a clear error. This restriction
+> disappears the moment `DATABASE_URL` points at a real server.
+
 With no `RESEND_API_KEY`, sign-in codes print to the dev terminal and are shown
 on the sign-in screen. Nothing is emailed.
 
@@ -52,8 +57,13 @@ These exist because this app moves real money between real friends.
    Never a float, never a `number` for an amount. Division must state where the
    remainder went (`split`), and amounts of different currencies never combine.
 2. **Balances are derived, never stored as a mutable field.** They come from
-   summing ledger entries. (Ledger lands in Phase 2.)
-3. **Only `modules/ledger` may write to `ledger_*` tables.**
+   summing ledger entries. `account_balances` is only a cache, which the
+   nightly reconciliation re-derives and alarms on if it has drifted.
+3. **Only `modules/ledger` may write to `ledger_*` tables.** Everything else
+   calls `operations.ts`, which names movements in domain terms ("a
+   contribution happened"), never in debits and credits. Postgres enforces
+   the rest: entries are append-only, every transaction must balance at
+   COMMIT, and no group account may go negative.
 4. **No fund release without an approved proposal** — enforced by a `NOT NULL`
    foreign key, not by a code check.
 5. **`audit_logs` is append-only** — enforced by a Postgres trigger

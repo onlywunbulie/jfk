@@ -3,9 +3,10 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/auth/session";
 import { getGroupDetail } from "@/modules/groups/service";
-import { Money } from "@/lib/money";
+import { groupAvailable, listEntries } from "@/modules/ledger/service";
 import { Card, CardHeader } from "@/components/ui/card";
 import { ButtonLink } from "@/components/ui/button";
+import { TransactionRow } from "@/components/transaction-row";
 
 export async function generateMetadata({
   params,
@@ -29,6 +30,8 @@ export default async function GroupPage({
   // those must be indistinguishable.
   if (!group) notFound();
 
+  const entries = await listEntries(groupAvailable(groupId), { limit: 20 });
+
   return (
     <main className="animate-rise space-y-6">
       <div>
@@ -46,20 +49,39 @@ export default async function GroupPage({
         )}
       </div>
 
-      {/* Balance is zero until the ledger arrives in Phase 2. */}
       <Card raised>
         <p className="text-sm text-ink-muted">Group balance</p>
         <p className="mt-1 text-[2.5rem] leading-tight font-semibold tracking-tight">
-          {Money.zero().format({ compact: true })}
+          {group.balance.total.format({ compact: true })}
         </p>
-        <div className="mt-4 flex gap-2 text-xs">
+        <div className="mt-4 flex flex-wrap gap-2 text-xs">
           <span className="rounded-full bg-inflow-soft px-2.5 py-1 text-inflow">
-            {Money.zero().format({ compact: true })} available
+            {group.balance.available.format({ compact: true })} available
           </span>
           <span className="rounded-full bg-locked-soft px-2.5 py-1 text-locked">
-            {Money.zero().format({ compact: true })} locked
+            {group.balance.locked.format({ compact: true })} locked
           </span>
         </div>
+        <p className="mt-3 text-xs leading-relaxed text-ink-faint">
+          Locked money can&rsquo;t be spent until the group votes to release it.
+        </p>
+      </Card>
+
+      <Card inset={false}>
+        <div className="px-5 pt-5">
+          <CardHeader title="Activity" />
+        </div>
+        {entries.length === 0 ? (
+          <p className="px-5 pb-5 text-sm text-ink-muted">
+            Nothing yet. Contributions will show up here.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {entries.map((entry) => (
+              <TransactionRow key={entry.transactionId} entry={entry} />
+            ))}
+          </ul>
+        )}
       </Card>
 
       <Card>

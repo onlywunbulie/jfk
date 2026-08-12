@@ -18,6 +18,11 @@ import { randomToken } from "@/lib/ids";
 import { Money } from "@/lib/money";
 import { assertCan, type PolicyContext } from "@/lib/auth/policy";
 import { recordAudit } from "@/modules/audit/service";
+import {
+  getBalancesForGroups,
+  getGroupBalances,
+  type GroupBalances,
+} from "@/modules/ledger/service";
 
 // ---------------------------------------------------------------------------
 // Membership context — every authorization decision starts here
@@ -624,6 +629,8 @@ export interface GroupSummary {
   contributionAmount: Money;
   cadence: Cadence;
   status: "ACTIVE" | "DISSOLVING" | "DISSOLVED";
+  /** Live from the ledger. Zero for a group that has never received money. */
+  balance: GroupBalances;
 }
 
 /** Every group the user actively belongs to, for the home screen. */
@@ -654,10 +661,18 @@ export async function listGroupsForUser(userId: string): Promise<GroupSummary[]>
     )
     .orderBy(asc(groups.createdAt));
 
+  // One balance query for all of them rather than one per card.
+  const balances = await getBalancesForGroups(rows.map((r) => r.id));
+
   return rows.map((row) => ({
     ...row,
     memberCount: Number(row.memberCount),
     contributionAmount: Money.fromMinor(row.contributionAmount),
+    balance: balances.get(row.id) ?? {
+      available: Money.zero(),
+      locked: Money.zero(),
+      total: Money.zero(),
+    },
   }));
 }
 
@@ -751,6 +766,7 @@ export async function getGroupDetail(
     role: membership.role,
     memberCount: membership.activeMemberCount,
     contributionAmount: Money.fromMinor(row.contributionAmount),
+    balance: await getGroupBalances(groupId),
     governance,
   };
 }

@@ -1,14 +1,9 @@
 import Link from "next/link";
 import type { GroupSummary } from "@/modules/groups/service";
-import { Money } from "@/lib/money";
 
 const CADENCE_LABEL = { WEEKLY: "weekly", MONTHLY: "monthly" } as const;
 
-/**
- * A group at a glance. The balance is the hero; everything else is context.
- * Balance is zero until the ledger lands in Phase 2 — shown rather than hidden
- * so the shape of the card is honest from the start.
- */
+/** A group at a glance. The balance is the hero; everything else is context. */
 export function GroupCard({ group }: { group: GroupSummary }) {
   return (
     <Link
@@ -31,9 +26,13 @@ export function GroupCard({ group }: { group: GroupSummary }) {
       <div className="mt-4 flex items-end justify-between gap-3">
         <div>
           <p className="text-2xl font-semibold tracking-tight text-ink">
-            {Money.zero().format({ compact: true })}
+            {group.balance.total.format({ compact: true })}
           </p>
-          <p className="text-xs text-ink-faint">group balance</p>
+          <p className="text-xs text-ink-faint">
+            {group.balance.locked.isZero()
+              ? "group balance"
+              : `${group.balance.locked.format({ compact: true })} locked`}
+          </p>
         </div>
         <p className="text-right text-sm text-ink-muted">
           {group.contributionAmount.format({ compact: true })}

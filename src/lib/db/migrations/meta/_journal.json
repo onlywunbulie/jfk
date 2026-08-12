@@ -22,6 +22,20 @@
       "when": 1786471394337,
       "tag": "0002_large_warbound",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786501666255,
+      "tag": "0003_material_black_cat",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786501678673,
+      "tag": "0004_ledger_invariants",
+      "breakpoints": true
     }
   ]
 }
