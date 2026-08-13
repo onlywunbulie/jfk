@@ -12,6 +12,8 @@ import { listPaymentMethods } from "@/modules/payments/service";
 import { ContributePanel } from "./contribute-panel";
 import { simulationAvailable } from "@/modules/payments/simulate";
 import { SimulatePanel } from "./simulate-panel";
+import { getArrears, getCurrentCycle } from "@/modules/contributions/service";
+import { CycleCard, NoCycleYet } from "@/components/cycle-card";
 
 export async function generateMetadata({
   params,
@@ -35,10 +37,12 @@ export default async function GroupPage({
   // those must be indistinguishable.
   if (!group) notFound();
 
-  const [entries, preview, methods] = await Promise.all([
+  const [entries, preview, methods, cycle, arrears] = await Promise.all([
     listEntries(groupAvailable(groupId), { limit: 20 }),
     previewContribution(groupId),
     listPaymentMethods(user.id),
+    getCurrentCycle(groupId, user.id),
+    getArrears(groupId),
   ]);
 
   return (
@@ -75,6 +79,36 @@ export default async function GroupPage({
           Locked money can&rsquo;t be spent until the group votes to release it.
         </p>
       </Card>
+
+      {cycle ? (
+        <CycleCard cycle={cycle} />
+      ) : (
+        <NoCycleYet amount={group.contributionAmount} />
+      )}
+
+      {arrears.length > 0 && (
+        <Card>
+          <CardHeader title="Behind" />
+          <ul className="space-y-2.5 text-sm">
+            {arrears.map((row) => (
+              <li
+                key={row.userId}
+                className="flex items-baseline justify-between gap-4"
+              >
+                <span className="truncate text-ink">{row.displayName}</span>
+                <span className="shrink-0 text-ink-muted">
+                  {row.missedCount} missed ·{" "}
+                  {row.totalOwed.format({ compact: true })}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-4 text-xs leading-relaxed text-ink-faint">
+            Missed contributions stay on the record. How the group handles them
+            is the group&rsquo;s call — JFK doesn&rsquo;t apply penalties.
+          </p>
+        </Card>
+      )}
 
       {preview && (
         <Card>

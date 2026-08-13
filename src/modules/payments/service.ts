@@ -2,12 +2,14 @@ import "server-only";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db, type Transaction } from "@/lib/db";
 import {
+  contributions,
   paymentMethods,
   payments,
   webhookEvents,
   users,
   type PaymentPurpose,
 } from "@/lib/db/schema";
+import { classifyDecline, nextRetryAt } from "@/modules/contributions/retry";
 import { Money } from "@/lib/money";
 import { postContribution } from "@/modules/ledger/operations";
 import { recordAudit } from "@/modules/audit/service";
@@ -232,6 +234,23 @@ async function applyChargeSuccess(
         tx,
       );
       ledgerTransactionId = posting.transactionId;
+
+      // Close the loop on the obligation this payment was collecting, if the
+      // collection job started it. Same transaction as the ledger posting, so
+      // a contribution can never read PAID without the money behind it.
+      const obligationId = contributionIdFrom(payment.raw);
+      if (obligationId) {
+        await tx
+          .update(contributions)
+          .set({
+            status: "PAID",
+            paidAt: new Date(),
+            paymentId: payment.id,
+            nextRetryAt: null,
+            lastFailureReason: null,
+          })
+          .where(eq(contributions.id, obligationId));
+      }
     }
     // A CARD_TOKENIZATION charge is refunded by Paystack immediately and never
     // belongs to a group, so it is deliberately not posted to the ledger.
@@ -273,19 +292,63 @@ async function applyChargeFailure(
     return { outcome: "ignored", eventId: event.eventId, reason: "no reference" };
   }
 
-  await db
-    .update(payments)
-    .set({
-      status: "FAILED",
-      providerRef: event.providerRef,
-      failureReason: event.failureReason ?? "charge failed",
-      raw: event.raw as object,
-    })
-    .where(
-      and(eq(payments.reference, event.reference), eq(payments.status, "INITIATED")),
-    );
+  const reason = event.failureReason ?? "charge failed";
 
-  return { outcome: "processed", eventId: event.eventId };
+  return db.transaction(async (tx) => {
+    const [payment] = await tx
+      .update(payments)
+      .set({
+        status: "FAILED",
+        providerRef: event.providerRef,
+        failureReason: reason,
+        raw: event.raw as object,
+      })
+      .where(
+        and(
+          eq(payments.reference, event.reference!),
+          eq(payments.status, "INITIATED"),
+        ),
+      )
+      .returning({ id: payments.id, raw: payments.raw });
+
+    // Release the obligation from PROCESSING so the retry ladder can pick it
+    // up. Left as-is it would sit in limbo, never retried and never missed.
+    const obligationId = payment ? contributionIdFrom(payment.raw) : null;
+    if (obligationId) {
+      const kind = classifyDecline(reason);
+      const [current] = await tx
+        .select({ attemptCount: contributions.attemptCount })
+        .from(contributions)
+        .where(eq(contributions.id, obligationId))
+        .limit(1);
+
+      await tx
+        .update(contributions)
+        .set({
+          status: "FAILED",
+          lastFailureReason: reason,
+          nextRetryAt:
+            kind === "soft" ? nextRetryAt(current?.attemptCount ?? 1) : null,
+        })
+        .where(eq(contributions.id, obligationId));
+    }
+
+    return { outcome: "processed" as const, eventId: event.eventId };
+  });
+}
+
+/**
+ * Pull the obligation id out of a payment's stored metadata.
+ *
+ * The collection job puts it there when it starts the charge. A manual or
+ * simulated payment has none, which is why this is optional rather than
+ * required — those credit the treasury without settling a scheduled
+ * obligation.
+ */
+function contributionIdFrom(raw: unknown): string | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = (raw as Record<string, unknown>).contributionId;
+  return typeof value === "string" ? value : null;
 }
 
 /**

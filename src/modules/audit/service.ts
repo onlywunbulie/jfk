@@ -22,6 +22,11 @@ export type AuditAction =
   | "payment.failed"
   | "payment_method.added"
   | "payment_method.removed"
+  | "cycle.opened"
+  | "cycle.closed"
+  | "contribution.paid"
+  | "contribution.missed"
+  | "contribution.waived"
   | "session.created"
   | "session.revoked";
 

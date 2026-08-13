@@ -150,6 +150,29 @@ for (const [index, member] of [chuka, geoffrey, amaka].entries()) {
   });
 }
 
+// Open a live cycle for each group so the contribution grid has something to
+// show. Everyone in JFK Empire has paid except one, so both states are visible.
+const { openCycleFor } = await import("../src/modules/contributions/service.js");
+const { contributions } = await import("../src/lib/db/schema/index.js");
+
+const empireCycle = await openCycleFor(empire.groupId);
+if (empireCycle) {
+  const owed = await db
+    .select({ id: contributions.id })
+    .from(contributions)
+    .where(eq(contributions.cycleId, empireCycle.cycleId));
+
+  // All but the last are paid; the straggler shows the "Due" state.
+  for (const row of owed.slice(0, -1)) {
+    await db
+      .update(contributions)
+      .set({ status: "PAID", paidAt: new Date() })
+      .where(eq(contributions.id, row.id));
+  }
+}
+
+await openCycleFor(ajo.groupId);
+
 const report = await reconcileLedger();
 if (!report.clean) {
   console.error(describeReport(report));

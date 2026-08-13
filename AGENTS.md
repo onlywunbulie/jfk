@@ -50,6 +50,7 @@ on the sign-in screen. Nothing is emailed.
 | `pnpm db:seed` | Two realistic groups, four users, printed session cookies |
 | `pnpm webhook:replay <ref>` | Deliver a signed Paystack webhook to the running dev server, twice, plus a forged one |
 | `pnpm simulate` | Run contributions through the whole payment pipeline with no Paystack account (dev only) |
+| `pnpm jobs list|tick|run <name>` | Scheduled jobs; `--at 2026-09-02` fast-forwards the clock |
 
 ## Rules that are not negotiable
 
