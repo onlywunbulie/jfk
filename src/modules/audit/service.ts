@@ -27,6 +27,13 @@ export type AuditAction =
   | "contribution.paid"
   | "contribution.missed"
   | "contribution.waived"
+  | "proposal.created"
+  | "proposal.approved"
+  | "proposal.rejected"
+  | "proposal.executed"
+  | "vote.cast"
+  | "funds.released"
+  | "funds.locked"
   | "session.created"
   | "session.revoked";
 

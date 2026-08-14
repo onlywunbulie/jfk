@@ -12,6 +12,10 @@ import {
   findRetryableContributions,
 } from "@/modules/contributions/collect";
 import { reconcileLedger, describeReport } from "@/modules/ledger/reconcile";
+import {
+  evaluateProposal,
+  findProposalsToClose,
+} from "@/modules/governance/service";
 import { dayKey, hourKey, type JobDefinition } from "./runner";
 
 /**
@@ -180,11 +184,41 @@ export const reconcile: JobDefinition = {
   },
 };
 
+/**
+ * Settle proposals whose voting window has closed.
+ *
+ * Runs often, because a proposal that has already been decided but still reads
+ * "voting" is confusing, and because an approved proposal reserves funds — the
+ * sooner that happens, the sooner the group knows what it can still spend.
+ */
+export const closeProposals: JobDefinition = {
+  name: "close-proposals",
+  description: "Settle proposals whose voting deadline has passed",
+  key: (ctx) => `close-proposals:${hourKey(ctx.now)}`,
+  async run(ctx) {
+    const due = await findProposalsToClose(ctx.now);
+    const outcomes = { approved: 0, rejected: 0, stillOpen: 0 };
+
+    for (const proposal of due) {
+      const outcome = await evaluateProposal(proposal.id, ctx.now);
+      if (outcome.decision === "approved") outcomes.approved++;
+      else if (outcome.decision === "rejected") outcomes.rejected++;
+      else outcomes.stillOpen++;
+    }
+
+    return {
+      summary: `Settled ${due.length}: ${outcomes.approved} approved, ${outcomes.rejected} rejected`,
+      details: outcomes,
+    };
+  },
+};
+
 export const ALL_JOBS: JobDefinition[] = [
   openCycles,
   collectContributions,
   retryFailedCharges,
   closeCycles,
+  closeProposals,
   reconcile,
 ];
 

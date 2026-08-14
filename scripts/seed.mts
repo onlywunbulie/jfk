@@ -130,10 +130,12 @@ for (let cycle = 1; cycle <= 2; cycle += 1) {
   }
 }
 
-// Lock most of it, the way a treasury group holding for a target would.
+// Lock most of it, the way a treasury group holding for a target would —
+// leaving enough available that the seeded proposal below can actually be
+// funded. Lock too much and the proposal is rejected before anyone votes.
 await lockFunds({
   groupId: empire.groupId,
-  amount: Money.fromMajor(300_000),
+  amount: Money.fromMajor(250_000),
   lockId: "seed-empire-lock-1",
   reason: "Locked until the group votes to release",
 });
@@ -172,6 +174,39 @@ if (empireCycle) {
 }
 
 await openCycleFor(ajo.groupId);
+
+// A live proposal mid-vote, so the governance screens have something real:
+// two votes in, one more needed to pass.
+const { createProposal, castVote } = await import(
+  "../src/modules/governance/service.js"
+);
+
+const proposal = await createProposal(geoffrey, {
+  groupId: empire.groupId,
+  title: "Buy a generator for the office",
+  reason:
+    "We lose power three days most weeks and we're already splitting the cost " +
+    "of a shared one. This buys ours outright — Ade's Electricals quoted " +
+    "₦120,000 for the 5.5kVA including installation.",
+  amount: Money.fromMajor(120_000),
+  destination: "Ade's Electricals",
+  voteDays: 5,
+});
+
+// Fail loudly. Silently skipping leaves the governance screens empty and it
+// took a confused debugging session to notice.
+if (!proposal.ok) {
+  console.error(`Could not seed the proposal: ${proposal.message}`);
+  process.exit(1);
+}
+
+await castVote(proposal.proposalId, geoffrey, "YES", "Long overdue.");
+await castVote(
+  proposal.proposalId,
+  chuka,
+  "NO",
+  "Rather we waited for the December target.",
+);
 
 const report = await reconcileLedger();
 if (!report.clean) {

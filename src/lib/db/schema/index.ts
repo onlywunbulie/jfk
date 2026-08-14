@@ -9,3 +9,4 @@ export * from "./groups";
 export * from "./ledger";
 export * from "./payments";
 export * from "./contributions";
+export * from "./governance";

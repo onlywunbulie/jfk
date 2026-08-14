@@ -14,6 +14,7 @@ import { simulationAvailable } from "@/modules/payments/simulate";
 import { SimulatePanel } from "./simulate-panel";
 import { getArrears, getCurrentCycle } from "@/modules/contributions/service";
 import { CycleCard, NoCycleYet } from "@/components/cycle-card";
+import { listProposals } from "@/modules/governance/service";
 
 export async function generateMetadata({
   params,
@@ -37,13 +38,16 @@ export default async function GroupPage({
   // those must be indistinguishable.
   if (!group) notFound();
 
-  const [entries, preview, methods, cycle, arrears] = await Promise.all([
+  const [entries, preview, methods, cycle, arrears, proposalList] = await Promise.all([
     listEntries(groupAvailable(groupId), { limit: 20 }),
     previewContribution(groupId),
     listPaymentMethods(user.id),
     getCurrentCycle(groupId, user.id),
     getArrears(groupId),
+    listProposals(groupId, user.id),
   ]);
+
+  const openProposals = (proposalList ?? []).filter((p) => p.status === "OPEN").length;
 
   return (
     <main className="animate-rise space-y-6">
@@ -78,6 +82,28 @@ export default async function GroupPage({
         <p className="mt-3 text-xs leading-relaxed text-ink-faint">
           Locked money can&rsquo;t be spent until the group votes to release it.
         </p>
+      </Card>
+
+      <Card inset={false}>
+        <div className="flex items-center justify-between gap-3 p-5">
+          <div className="min-w-0">
+            <h2 className="text-sm font-medium tracking-wide text-ink-muted uppercase">
+              Proposals
+            </h2>
+            <p className="mt-1 text-ink">
+              {openProposals === 0
+                ? "Nothing to vote on"
+                : `${openProposals} waiting on the group`}
+            </p>
+          </div>
+          <ButtonLink
+            href={`/groups/${groupId}/proposals`}
+            size="sm"
+            variant={openProposals > 0 ? "primary" : "secondary"}
+          >
+            {openProposals > 0 ? "Vote" : "View"}
+          </ButtonLink>
+        </div>
       </Card>
 
       {cycle ? (

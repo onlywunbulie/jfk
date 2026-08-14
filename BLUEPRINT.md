@@ -1,5 +1,26 @@
 # JFK — Build Plan
 
+> ## ⚠️ Scope changed on 13 August 2026
+>
+> This plan was written for an app that would hold real money for real friends.
+> **It won't.** JFK is a portfolio project: built to be demonstrated, never
+> operated. No live payment keys, no business registration, no real naira.
+>
+> **Read with that in mind:**
+>
+> | Section | Still true? |
+> |---|---|
+> | §7 Database schema, §8 Financial architecture, §9 Governance, §12 Backend, §17 Testing | **Yes** — these are what got built and what the project is judged on |
+> | §10 Payment architecture | Yes, but test mode only. The Paystack adapter is real; it is never pointed at live keys |
+> | §21 Risks | Mostly moot. The custody risk was the big one and it no longer exists |
+> | §11 Crypto, §19 Deployment (multi-service), §22 Open decisions | Largely hypothetical now. See [HANDOFF.md](./HANDOFF.md) §7–§8 for the current plan |
+>
+> The remaining roadmap is **voting → simulated payouts → polish → deploy →
+> README**. Chat and push notifications are cut.
+>
+> [HANDOFF.md](./HANDOFF.md) is the live document. This one is the original
+> reasoning, kept because the architectural arguments still hold.
+
 ## Context
 
 JFK digitizes the Nigerian **Ajo/Esusu** contribution culture for a private circle of friends: a group pools money on a schedule, the money is locked, and it only leaves the pool when the group's own governance rules say so. The guiding principle is **nobody can unilaterally take group money — not even an admin.**
