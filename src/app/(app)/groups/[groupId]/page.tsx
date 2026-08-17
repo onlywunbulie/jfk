@@ -14,6 +14,7 @@ import { simulationAvailable } from "@/modules/payments/simulate";
 import { SimulatePanel } from "./simulate-panel";
 import { getArrears, getCurrentCycle } from "@/modules/contributions/service";
 import { CycleCard, NoCycleYet } from "@/components/cycle-card";
+import { StatRow, StatTile } from "@/components/ui/stat-tile";
 import { listProposals } from "@/modules/governance/service";
 
 export async function generateMetadata({
@@ -51,66 +52,106 @@ export default async function GroupPage({
 
   return (
     <main className="animate-rise space-y-6">
-      <div>
+      {/* On mobile the sidebar is gone, so the group has to name itself here. */}
+      <div className="lg:hidden">
         <Link
           href="/groups"
           className="text-sm text-ink-muted transition-colors hover:text-ink"
         >
           ← Groups
         </Link>
-        <h1 className="mt-3 text-2xl font-semibold tracking-tight">
-          {group.name}
-        </h1>
-        {group.description && (
-          <p className="mt-1.5 text-sm text-ink-muted">{group.description}</p>
-        )}
       </div>
 
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-tight">{group.name}</h1>
+          {group.description && (
+            <p className="mt-1.5 max-w-prose text-sm text-ink-muted">
+              {group.description}
+            </p>
+          )}
+        </div>
+
+        {/* The three things you actually come here to do. */}
+        <div className="flex flex-wrap gap-2">
+          <ButtonLink href={`/groups/${groupId}/proposals/new`} size="sm">
+            Propose a spend
+          </ButtonLink>
+          <ButtonLink
+            href={`/groups/${groupId}/proposals`}
+            size="sm"
+            variant="secondary"
+          >
+            {openProposals > 0 ? `Vote · ${openProposals}` : "Proposals"}
+          </ButtonLink>
+          <ButtonLink
+            href={`/groups/${groupId}/members`}
+            size="sm"
+            variant="secondary"
+          >
+            Invite
+          </ButtonLink>
+        </div>
+      </header>
+
       <Card raised>
-        <p className="text-sm text-ink-muted">Group balance</p>
-        <p className="mt-1 text-[2.5rem] leading-tight font-semibold tracking-tight">
+        <p className="text-sm text-ink-muted">Total balance</p>
+        <p className="mt-1 text-[2.75rem] leading-none font-semibold tracking-tight">
           {group.balance.total.format({ compact: true })}
         </p>
-        <div className="mt-4 flex flex-wrap gap-2 text-xs">
-          <span className="rounded-full bg-inflow-soft px-2.5 py-1 text-inflow">
-            {group.balance.available.format({ compact: true })} available
-          </span>
-          <span className="rounded-full bg-locked-soft px-2.5 py-1 text-locked">
-            {group.balance.locked.format({ compact: true })} locked
-          </span>
-        </div>
         <p className="mt-3 text-xs leading-relaxed text-ink-faint">
           Locked money can&rsquo;t be spent until the group votes to release it.
         </p>
       </Card>
 
-      <Card inset={false}>
-        <div className="flex items-center justify-between gap-3 p-5">
-          <div className="min-w-0">
-            <h2 className="text-sm font-medium tracking-wide text-ink-muted uppercase">
-              Proposals
-            </h2>
-            <p className="mt-1 text-ink">
-              {openProposals === 0
-                ? "Nothing to vote on"
-                : `${openProposals} waiting on the group`}
-            </p>
-          </div>
-          <ButtonLink
-            href={`/groups/${groupId}/proposals`}
-            size="sm"
-            variant={openProposals > 0 ? "primary" : "secondary"}
-          >
-            {openProposals > 0 ? "Vote" : "View"}
-          </ButtonLink>
-        </div>
-      </Card>
+      <StatRow>
+        <StatTile
+          value={group.balance.available.format({ compact: true })}
+          label="Available to spend"
+          tone="inflow"
+        />
+        <StatTile
+          value={group.balance.locked.format({ compact: true })}
+          label="Locked"
+          tone="locked"
+        />
+        <StatTile value={group.memberCount} label="Members" />
+        <StatTile
+          value={openProposals}
+          label={openProposals === 1 ? "Open proposal" : "Open proposals"}
+          tone={openProposals > 0 ? "pending" : "default"}
+        />
+      </StatRow>
 
-      {cycle ? (
-        <CycleCard cycle={cycle} />
-      ) : (
-        <NoCycleYet amount={group.contributionAmount} />
-      )}
+      {/* Two columns on desktop: what's happening now on the left, the
+          group's standing facts on the right. One column below lg. */}
+      <div className="grid gap-6 lg:grid-cols-[1.55fr_1fr] lg:items-start">
+        <div className="space-y-6">
+          {cycle ? (
+            <CycleCard cycle={cycle} />
+          ) : (
+            <NoCycleYet amount={group.contributionAmount} />
+          )}
+
+          <Card inset={false}>
+            <div className="px-5 pt-5">
+              <CardHeader title="Activity" />
+            </div>
+            {entries.length === 0 ? (
+              <p className="px-5 pb-5 text-sm text-ink-muted">
+                Nothing yet. Contributions will show up here.
+              </p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {entries.map((entry) => (
+                  <TransactionRow key={entry.transactionId} entry={entry} />
+                ))}
+              </ul>
+            )}
+          </Card>
+        </div>
+
+        <div className="space-y-6">
 
       {arrears.length > 0 && (
         <Card>
@@ -149,25 +190,6 @@ export default async function GroupPage({
           />
         </Card>
       )}
-
-      {simulationAvailable() && <SimulatePanel groupId={groupId} />}
-
-      <Card inset={false}>
-        <div className="px-5 pt-5">
-          <CardHeader title="Activity" />
-        </div>
-        {entries.length === 0 ? (
-          <p className="px-5 pb-5 text-sm text-ink-muted">
-            Nothing yet. Contributions will show up here.
-          </p>
-        ) : (
-          <ul className="divide-y divide-border">
-            {entries.map((entry) => (
-              <TransactionRow key={entry.transactionId} entry={entry} />
-            ))}
-          </ul>
-        )}
-      </Card>
 
       <Card>
         <CardHeader
@@ -239,15 +261,9 @@ export default async function GroupPage({
         </dl>
       </Card>
 
-      <Card className="border-dashed text-center">
-        <div className="py-6">
-          <p className="mx-auto max-w-[30ch] text-sm text-ink-muted">
-            Contributions, the group wallet, proposals and chat land in the next
-            phases.
-          </p>
-          <p className="mt-3 text-xs text-ink-faint">Phases 2–7</p>
+          {simulationAvailable() && <SimulatePanel groupId={groupId} />}
         </div>
-      </Card>
+      </div>
     </main>
   );
 }

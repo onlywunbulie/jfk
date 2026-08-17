@@ -3,29 +3,36 @@
 /**
  * JFK design tokens.
  *
- * Dark-only by decision, not by default (BLUEPRINT.md §5): this is a wallet,
+ * Dark-only by decision, not by default (BLUEPRINT.md §5): this is a treasury,
  * and committing to one deep, quiet ground lets money be the brightest thing
  * on screen. A light theme would halve the contrast budget for no user gain.
+ *
+ * Two colours carry meaning and must not be used decoratively:
+ *   white  — "this is the action to take"
+ *   violet — "this is JFK": active nav, links, focus, the mark
+ * Everything else is semantic money state.
  */
 @theme {
-  /* Ground — near-black with a trace of blue so it reads deep, not flat. */
-  --color-base: #0b0b10;
-  --color-surface: #14141c;
-  --color-raised: #1c1c27;
-  --color-overlay: #23232f;
+  /* Ground — pushed nearly to black so cards float rather than sit in a box. */
+  --color-base: #08080b;
+  --color-surface: #101014;
+  --color-raised: #17171d;
+  --color-overlay: #1e1e26;
 
-  --color-border: #262632;
-  --color-border-strong: #34344a;
+  /* Low-contrast borders. The separation should come from surface lift,
+     not from drawing lines around everything. */
+  --color-border: #1f1f27;
+  --color-border-strong: #2e2e3a;
 
   /* Text — three steps is enough; more becomes mush. */
-  --color-ink: #f4f4f7;
-  --color-ink-muted: #9494a6;
-  --color-ink-faint: #5f5f6e;
+  --color-ink: #f7f7f9;
+  --color-ink-muted: #8f8f9e;
+  --color-ink-faint: #5a5a67;
 
-  /* Brand */
+  /* Brand. Identity, not action. */
   --color-accent: #7b61ff;
   --color-accent-hover: #8e78ff;
-  --color-accent-soft: #1e1a3d;
+  --color-accent-soft: #1a1633;
 
   /* Semantic money states. These are load-bearing: the plan requires money
      in flight to be visually distinct from settled money. */
@@ -41,10 +48,13 @@
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
-  --radius-card: 1rem;
-  --radius-sheet: 1.5rem;
+  --radius-card: 0.875rem;
+  --radius-sheet: 1.25rem;
 
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Sidebar width, referenced by the shell and by sticky offsets. */
+  --sidebar-width: 17rem;
 }
 
 @layer base {

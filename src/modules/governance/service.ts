@@ -509,8 +509,10 @@ export interface ProposalView {
   thresholdPermille: number;
   quorumPct: number;
   eligibleVoterCount: number;
+  createdAt: Date;
   closesAt: Date;
   decidedAt: Date | null;
+  executedAt: Date | null;
   outcomeReason: string | null;
   tally: { yes: number; no: number; abstain: number };
   outcome: ProposalOutcome;
@@ -538,8 +540,10 @@ export async function getProposal(
       thresholdPermille: proposals.thresholdPermilleSnapshot,
       quorumPct: proposals.quorumPctSnapshot,
       eligibleVoterCount: proposals.eligibleVoterCount,
+      createdAt: proposals.createdAt,
       closesAt: proposals.closesAt,
       decidedAt: proposals.decidedAt,
+      executedAt: proposals.executedAt,
       outcomeReason: proposals.outcomeReason,
       createdByName: users.displayName,
     })

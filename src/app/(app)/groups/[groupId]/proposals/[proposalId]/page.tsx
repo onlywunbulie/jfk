@@ -6,6 +6,7 @@ import { getProposal } from "@/modules/governance/service";
 import { formatPermille } from "@/modules/governance/threshold";
 import { Card, CardHeader } from "@/components/ui/card";
 import { VoteBar, PROPOSAL_STATUS } from "@/components/proposal-card";
+import { ProposalTimeline } from "@/components/proposal-timeline";
 import { VotePanel } from "./vote-panel";
 import { ExecutePanel } from "./execute-panel";
 import { getReleaseForProposal } from "@/modules/releases/service";
@@ -90,6 +91,21 @@ export default async function ProposalPage({
         <p className="text-sm leading-relaxed whitespace-pre-wrap text-ink">
           {proposal.reason}
         </p>
+      </Card>
+
+      <Card>
+        <CardHeader title="Progress" />
+        <ProposalTimeline
+          status={proposal.status}
+          createdAt={proposal.createdAt}
+          createdBy={proposal.createdByName}
+          yes={yes}
+          no={no}
+          eligibleVoters={proposal.eligibleVoterCount}
+          thresholdLabel={formatPermille(proposal.thresholdPermille)}
+          decidedAt={proposal.decidedAt}
+          executedAt={proposal.executedAt}
+        />
       </Card>
 
       <Card>

@@ -6,9 +6,17 @@ import { cn } from "@/lib/cn";
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
 
+/**
+ * White is the action colour, violet is the identity colour.
+ *
+ * On a near-black ground white is the highest contrast available, so it reads
+ * unambiguously as "this is the thing to press". Violet stays for nav, links
+ * and focus — brand, not instruction. Using both for actions would make
+ * neither mean anything.
+ */
 const VARIANTS: Record<Variant, string> = {
   primary:
-    "bg-accent text-white hover:bg-accent-hover active:bg-accent disabled:bg-accent/40",
+    "bg-ink text-base hover:bg-white active:bg-ink/90 disabled:bg-ink/30 disabled:text-base/60",
   secondary:
     "bg-raised text-ink border border-border hover:border-border-strong hover:bg-overlay",
   ghost: "text-ink-muted hover:text-ink hover:bg-raised",
