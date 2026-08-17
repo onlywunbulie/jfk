@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth/session";
 import { ForbiddenError, explain } from "@/lib/auth/policy";
 import { Money } from "@/lib/money";
 import { castVote, createProposal } from "@/modules/governance/service";
+import { executeRelease } from "@/modules/releases/service";
 import type { CreateProposalState, VoteState } from "./state";
 
 const createSchema = z.object({
@@ -115,6 +116,45 @@ export async function castVoteAction(
       return { message: "That settled it. The proposal did not pass." };
     }
     return { message: "Vote recorded." };
+  } catch (error) {
+    if (error instanceof ForbiddenError) return { error: explain(error.decision) };
+    throw error;
+  }
+}
+
+/**
+ * Pay out an approved proposal.
+ *
+ * The `mode` decides which route out: a provider transfer (simulated in this
+ * build), a payout the admin already made themselves, or a deliberate failure
+ * so the reversal path can be demonstrated.
+ */
+export async function executeReleaseAction(
+  _prev: VoteState,
+  formData: FormData,
+): Promise<VoteState> {
+  const user = await requireUser();
+  const proposalId = String(formData.get("proposalId") ?? "");
+  const groupId = String(formData.get("groupId") ?? "");
+  const mode = String(formData.get("mode") ?? "transfer");
+
+  try {
+    const result = await executeRelease(proposalId, user.id, {
+      manual: mode === "manual",
+      simulateFailure: mode === "fail",
+    });
+
+    revalidatePath(`/groups/${groupId}`);
+    revalidatePath(`/groups/${groupId}/proposals/${proposalId}`);
+
+    if (!result.ok) return { error: result.message };
+
+    return {
+      message:
+        mode === "manual"
+          ? `Recorded. ${result.amount.format()} has left the group's books.`
+          : `Sent. ${result.amount.format()} has left the group.`,
+    };
   } catch (error) {
     if (error instanceof ForbiddenError) return { error: explain(error.decision) };
     throw error;

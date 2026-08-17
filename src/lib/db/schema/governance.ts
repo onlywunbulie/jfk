@@ -253,6 +253,8 @@ export type FundLock = typeof fundLocks.$inferSelect;
 export type FundRelease = typeof fundReleases.$inferSelect;
 export type ProposalStatus = (typeof proposalStatusEnum.enumValues)[number];
 export type VoteChoice = (typeof voteChoiceEnum.enumValues)[number];
+export type ReleaseStatus = (typeof releaseStatusEnum.enumValues)[number];
+export type LockStatus = (typeof lockStatusEnum.enumValues)[number];
 
 /** Default voting window, in days. */
 export const DEFAULT_VOTE_DAYS = 3;

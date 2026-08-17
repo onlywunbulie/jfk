@@ -1,8 +1,8 @@
 # JFK — Handoff
 
-**Last updated:** 13 August 2026, after voting shipped.
-**Status:** Phases 0–5 complete and committed. Payouts are next.
-**Tests:** 335 passing. Typecheck, lint and build all clean.
+**Last updated:** 13 August 2026, after payouts shipped.
+**Status:** All six build phases complete. Polish, deploy and README remain.
+**Tests:** 352 passing. Typecheck, lint and build all clean.
 
 > ### ⚠️ Scope: this is a portfolio project
 >
@@ -63,6 +63,7 @@ In plain terms, you can currently:
 | See the current cycle: who has paid, who hasn't, how much is in | `/groups/[id]` |
 | See who is behind, and by how much | `/groups/[id]` → Behind |
 | Propose a spend, vote on it, watch it pass or fail | `/groups/[id]/proposals` |
+| Pay out an approved proposal — or watch a failure reverse cleanly | proposal page → Pay it out |
 | Run the automation by hand and travel through time | `pnpm jobs tick --at 2026-09-02` |
 | Simulate contributions end-to-end without Paystack | Developer tools panel |
 
@@ -72,7 +73,6 @@ Family Ajo holds ₦60,000.
 
 ### What does NOT work yet
 
-- **No payouts.** Money still cannot leave the app. That is next.
 - **No chat, no notifications.** Cut from scope — see §7.
 - **No real card has ever been charged.** See §4.
 
@@ -101,7 +101,7 @@ email provider is configured.
 
 | Command | Does |
 |---|---|
-| `pnpm test` | The whole test suite (335 tests) |
+| `pnpm test` | The whole test suite (352 tests) |
 | `pnpm typecheck` / `pnpm lint` / `pnpm build` | Should all be clean |
 | `pnpm db:reset` | Wipe local data and re-migrate |
 | `pnpm simulate` | Run contributions through the real payment pipeline, no Paystack needed |

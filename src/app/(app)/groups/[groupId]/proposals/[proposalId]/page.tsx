@@ -7,6 +7,10 @@ import { formatPermille } from "@/modules/governance/threshold";
 import { Card, CardHeader } from "@/components/ui/card";
 import { VoteBar, PROPOSAL_STATUS } from "@/components/proposal-card";
 import { VotePanel } from "./vote-panel";
+import { ExecutePanel } from "./execute-panel";
+import { getReleaseForProposal } from "@/modules/releases/service";
+import { getMembership } from "@/modules/groups/service";
+import { can } from "@/lib/auth/policy";
 import { cn } from "@/lib/cn";
 
 export async function generateMetadata({
@@ -26,6 +30,14 @@ export default async function ProposalPage({
 
   const proposal = await getProposal(proposalId, user.id);
   if (!proposal) notFound();
+
+  const [release, membership] = await Promise.all([
+    getReleaseForProposal(proposalId),
+    getMembership(groupId, user.id),
+  ]);
+
+  // Admins execute; the group decides. The server re-checks on submit.
+  const canExecute = membership ? can("proposal.execute", membership).allowed : false;
 
   const status = PROPOSAL_STATUS[proposal.status];
   const { yes, no, abstain } = proposal.tally;
@@ -157,15 +169,59 @@ export default async function ProposalPage({
         </Card>
       )}
 
-      {proposal.status === "APPROVED" && (
-        <Card className="border-dashed text-center">
-          <div className="py-6">
-            <p className="mx-auto max-w-[32ch] text-sm text-ink-muted">
-              The group approved this and the money is reserved. Actually paying
-              it out is the next thing being built.
+      {proposal.status === "APPROVED" && proposal.amount && (
+        <Card>
+          <CardHeader title="Pay it out" />
+          {canExecute ? (
+            <ExecutePanel
+              proposalId={proposalId}
+              groupId={groupId}
+              amount={proposal.amount.format({ compact: true })}
+              destination={proposal.destination ?? "the agreed destination"}
+            />
+          ) : (
+            <p className="text-sm text-ink-muted">
+              The group approved this and{" "}
+              {proposal.amount.format({ compact: true })} is reserved. An admin
+              has to make the payment.
             </p>
-            <p className="mt-3 text-xs text-ink-faint">Payouts — coming next</p>
-          </div>
+          )}
+        </Card>
+      )}
+
+      {release && (
+        <Card>
+          <CardHeader title="Payout" />
+          <dl className="space-y-3 text-sm">
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-ink-muted">Status</dt>
+              <dd
+                className={
+                  release.status === "EXECUTED" ? "text-inflow" : "text-danger"
+                }
+              >
+                {release.status === "EXECUTED" ? "Sent" : "Failed"}
+              </dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-ink-muted">To</dt>
+              <dd className="text-right text-ink">{release.destination}</dd>
+            </div>
+            {release.executedByName && (
+              <div className="flex items-baseline justify-between gap-4">
+                <dt className="text-ink-muted">
+                  {release.recordedManually ? "Recorded by" : "Sent by"}
+                </dt>
+                <dd className="text-ink">{release.executedByName}</dd>
+              </div>
+            )}
+          </dl>
+          {release.failureReason && (
+            <p className="mt-4 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
+              {release.failureReason} The money went back to the group. A fresh
+              proposal is needed to try again.
+            </p>
+          )}
         </Card>
       )}
     </main>
