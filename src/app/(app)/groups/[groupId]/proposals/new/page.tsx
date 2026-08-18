@@ -2,10 +2,12 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/auth/session";
-import { getGroupDetail, getMembership } from "@/modules/groups/service";
+import {
+  getGroupDetail,
+  getMembership,
+  listMembers,
+} from "@/modules/groups/service";
 import { assertCan } from "@/lib/auth/policy";
-import { formatPermille } from "@/modules/governance/threshold";
-import { LARGE_RELEASE_SHARE_PERMILLE } from "@/lib/db/schema";
 import { ProposalForm } from "./proposal-form";
 
 export const metadata: Metadata = { title: "New proposal" };
@@ -16,29 +18,21 @@ export default async function NewProposalPage({
   const { groupId } = await params;
   const user = await requireUser();
 
-  const [group, membership] = await Promise.all([
+  const [group, membership, members] = await Promise.all([
     getGroupDetail(groupId, user.id),
     getMembership(groupId, user.id),
+    listMembers(groupId, user.id),
   ]);
 
-  if (!group || !membership) notFound();
+  if (!group || !membership || !members) notFound();
 
   // Throws for a member of a group where only admins may propose.
   assertCan("proposal.create", membership);
 
-  const thresholdFor = (action: string) =>
-    formatPermille(
-      group.governance.find((rule) => rule.action === action)
-        ?.thresholdPermille ?? 667,
-    );
-
-  // The "large withdrawal" line, expressed in naira for this group.
-  const largeAbove = group.balance.total
-    .percentage(LARGE_RELEASE_SHARE_PERMILLE * 10)
-    .format({ compact: true });
-
   return (
-    <main className="animate-rise space-y-6">
+    // A sequence of decisions reads better narrow than stretched across a
+    // dashboard-width page.
+    <main className="animate-rise mx-auto max-w-2xl space-y-6">
       <div>
         <Link
           href={`/groups/${groupId}/proposals`}
@@ -47,10 +41,10 @@ export default async function NewProposalPage({
           ← Proposals
         </Link>
         <h1 className="mt-3 text-2xl font-semibold tracking-tight">
-          Propose a spend
+          Put something to the group
         </h1>
         <p className="mt-1.5 text-sm text-ink-muted">
-          Nothing moves until enough of the group agrees. Not even you can
+          Nothing happens until enough of the group agrees. Not even you can
           override that.
         </p>
       </div>
@@ -58,9 +52,20 @@ export default async function NewProposalPage({
       <ProposalForm
         groupId={groupId}
         available={group.balance.available.format({ compact: true })}
-        smallThreshold={thresholdFor("FUND_RELEASE_SMALL")}
-        largeThreshold={thresholdFor("FUND_RELEASE_LARGE")}
-        largeAbove={largeAbove}
+        members={members.map((m) => ({
+          userId: m.userId,
+          displayName: m.displayName,
+          role: m.role,
+        }))}
+        currentThresholds={group.governance.map((rule) => ({
+          action: rule.action,
+          permille: rule.thresholdPermille,
+        }))}
+        contribution={{
+          amount: group.contributionAmount.format({ compact: true }),
+          cadence: group.cadence,
+          dueDay: group.dueDay,
+        }}
       />
     </main>
   );

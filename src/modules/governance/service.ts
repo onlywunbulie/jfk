@@ -21,6 +21,14 @@ import { getGroupBalances } from "@/modules/ledger/service";
 import { reserveForProposal } from "@/modules/ledger/operations";
 import { recordAudit } from "@/modules/audit/service";
 import { evaluate, whatIsNeeded, type ProposalOutcome } from "./threshold";
+import {
+  KIND_ACTION,
+  isRuleChange,
+  parsePayload,
+  type ProposalKind,
+  type ProposalPayload,
+} from "./kinds";
+import { applyProposalPayload } from "./apply";
 
 /**
  * Proposals and voting. See BLUEPRINT.md §9.
@@ -40,11 +48,13 @@ export interface CreateProposalInput {
   groupId: string;
   title: string;
   reason: string;
+  /** Defaults to a spend, which is what most proposals are. */
+  kind?: ProposalKind;
   /** Required for spending proposals. */
   amount?: Money;
   destination?: string;
-  action?: GovernedAction;
-  payload?: Record<string, unknown>;
+  /** What to change when this passes. Ignored for spends. */
+  payload?: ProposalPayload;
   voteDays?: number;
 }
 
@@ -79,10 +89,18 @@ export async function createProposal(
   assertCan("proposal.create", membership);
 
   const balances = await getGroupBalances(input.groupId);
+  const kind = input.kind ?? "SPEND";
 
-  // Which rule applies is derived from the amount, not chosen by the proposer —
-  // otherwise anyone could route a large withdrawal through the low threshold.
-  const action = input.action ?? deriveAction(input.amount, balances.total);
+  /**
+   * The threshold is decided by what the proposal *does*, never by the
+   * proposer. For a rule change that is fixed by the kind; for a spend it
+   * depends on how much of the treasury it would take — otherwise anyone could
+   * route a large withdrawal through the low bar by claiming it was routine.
+   */
+  const action =
+    kind === "SPEND"
+      ? deriveAction(input.amount, balances.total)
+      : KIND_ACTION[kind];
 
   if (isSpendingAction(action)) {
     if (!input.amount?.isPositive()) {
@@ -138,6 +156,15 @@ export async function createProposal(
   const voteDays = input.voteDays ?? settings?.defaultVoteDays ?? DEFAULT_VOTE_DAYS;
   const closesAt = new Date(Date.now() + voteDays * 24 * 60 * 60 * 1000);
 
+  /**
+   * Resolve who a removal is about from the membership, not from the browser.
+   *
+   * The name is written into the proposal so the record still reads sensibly
+   * years later, after the person has left and their row has changed — but a
+   * name supplied by the client is not worth trusting on a governance record.
+   */
+  const payload = await resolvePayload(input.groupId, input.payload);
+
   const proposalId = await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(proposals)
@@ -149,7 +176,7 @@ export async function createProposal(
         reason: input.reason.trim(),
         amount: input.amount?.minor ?? null,
         destination: input.destination?.trim() || null,
-        payload: input.payload ?? null,
+        payload: payload ?? { kind },
         thresholdPermilleSnapshot: rule?.thresholdPermille ?? 667,
         quorumPctSnapshot: settings?.quorumPct ?? 60,
         eligibleVoterCount,
@@ -175,6 +202,32 @@ export async function createProposal(
   });
 
   return { ok: true, proposalId, action };
+}
+
+/** Fill in anything the payload should not take the client's word for. */
+async function resolvePayload(
+  groupId: string,
+  payload: ProposalPayload | undefined,
+): Promise<ProposalPayload | undefined> {
+  if (!payload) return undefined;
+  if (payload.kind !== "REMOVE_MEMBER" && payload.kind !== "REMOVE_ADMIN") {
+    return payload;
+  }
+
+  const [target] = await db
+    .select({ displayName: users.displayName })
+    .from(groupMembers)
+    .innerJoin(users, eq(users.id, groupMembers.userId))
+    .where(
+      and(
+        eq(groupMembers.groupId, groupId),
+        eq(groupMembers.userId, payload.userId),
+        eq(groupMembers.status, "ACTIVE"),
+      ),
+    )
+    .limit(1);
+
+  return { ...payload, displayName: target?.displayName ?? "a former member" };
 }
 
 /** Large withdrawals need a higher bar than routine ones. */
@@ -390,7 +443,7 @@ export async function evaluateProposal(
     return outcome;
   }
 
-  // Approved. Reserve the funds in the same breath.
+  // Approved. Reserve the funds, or enact the rule change, in the same breath.
   await db.transaction(async (tx) => {
     const [claimed] = await tx
       .update(proposals)
@@ -400,6 +453,35 @@ export async function evaluateProposal(
 
     // Another evaluation got there first.
     if (!claimed) return;
+
+    /**
+     * A rule change takes effect now, and the proposal is finished — there is
+     * no second step, because nothing has to leave the building. Marking it
+     * EXECUTED rather than APPROVED keeps "approved but not yet done" meaning
+     * only one thing: money waiting to be sent.
+     */
+    const payload = parsePayload(proposal.payload);
+    if (payload && isRuleChange(payload.kind)) {
+      await applyProposalPayload(tx, proposal.groupId, proposalId, payload);
+
+      await tx
+        .update(proposals)
+        .set({
+          status: "EXECUTED",
+          executedAt: now,
+          outcomeReason: "Approved by the group and applied",
+        })
+        .where(eq(proposals.id, proposalId));
+
+      await recordAudit(tx, {
+        action: "proposal.approved",
+        groupId: proposal.groupId,
+        subjectType: "proposal",
+        subjectId: proposalId,
+        after: { ...tally, kind: payload.kind },
+      });
+      return;
+    }
 
     if (proposal.amount && proposal.amount > 0n) {
       try {

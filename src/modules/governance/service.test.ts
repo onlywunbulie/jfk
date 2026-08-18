@@ -12,7 +12,9 @@ const groupsService = await import("@/modules/groups/service");
 const ledger = await import("@/modules/ledger/service");
 const { simulateContribution } = await import("@/modules/payments/simulate");
 const { reconcileLedger } = await import("@/modules/ledger/reconcile");
-const { users, proposals, votes, groupSettings } = await import("@/lib/db/schema");
+const { users, proposals, votes, groupSettings } = await import(
+  "@/lib/db/schema"
+);
 
 /** Four friends, ₦50,000 each, ₦200,000 in the treasury. */
 async function seedFundedGroup() {
