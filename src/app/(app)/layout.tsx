@@ -43,7 +43,14 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       <CurrentGroupProbe groups={sidebarGroups} user={user} />
 
       <div className="flex min-h-dvh flex-col lg:pl-[var(--sidebar-width)]">
-        <div className="mx-auto w-full max-w-lg flex-1 px-5 pt-8 pb-6 lg:max-w-5xl lg:px-10 lg:pt-10 lg:pb-16">
+        {/*
+          Mobile stays a centred narrow column. Desktop fills the space beside
+          the sidebar rather than sitting in a centred box — the dead margins
+          made a wide screen feel like a stretched phone. The cap only bites on
+          very large displays, where an uninterrupted 2000px row of text would
+          be worse than a margin.
+        */}
+        <div className="mx-auto w-full max-w-lg flex-1 px-5 pt-8 pb-6 lg:mx-0 lg:max-w-none lg:px-8 lg:pt-10 lg:pb-16 2xl:max-w-[112rem] 2xl:px-12">
           {children}
         </div>
         <div className="lg:hidden">

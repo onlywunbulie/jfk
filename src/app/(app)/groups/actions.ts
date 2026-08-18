@@ -9,6 +9,8 @@ import { ForbiddenError, assertCan, explain } from "@/lib/auth/policy";
 import { Money } from "@/lib/money";
 import * as groupsService from "@/modules/groups/service";
 import { chargeContribution } from "@/modules/payments/contribute";
+import type { GovernedAction } from "@/lib/db/schema";
+import { ALL_GOVERNED_ACTIONS } from "./new/governance-options";
 import {
   simulateContribution,
   SimulationNotAllowedError,
@@ -76,6 +78,8 @@ export async function createGroupAction(
       cadence: input.cadence,
       dueDay: input.dueDay,
       membersCanPropose: input.membersCanPropose === "on",
+      governance: readThresholds(formData),
+      quorumPct: Number(formData.get("quorumPct") ?? 60),
     },
     { ip: await clientIp() },
   );
@@ -180,6 +184,30 @@ export async function leaveGroupAction(formData: FormData): Promise<void> {
 
   revalidatePath("/");
   redirect("/groups");
+}
+
+/**
+ * Pull the per-action thresholds out of the create-group form.
+ *
+ * Only recognised action names are accepted — a crafted `threshold.WHATEVER`
+ * field is dropped rather than trusted, and anything unparseable falls back to
+ * the default. The service clamps the range on top of this, so a hand-rolled
+ * POST cannot set a 1% bar for releasing funds.
+ */
+function readThresholds(
+  formData: FormData,
+): Partial<Record<GovernedAction, number>> {
+  const chosen: Partial<Record<GovernedAction, number>> = {};
+
+  for (const action of ALL_GOVERNED_ACTIONS) {
+    const raw = formData.get(`threshold.${action}`);
+    if (typeof raw !== "string") continue;
+
+    const permille = Number(raw);
+    if (Number.isFinite(permille)) chosen[action] = permille;
+  }
+
+  return chosen;
 }
 
 /**

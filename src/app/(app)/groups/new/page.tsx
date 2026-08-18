@@ -9,7 +9,9 @@ export default async function NewGroupPage() {
   await requireUser();
 
   return (
-    <main className="animate-rise space-y-7">
+    // The wizard is the one screen that reads better narrow: it is a sequence
+    // of decisions, not a dashboard, and a 1500px-wide form is unreadable.
+    <main className="animate-rise mx-auto max-w-2xl space-y-7">
       <div>
         <Link
           href="/groups"
@@ -21,8 +23,8 @@ export default async function NewGroupPage() {
           Create a group
         </h1>
         <p className="mt-1.5 text-sm text-ink-muted">
-          You&rsquo;ll be the owner. Everything about the money is decided by the
-          group, not by you.
+          You&rsquo;ll be the owner — but not of the money. Set the rules now;
+          afterwards the group changes them by vote.
         </p>
       </div>
 

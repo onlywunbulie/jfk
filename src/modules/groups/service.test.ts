@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { createTestDb, type TestDb } from "@/lib/db/testing";
 import { Money } from "@/lib/money";
-import { ForbiddenError } from "@/lib/auth/policy";
+import { ForbiddenError, can } from "@/lib/auth/policy";
 
 const t: TestDb = await createTestDb();
 vi.mock("@/lib/db", async () => ({ db: t.db }));
@@ -431,5 +431,101 @@ describe("cross-group isolation", () => {
     await expect(
       service.createInvite(groupId, stranger),
     ).resolves.toMatchObject({ ok: false, reason: "forbidden" });
+  });
+});
+
+describe("choosing thresholds at creation", () => {
+  it("stores the creator's choices instead of the defaults", async () => {
+    const owner = await makeUser("geoffrey");
+    const { groupId } = await service.createGroup(owner, {
+      ...EMPIRE,
+      governance: {
+        FUND_RELEASE_SMALL: 750,
+        DISSOLVE_GROUP: 1000,
+      },
+      quorumPct: 75,
+    });
+
+    const detail = await service.getGroupDetail(groupId, owner);
+    const byAction = Object.fromEntries(
+      detail!.governance.map((r) => [r.action, r.thresholdPermille]),
+    );
+
+    expect(byAction.FUND_RELEASE_SMALL).toBe(750);
+    expect(byAction.DISSOLVE_GROUP).toBe(1000);
+    // Anything not chosen keeps its default.
+    expect(byAction.CHANGE_GOVERNANCE).toBe(750);
+    expect(byAction.FUND_RELEASE_LARGE).toBe(667);
+    expect(detail!.quorumPct).toBe(75);
+  });
+
+  it("still writes a row for every action, so no rule is invisible", async () => {
+    const owner = await makeUser("geoffrey");
+    const { groupId } = await service.createGroup(owner, {
+      ...EMPIRE,
+      governance: { FUND_RELEASE_SMALL: 600 },
+    });
+
+    const rules = await t.db
+      .select()
+      .from(governanceRules)
+      .where(eq(governanceRules.groupId, groupId));
+    expect(rules).toHaveLength(9);
+  });
+
+  it("refuses a threshold that would hand the treasury to a minority", async () => {
+    const owner = await makeUser("geoffrey");
+    const { groupId } = await service.createGroup(owner, {
+      ...EMPIRE,
+      // A hand-rolled POST trying to set a 1% bar for releasing funds.
+      governance: { FUND_RELEASE_SMALL: 10, FUND_RELEASE_LARGE: 0 },
+    });
+
+    const detail = await service.getGroupDetail(groupId, owner);
+    const byAction = Object.fromEntries(
+      detail!.governance.map((r) => [r.action, r.thresholdPermille]),
+    );
+
+    // Clamped up to a real majority rather than accepted.
+    expect(byAction.FUND_RELEASE_SMALL).toBe(500);
+    expect(byAction.FUND_RELEASE_LARGE).toBe(500);
+  });
+
+  it("refuses an unreachable threshold above 100%", async () => {
+    const owner = await makeUser("geoffrey");
+    const { groupId } = await service.createGroup(owner, {
+      ...EMPIRE,
+      governance: { DISSOLVE_GROUP: 5000 },
+    });
+
+    const detail = await service.getGroupDetail(groupId, owner);
+    const dissolve = detail!.governance.find((r) => r.action === "DISSOLVE_GROUP");
+    expect(dissolve!.thresholdPermille).toBe(1000);
+  });
+
+  it("keeps quorum inside a range where a vote can still conclude", async () => {
+    const owner = await makeUser("geoffrey");
+    const zero = await service.createGroup(owner, { ...EMPIRE, quorumPct: 0 });
+    const huge = await service.createGroup(owner, {
+      ...EMPIRE,
+      name: "Second",
+      quorumPct: 900,
+    });
+
+    expect((await service.getGroupDetail(zero.groupId, owner))!.quorumPct).toBe(1);
+    expect((await service.getGroupDetail(huge.groupId, owner))!.quorumPct).toBe(100);
+  });
+
+  it("leaves changing them a governed action once the group is live", async () => {
+    const owner = await makeUser("geoffrey");
+    const { groupId } = await service.createGroup(owner, EMPIRE);
+    const membership = await service.getMembership(groupId, owner);
+
+    // The owner picked the numbers at creation, but cannot revise them alone.
+    const decision = can("group.governance.change", membership!);
+    expect(decision.allowed).toBe(false);
+    if (!decision.allowed) {
+      expect(decision.reason).toBe("needs_proposal");
+    }
   });
 });

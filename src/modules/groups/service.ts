@@ -11,6 +11,7 @@ import {
   users,
   INVITE_TTL_DAYS,
   type Cadence,
+  type GovernedAction,
   type GroupType,
   type MemberRole,
 } from "@/lib/db/schema";
@@ -103,7 +104,25 @@ export interface CreateGroupInput {
   cadence: Cadence;
   dueDay: number;
   membersCanPropose?: boolean;
+
+  /**
+   * Approval thresholds in permille (667 = 66.7%), overriding the defaults.
+   *
+   * Settable **only here**, at creation, while there is no money and no other
+   * members to protect. Once the group is live, changing a threshold is itself
+   * a governed action needing 75% — otherwise an admin could lower the release
+   * bar to 1% and then empty the treasury alone, which would undo the one
+   * guarantee the whole product makes.
+   */
+  governance?: Partial<Record<GovernedAction, number>>;
+
+  /** Share of eligible voters who must respond, in percent. */
+  quorumPct?: number;
 }
+
+/** Thresholds must be a real majority-ish share, never 0% or above 100%. */
+export const MIN_THRESHOLD_PERMILLE = 500;
+export const MAX_THRESHOLD_PERMILLE = 1000;
 
 /**
  * Create a group, its settings, its default governance rules and its owner
@@ -135,13 +154,20 @@ export async function createGroup(
       cadence: input.cadence,
       dueDay: input.dueDay,
       membersCanPropose: input.membersCanPropose ?? true,
+      quorumPct: clampQuorum(input.quorumPct),
     });
 
+    // Every action gets a row, whether or not the creator chose a value for it.
+    // A missing rule would silently fall back to a hard-coded default at vote
+    // time, which is exactly the kind of invisible rule this table exists to
+    // prevent — the group's constitution should be readable in one query.
     await tx.insert(governanceRules).values(
-      Object.entries(DEFAULT_GOVERNANCE).map(([action, thresholdPermille]) => ({
+      (Object.keys(DEFAULT_GOVERNANCE) as GovernedAction[]).map((action) => ({
         groupId: group.id,
-        action: action as keyof typeof DEFAULT_GOVERNANCE,
-        thresholdPermille,
+        action,
+        thresholdPermille: clampThreshold(
+          input.governance?.[action] ?? DEFAULT_GOVERNANCE[action],
+        ),
       })),
     );
 
@@ -396,6 +422,27 @@ export async function acceptInvite(
       alreadyMember: false,
     };
   });
+}
+
+/**
+ * Keep a chosen threshold inside a range that still means something.
+ *
+ * Below half is not a majority, and above 100% is unreachable — a group that
+ * set either would have locked its own money away or handed it to a minority,
+ * and would not find out until the first vote.
+ */
+function clampThreshold(permille: number): number {
+  if (!Number.isFinite(permille)) return DEFAULT_GOVERNANCE.FUND_RELEASE_SMALL;
+  return Math.min(
+    MAX_THRESHOLD_PERMILLE,
+    Math.max(MIN_THRESHOLD_PERMILLE, Math.round(permille)),
+  );
+}
+
+/** Quorum of zero would let one voter decide; 100 would stall on one absence. */
+function clampQuorum(pct: number | undefined): number {
+  if (pct === undefined || !Number.isFinite(pct)) return 60;
+  return Math.min(100, Math.max(1, Math.round(pct)));
 }
 
 /** Next free payout slot, or null for treasury groups where order is moot. */
