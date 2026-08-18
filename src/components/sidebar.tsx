@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { Route } from "next";
 import { cn } from "@/lib/cn";
+import { signOutAction } from "@/app/(app)/actions";
 
 export interface SidebarGroup {
   id: string;
@@ -122,7 +123,7 @@ export function Sidebar({
 
       <div className="border-t border-border p-3">
         <ul className="space-y-0.5">
-          <NavItem href="/" pathname={pathname} icon={<HomeIcon />} exact>
+          <NavItem href="/groups" pathname={pathname} icon={<HomeIcon />} exact>
             All groups
           </NavItem>
           <NavItem href="/wallet" pathname={pathname} icon={<WalletIcon />}>
@@ -132,10 +133,21 @@ export function Sidebar({
 
         <div className="mt-2 flex items-center gap-2.5 rounded-lg px-3 py-2">
           <Avatar name={user.displayName} />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="truncate text-sm text-ink">{user.displayName}</p>
             <p className="truncate text-xs text-ink-faint">{user.email}</p>
           </div>
+          {/* Sign out used to sit on the home screen, which is now a redirect. */}
+          <form action={signOutAction}>
+            <button
+              type="submit"
+              title="Sign out"
+              aria-label="Sign out"
+              className="grid size-7 shrink-0 place-items-center rounded-md text-ink-faint transition-colors hover:bg-raised hover:text-ink"
+            >
+              <SignOutIcon />
+            </button>
+          </form>
         </div>
       </div>
     </aside>
@@ -255,6 +267,15 @@ function HomeIcon() {
     <svg viewBox="0 0 24 24" className="size-[1.125rem]" aria-hidden="true" {...stroke}>
       <path d="M3 10.5 12 3l9 7.5" />
       <path d="M5.5 9.5V20h13V9.5" />
+    </svg>
+  );
+}
+
+function SignOutIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true" {...stroke}>
+      <path d="M15 17v1.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2V7" />
+      <path d="M19 12H9m10 0-3-3m3 3-3 3" />
     </svg>
   );
 }

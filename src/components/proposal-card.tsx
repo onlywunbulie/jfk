@@ -77,7 +77,7 @@ export function VoteBar({
 
   return (
     <div
-      className={cn("mt-4 flex h-2 gap-0.5 overflow-hidden rounded-full bg-base", className)}
+      className={cn("mt-4 flex h-2 gap-0.5 overflow-hidden rounded-full bg-canvas", className)}
       role="img"
       aria-label={`${tally.yes} for, ${tally.no} against, ${tally.abstain} abstained, of ${eligible} members`}
     >

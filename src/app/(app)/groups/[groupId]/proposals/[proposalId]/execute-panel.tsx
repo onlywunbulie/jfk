@@ -48,7 +48,7 @@ export function ExecutePanel({
           Pay out {amount}
         </Button>
       ) : (
-        <div className="space-y-3 rounded-xl border border-border-strong bg-base p-4">
+        <div className="space-y-3 rounded-xl border border-border-strong bg-canvas p-4">
           <p className="text-sm font-medium text-ink">
             Send {amount} to {destination}?
           </p>

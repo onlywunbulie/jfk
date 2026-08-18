@@ -70,9 +70,9 @@ function Marker({ state }: { state: StageState }) {
       className={cn(
         "relative z-10 mt-0.5 grid size-3.5 shrink-0 place-items-center rounded-full border-2",
         state === "done" && "border-accent bg-accent",
-        state === "active" && "border-pending bg-base",
+        state === "active" && "border-pending bg-canvas",
         state === "failed" && "border-danger bg-danger",
-        state === "pending" && "border-border-strong bg-base",
+        state === "pending" && "border-border-strong bg-canvas",
       )}
     >
       {state === "active" && (

@@ -10,7 +10,6 @@ import { cn } from "@/lib/cn";
  * Phases 1 and 7 — they're present so the shape of the app is real from day one.
  */
 const TABS = [
-  { href: "/", label: "Home", icon: HomeIcon },
   { href: "/groups", label: "Groups", icon: GroupsIcon },
   { href: "/activity", label: "Activity", icon: ActivityIcon },
   { href: "/wallet", label: "Wallet", icon: WalletIcon },
@@ -26,7 +25,7 @@ export function TabBar() {
   return (
     <nav
       aria-label="Primary"
-      className="pb-safe sticky bottom-0 z-40 border-t border-border bg-base/85 backdrop-blur-xl"
+      className="pb-safe sticky bottom-0 z-40 border-t border-border bg-canvas/85 backdrop-blur-xl"
     >
       <ul className="mx-auto flex max-w-lg items-stretch">
         {TABS.map(({ href, label, icon: Icon }) => {
@@ -62,15 +61,6 @@ const strokeProps = {
   strokeLinecap: "round",
   strokeLinejoin: "round",
 } as const;
-
-function HomeIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...strokeProps}>
-      <path d="M3 10.5 12 3l9 7.5" />
-      <path d="M5.5 9.5V20h13V9.5" />
-    </svg>
-  );
-}
 
 function GroupsIcon({ className }: { className?: string }) {
   return (

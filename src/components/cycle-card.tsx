@@ -36,7 +36,7 @@ export function CycleCard({ cycle }: { cycle: CycleView }) {
 
       {/* Progress toward a fully funded cycle. */}
       <div
-        className="mt-4 h-1.5 overflow-hidden rounded-full bg-base"
+        className="mt-4 h-1.5 overflow-hidden rounded-full bg-canvas"
         role="progressbar"
         aria-valuenow={percent}
         aria-valuemin={0}

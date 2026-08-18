@@ -14,7 +14,7 @@
  */
 @theme {
   /* Ground — pushed nearly to black so cards float rather than sit in a box. */
-  --color-base: #08080b;
+  --color-canvas: #08080b;
   --color-surface: #101014;
   --color-raised: #17171d;
   --color-overlay: #1e1e26;
@@ -60,13 +60,13 @@
 @layer base {
   html {
     color-scheme: dark;
-    background-color: var(--color-base);
+    background-color: var(--color-canvas);
     /* Keeps the notch/status bar from flashing white on iOS PWA launch. */
     -webkit-tap-highlight-color: transparent;
   }
 
   body {
-    background-color: var(--color-base);
+    background-color: var(--color-canvas);
     color: var(--color-ink);
     font-family: var(--font-sans);
     /* Contribution amounts sit in tables and lists; lining figures keep

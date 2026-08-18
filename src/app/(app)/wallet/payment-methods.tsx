@@ -26,7 +26,7 @@ export function PaymentMethods({ methods }: { methods: PaymentMethodView[] }) {
           {methods.map((method) => (
             <li
               key={method.id}
-              className="flex items-center gap-3 rounded-xl border border-border bg-base p-3.5"
+              className="flex items-center gap-3 rounded-xl border border-border bg-canvas p-3.5"
             >
               <CardGlyph brand={method.brand} />
 

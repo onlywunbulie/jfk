@@ -37,7 +37,7 @@ export function InvitePanel({
           <p className="text-sm text-ink-muted">
             Share this link. It works once and expires in 14 days.
           </p>
-          <div className="flex items-center gap-2 rounded-xl border border-border bg-base p-3">
+          <div className="flex items-center gap-2 rounded-xl border border-border bg-canvas p-3">
             <code className="min-w-0 flex-1 truncate font-mono text-xs text-ink">
               {link}
             </code>
