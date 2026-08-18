@@ -253,7 +253,7 @@ describe("how a rule change ends", () => {
     await passIt(created.proposalId, ids);
 
     const balances = await ledger.getGroupBalances(groupId);
-    expect(balances.locked.isZero()).toBe(true);
+    expect(balances.reserved.isZero()).toBe(true);
     expect((await reconcileLedger(t.db)).clean).toBe(true);
   });
 });

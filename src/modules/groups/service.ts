@@ -717,7 +717,7 @@ export async function listGroupsForUser(userId: string): Promise<GroupSummary[]>
     contributionAmount: Money.fromMinor(row.contributionAmount),
     balance: balances.get(row.id) ?? {
       available: Money.zero(),
-      locked: Money.zero(),
+      reserved: Money.zero(),
       total: Money.zero(),
     },
   }));

@@ -18,7 +18,7 @@ export function StatTile({
   value: ReactNode;
   label: string;
   icon?: ReactNode;
-  tone?: "default" | "inflow" | "locked" | "pending" | "danger";
+  tone?: "default" | "inflow" | "held" | "pending" | "danger";
   className?: string;
 }) {
   return (
@@ -52,7 +52,7 @@ export function StatTile({
 const TONES = {
   default: "text-ink",
   inflow: "text-inflow",
-  locked: "text-locked",
+  held: "text-held",
   pending: "text-pending",
   danger: "text-danger",
 } as const;

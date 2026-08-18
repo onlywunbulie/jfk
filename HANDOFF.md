@@ -56,7 +56,7 @@ In plain terms, you can currently:
 | See members, roles, and rotation payout order | `/groups/[id]/members` |
 | Make someone an admin (owner only) | members page |
 | Leave a group (owner can't — must transfer first) | members page |
-| See a group's balance, split into available vs locked | `/groups/[id]` |
+| See a group's balance, split into available vs reserved | `/groups/[id]` |
 | See a transaction history of every movement | `/groups/[id]` |
 | See all your groups and a combined total | `/` |
 | See your saved cards and profile | `/wallet` |
@@ -67,9 +67,9 @@ In plain terms, you can currently:
 | Run the automation by hand and travel through time | `pnpm jobs tick --at 2026-09-02` |
 | Simulate contributions end-to-end without Paystack | Developer tools panel |
 
-**Numbers in the seeded data:** JFK Empire holds ₦400,000 (₦150,000 available,
-₦250,000 locked), a live cycle, and a generator proposal mid-vote at 1–1.
-Family Ajo holds ₦60,000.
+**Numbers in the seeded data:** JFK Empire holds ₦400,000, all available — nothing
+is reserved until a proposal passes. There is a live cycle and a generator
+proposal mid-vote at 1–1. Family Ajo holds ₦60,000.
 
 ### What does NOT work yet
 
@@ -101,7 +101,7 @@ email provider is configured.
 
 | Command | Does |
 |---|---|
-| `pnpm test` | The whole test suite (352 tests) |
+| `pnpm test` | The whole test suite (364 tests) |
 | `pnpm typecheck` / `pnpm lint` / `pnpm build` | Should all be clean |
 | `pnpm db:reset` | Wipe local data and re-migrate |
 | `pnpm simulate` | Run contributions through the real payment pipeline, no Paystack needed |

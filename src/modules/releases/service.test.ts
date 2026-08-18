@@ -148,7 +148,7 @@ describe("a successful payout", () => {
     // The vote already reserved it.
     const before = await ledger.getGroupBalances(groupId);
     expect(before.available.format()).toBe("₦80,000.00");
-    expect(before.locked.format()).toBe("₦120,000.00");
+    expect(before.reserved.format()).toBe("₦120,000.00");
 
     const result = await releases.executeRelease(proposalId, ids[0], {
       manual: true,
@@ -157,7 +157,7 @@ describe("a successful payout", () => {
 
     const after = await ledger.getGroupBalances(groupId);
     expect(after.available.format()).toBe("₦80,000.00");
-    expect(after.locked.isZero()).toBe(true);
+    expect(after.reserved.isZero()).toBe(true);
     expect(after.total.format()).toBe("₦80,000.00");
 
     expect((await reconcileLedger(t.db)).clean).toBe(true);
@@ -187,7 +187,7 @@ describe("a successful payout", () => {
     const { groupId, proposalId, ids } = await seedApprovedProposal();
     await releases.executeRelease(proposalId, ids[0], { manual: true });
 
-    const entries = await ledger.listEntries(ledger.groupLocked(groupId));
+    const entries = await ledger.listEntries(ledger.groupReserved(groupId));
     const payout = entries.find((e) => e.type === "PAYOUT");
     expect(payout).toBeDefined();
     expect(payout!.amount.format()).toBe("-₦120,000.00");
@@ -206,7 +206,7 @@ describe("a failed payout", () => {
     // The reservation is handed straight back.
     const after = await ledger.getGroupBalances(groupId);
     expect(after.available.format()).toBe("₦200,000.00");
-    expect(after.locked.isZero()).toBe(true);
+    expect(after.reserved.isZero()).toBe(true);
     expect(after.total.format()).toBe("₦200,000.00");
 
     expect((await reconcileLedger(t.db)).clean).toBe(true);
@@ -326,7 +326,7 @@ describe("the whole JFK Empire story, end to end", () => {
     const final = await ledger.getGroupBalances(groupId);
     expect(final.total.format()).toBe("₦80,000.00");
     expect(final.available.format()).toBe("₦80,000.00");
-    expect(final.locked.isZero()).toBe(true);
+    expect(final.reserved.isZero()).toBe(true);
 
     const report = await reconcileLedger(t.db);
     expect(report.clean).toBe(true);

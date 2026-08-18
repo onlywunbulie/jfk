@@ -44,10 +44,10 @@ export const groupAvailable = (groupId: string): AccountRef => ({
   purpose: "GROUP_AVAILABLE",
 });
 
-export const groupLocked = (groupId: string): AccountRef => ({
+export const groupReserved = (groupId: string): AccountRef => ({
   ownerType: "GROUP",
   ownerId: groupId,
-  purpose: "GROUP_LOCKED",
+  purpose: "GROUP_RESERVED",
 });
 
 export const systemAccount = (purpose: AccountPurpose): AccountRef => ({
@@ -395,7 +395,7 @@ export async function getBalance(
 
 export interface GroupBalances {
   available: Money;
-  locked: Money;
+  reserved: Money;
   total: Money;
 }
 
@@ -418,20 +418,20 @@ export async function getGroupBalances(
         eq(ledgerAccounts.ownerType, "GROUP"),
         eq(ledgerAccounts.ownerId, groupId),
         eq(ledgerAccounts.currency, currency),
-        inArray(ledgerAccounts.purpose, ["GROUP_AVAILABLE", "GROUP_LOCKED"]),
+        inArray(ledgerAccounts.purpose, ["GROUP_AVAILABLE", "GROUP_RESERVED"]),
       ),
     );
 
   let available = Money.zero(currency);
-  let locked = Money.zero(currency);
+  let reserved = Money.zero(currency);
 
   for (const row of rows) {
     const balance = normalBalance(row.purpose, row.debits, row.credits, currency);
     if (row.purpose === "GROUP_AVAILABLE") available = balance;
-    else locked = balance;
+    else reserved = balance;
   }
 
-  return { available, locked, total: available.plus(locked) };
+  return { available, reserved, total: available.plus(reserved) };
 }
 
 /**
@@ -462,14 +462,14 @@ export async function getBalancesForGroups(
         eq(ledgerAccounts.ownerType, "GROUP"),
         inArray(ledgerAccounts.ownerId, groupIds),
         eq(ledgerAccounts.currency, currency),
-        inArray(ledgerAccounts.purpose, ["GROUP_AVAILABLE", "GROUP_LOCKED"]),
+        inArray(ledgerAccounts.purpose, ["GROUP_AVAILABLE", "GROUP_RESERVED"]),
       ),
     );
 
   for (const groupId of groupIds) {
     result.set(groupId, {
       available: Money.zero(currency),
-      locked: Money.zero(currency),
+      reserved: Money.zero(currency),
       total: Money.zero(currency),
     });
   }
@@ -483,9 +483,9 @@ export async function getBalancesForGroups(
     const next =
       row.purpose === "GROUP_AVAILABLE"
         ? { ...current, available: balance }
-        : { ...current, locked: balance };
+        : { ...current, reserved: balance };
 
-    result.set(row.groupId, { ...next, total: next.available.plus(next.locked) });
+    result.set(row.groupId, { ...next, total: next.available.plus(next.reserved) });
   }
 
   return result;

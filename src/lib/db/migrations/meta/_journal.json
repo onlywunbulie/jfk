@@ -57,6 +57,13 @@
       "when": 1786726564752,
       "tag": "0007_thankful_iceman",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787026287201,
+      "tag": "0008_smiling_kid_colt",
+      "breakpoints": true
     }
   ]
 }

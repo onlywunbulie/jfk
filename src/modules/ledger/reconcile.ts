@@ -186,7 +186,7 @@ export async function reconcileLedger(
       from ledger_entries
       group by account_id
     ) d on d.account_id = a.id
-    where a.purpose in ('GROUP_AVAILABLE', 'GROUP_LOCKED')
+    where a.purpose in ('GROUP_AVAILABLE', 'GROUP_RESERVED')
       and coalesce(d.credits, 0) - coalesce(d.debits, 0) < 0
   `);
 

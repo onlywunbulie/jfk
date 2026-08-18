@@ -115,7 +115,6 @@ export const THRESHOLD_ACTION_LABELS: Record<GovernedAction, string> = {
   CHANGE_GOVERNANCE: "Change thresholds",
   REMOVE_MEMBER: "Remove a member",
   REMOVE_ADMIN: "Remove an admin",
-  CHANGE_LOCK_RULE: "Change a lock",
   ROTATION_ORDER_CHANGE: "Change payout order",
   DISSOLVE_GROUP: "Dissolve the group",
 };

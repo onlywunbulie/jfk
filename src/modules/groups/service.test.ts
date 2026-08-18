@@ -52,7 +52,7 @@ describe("createGroup", () => {
     expect(detail!.contributionAmount.format()).toBe("₦50,000.00");
   });
 
-  it("seeds all nine governance defaults", async () => {
+  it("seeds a governance default for every governed action", async () => {
     const owner = await makeUser("geoffrey");
     const { groupId } = await service.createGroup(owner, EMPIRE);
 
@@ -61,7 +61,7 @@ describe("createGroup", () => {
       .from(governanceRules)
       .where(eq(governanceRules.groupId, groupId));
 
-    expect(rules).toHaveLength(9);
+    expect(rules).toHaveLength(8);
     const byAction = Object.fromEntries(
       rules.map((r) => [r.action, r.thresholdPermille]),
     );
@@ -470,7 +470,7 @@ describe("choosing thresholds at creation", () => {
       .select()
       .from(governanceRules)
       .where(eq(governanceRules.groupId, groupId));
-    expect(rules).toHaveLength(9);
+    expect(rules).toHaveLength(8);
   });
 
   it("refuses a threshold that would hand the treasury to a minority", async () => {

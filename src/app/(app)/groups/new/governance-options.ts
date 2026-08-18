@@ -57,7 +57,6 @@ export const GOVERNANCE_GROUPS: {
         label: "Change these thresholds",
         hint: "The bar for changing the bar",
       },
-      { action: "CHANGE_LOCK_RULE", label: "Change a lock", hint: "Free up held money" },
     ],
   },
   {

@@ -41,7 +41,8 @@ export const accountOwnerTypeEnum = pgEnum("account_owner_type", [
  *
  *  PSP_SETTLEMENT — cash sitting in the Paystack balance. An asset.
  *  GROUP_AVAILABLE — money a group can propose to spend. We owe it: a liability.
- *  GROUP_LOCKED — the group's money that a lock or a reservation has fenced off.
+ *  GROUP_RESERVED — money an approved proposal is about to spend. Fenced off
+ *    so a second proposal cannot claim the same naira.
  *  USER_WALLET — reserved. The MVP personal wallet is a view, not a balance.
  *  FEE_EXPENSE — gateway fees incurred.
  *  FEE_RECOVERY — fees funded by whoever paid the charge. Offsets FEE_EXPENSE.
@@ -51,7 +52,7 @@ export const accountOwnerTypeEnum = pgEnum("account_owner_type", [
 export const accountPurposeEnum = pgEnum("account_purpose", [
   "PSP_SETTLEMENT",
   "GROUP_AVAILABLE",
-  "GROUP_LOCKED",
+  "GROUP_RESERVED",
   "USER_WALLET",
   "FEE_EXPENSE",
   "FEE_RECOVERY",
@@ -211,7 +212,7 @@ export type LedgerTransactionType =
 export const PURPOSE_KIND: Record<AccountPurpose, AccountKind> = {
   PSP_SETTLEMENT: "ASSET",
   GROUP_AVAILABLE: "LIABILITY",
-  GROUP_LOCKED: "LIABILITY",
+  GROUP_RESERVED: "LIABILITY",
   USER_WALLET: "LIABILITY",
   FEE_EXPENSE: "EXPENSE",
   FEE_RECOVERY: "INCOME",
@@ -220,7 +221,7 @@ export const PURPOSE_KIND: Record<AccountPurpose, AccountKind> = {
 };
 
 /** Purposes that belong to a group rather than a user or the system. */
-export const GROUP_PURPOSES = ["GROUP_AVAILABLE", "GROUP_LOCKED"] as const;
+export const GROUP_PURPOSES = ["GROUP_AVAILABLE", "GROUP_RESERVED"] as const;
 
 /** Purposes with exactly one system-wide account. */
 export const SYSTEM_PURPOSES = [

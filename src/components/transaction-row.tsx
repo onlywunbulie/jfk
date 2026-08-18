@@ -63,13 +63,13 @@ const PRESENTATION: Record<
   },
   FUND_LOCK: {
     label: "Funds locked",
-    chip: "bg-locked-soft text-locked",
+    chip: "bg-held-soft text-held",
     icon: "🔒",
     neutral: true,
   },
   FUND_UNLOCK: {
     label: "Funds unlocked",
-    chip: "bg-locked-soft text-locked",
+    chip: "bg-held-soft text-held",
     icon: "🔓",
     neutral: true,
   },

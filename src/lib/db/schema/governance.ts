@@ -37,15 +37,6 @@ export const proposalStatusEnum = pgEnum("proposal_status", [
 
 export const voteChoiceEnum = pgEnum("vote_choice", ["YES", "NO", "ABSTAIN"]);
 
-export const lockStatusEnum = pgEnum("lock_status", [
-  "LOCKED",
-  "ELIGIBLE",
-  "RELEASED",
-  "CANCELLED",
-]);
-
-export const lockRuleEnum = pgEnum("lock_rule", ["DATE", "CYCLE_COUNT", "MANUAL"]);
-
 export const releaseStatusEnum = pgEnum("release_status", [
   "PENDING",
   "EXECUTING",
@@ -147,50 +138,6 @@ export const votes = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// fund_locks
-// ---------------------------------------------------------------------------
-
-export const fundLocks = pgTable(
-  "fund_locks",
-  {
-    id: primaryId(),
-    groupId: text("group_id")
-      .notNull()
-      .references(() => groups.id, { onDelete: "cascade" }),
-
-    amount: bigint("amount", { mode: "bigint" }).notNull(),
-    ruleType: lockRuleEnum("rule_type").notNull(),
-
-    /** For DATE locks. */
-    unlockAt: timestamp("unlock_at", { withTimezone: true }),
-    /** For CYCLE_COUNT locks. */
-    unlockAfterCycle: integer("unlock_after_cycle"),
-
-    status: lockStatusEnum("status").notNull().default("LOCKED"),
-    reason: text("reason"),
-
-    createdBy: text("created_by").references(() => users.id, {
-      onDelete: "set null",
-    }),
-    /** Set when a vote created or changed this lock. */
-    createdViaProposalId: text("created_via_proposal_id").references(
-      () => proposals.id,
-      { onDelete: "set null" },
-    ),
-
-    becameEligibleAt: timestamp("became_eligible_at", { withTimezone: true }),
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
-  },
-  (table) => [
-    index("fund_locks_group_status_idx").on(table.groupId, table.status),
-    index("fund_locks_due_idx")
-      .on(table.unlockAt)
-      .where(sql`${table.status} = 'LOCKED'`),
-  ],
-);
-
-// ---------------------------------------------------------------------------
 // fund_releases
 // ---------------------------------------------------------------------------
 
@@ -249,12 +196,10 @@ export const fundReleases = pgTable(
 
 export type Proposal = typeof proposals.$inferSelect;
 export type Vote = typeof votes.$inferSelect;
-export type FundLock = typeof fundLocks.$inferSelect;
 export type FundRelease = typeof fundReleases.$inferSelect;
 export type ProposalStatus = (typeof proposalStatusEnum.enumValues)[number];
 export type VoteChoice = (typeof voteChoiceEnum.enumValues)[number];
 export type ReleaseStatus = (typeof releaseStatusEnum.enumValues)[number];
-export type LockStatus = (typeof lockStatusEnum.enumValues)[number];
 
 /** Default voting window, in days. */
 export const DEFAULT_VOTE_DAYS = 3;

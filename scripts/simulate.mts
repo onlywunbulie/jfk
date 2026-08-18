@@ -97,7 +97,7 @@ for (const group of targets) {
   const after = await getGroupBalances(group.id);
   console.log(
     `  ${"".padEnd(14)} ${after.total.format()} total ` +
-      `(${after.available.format()} available, ${after.locked.format()} locked)`,
+      `(${after.available.format()} available, ${after.reserved.format()} reserved)`,
   );
 }
 

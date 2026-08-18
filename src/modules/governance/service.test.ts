@@ -272,7 +272,7 @@ describe("the worked example from the brief", () => {
     // The money is now fenced off: available drops, locked rises, total same.
     const after = await ledger.getGroupBalances(groupId);
     expect(after.available.format()).toBe("₦80,000.00");
-    expect(after.locked.format()).toBe("₦120,000.00");
+    expect(after.reserved.format()).toBe("₦120,000.00");
     expect(after.total.format()).toBe("₦200,000.00");
 
     expect((await reconcileLedger(t.db)).clean).toBe(true);
@@ -298,7 +298,7 @@ describe("the worked example from the brief", () => {
 
     const balances = await ledger.getGroupBalances(groupId);
     expect(balances.available.format()).toBe("₦200,000.00");
-    expect(balances.locked.isZero()).toBe(true);
+    expect(balances.reserved.isZero()).toBe(true);
   });
 });
 
@@ -339,7 +339,7 @@ describe("two proposals cannot spend the same money", () => {
 
     // Only one reservation exists, and the books still balance.
     const balances = await ledger.getGroupBalances(groupId);
-    expect(balances.locked.format()).toBe("₦120,000.00");
+    expect(balances.reserved.format()).toBe("₦120,000.00");
     expect(balances.available.format()).toBe("₦80,000.00");
     expect((await reconcileLedger(t.db)).clean).toBe(true);
   });

@@ -29,9 +29,9 @@ export function GroupCard({ group }: { group: GroupSummary }) {
             {group.balance.total.format({ compact: true })}
           </p>
           <p className="text-xs text-ink-faint">
-            {group.balance.locked.isZero()
+            {group.balance.reserved.isZero()
               ? "group balance"
-              : `${group.balance.locked.format({ compact: true })} locked`}
+              : `${group.balance.reserved.format({ compact: true })} reserved`}
           </p>
         </div>
         <p className="text-right text-sm text-ink-muted">
@@ -50,7 +50,7 @@ function TypeBadge({ type }: { type: GroupSummary["type"] }) {
       className={
         "shrink-0 rounded-full px-2.5 py-1 text-[0.6875rem] font-medium " +
         (rotating
-          ? "bg-locked-soft text-locked"
+          ? "bg-held-soft text-held"
           : "bg-accent-soft text-accent")
       }
     >

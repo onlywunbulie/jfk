@@ -18,7 +18,6 @@ const ALL_ACTIONS: Action[] = [
   "group.transfer_ownership",
   "group.contribution.change",
   "group.governance.change",
-  "group.lock.change",
   "funds.release",
   "group.dissolve",
   "rotation.order.change",
@@ -111,11 +110,6 @@ describe("permission matrix — every role × action", () => {
       ADMIN: "vote:CHANGE_GOVERNANCE",
       OWNER: "vote:CHANGE_GOVERNANCE",
     },
-    "group.lock.change": {
-      MEMBER: "vote:CHANGE_LOCK_RULE",
-      ADMIN: "vote:CHANGE_LOCK_RULE",
-      OWNER: "vote:CHANGE_LOCK_RULE",
-    },
     "funds.release": {
       MEMBER: "vote:FUND_RELEASE_SMALL",
       ADMIN: "vote:FUND_RELEASE_SMALL",
@@ -153,7 +147,6 @@ describe("the admin ≠ owner-of-the-money rule", () => {
     const moneyActions: Action[] = [
       "funds.release",
       "group.contribution.change",
-      "group.lock.change",
       "group.dissolve",
     ];
 

@@ -34,7 +34,6 @@ export type Action =
   // Always governed — listed so the matrix is exhaustive and testable
   | "group.contribution.change"
   | "group.governance.change"
-  | "group.lock.change"
   | "funds.release"
   | "group.dissolve"
   | "rotation.order.change";
@@ -74,7 +73,6 @@ function atLeast(role: MemberRole, required: MemberRole): boolean {
 const ALWAYS_GOVERNED: Partial<Record<Action, GovernedAction>> = {
   "group.contribution.change": "CHANGE_CONTRIBUTION",
   "group.governance.change": "CHANGE_GOVERNANCE",
-  "group.lock.change": "CHANGE_LOCK_RULE",
   "funds.release": "FUND_RELEASE_SMALL",
   "group.dissolve": "DISSOLVE_GROUP",
   "rotation.order.change": "ROTATION_ORDER_CHANGE",

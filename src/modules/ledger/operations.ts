@@ -4,7 +4,7 @@ import { Money } from "@/lib/money";
 import {
   getGroupBalances,
   groupAvailable,
-  groupLocked,
+  groupReserved,
   post,
   systemAccount,
   InsufficientFundsError,
@@ -93,66 +93,6 @@ export async function postContribution(
 }
 
 // ---------------------------------------------------------------------------
-// Locking
-// ---------------------------------------------------------------------------
-
-/**
- * Fence money off so it cannot be proposed for spending.
- *
- *   DR GROUP_AVAILABLE  →  CR GROUP_LOCKED
- *
- * The total is unchanged; only what the group may reach moves. Because this is
- * a real posting rather than a flag, every lock and unlock is in the history.
- */
-export async function lockFunds(
-  input: { groupId: string; amount: Money; lockId: string; reason?: string },
-  executor?: Transaction,
-): Promise<PostingResult> {
-  await assertAvailable(input.groupId, input.amount, executor);
-
-  return post(
-    {
-      type: "FUND_LOCK",
-      idempotencyKey: `lock:${input.lockId}`,
-      description: input.reason ?? "Funds locked",
-      groupId: input.groupId,
-      metadata: { lockId: input.lockId },
-      legs: [
-        { account: groupAvailable(input.groupId), direction: "DEBIT", amount: input.amount },
-        { account: groupLocked(input.groupId), direction: "CREDIT", amount: input.amount },
-      ],
-    },
-    executor,
-  );
-}
-
-/**
- * Release a lock whose condition has been met.
- *
- * Eligible is not the same as withdrawn: this only returns the money to the
- * group's available balance, where a proposal can then be raised against it.
- */
-export async function unlockFunds(
-  input: { groupId: string; amount: Money; lockId: string },
-  executor?: Transaction,
-): Promise<PostingResult> {
-  return post(
-    {
-      type: "FUND_UNLOCK",
-      idempotencyKey: `unlock:${input.lockId}`,
-      description: "Lock condition met — funds unlocked",
-      groupId: input.groupId,
-      metadata: { lockId: input.lockId },
-      legs: [
-        { account: groupLocked(input.groupId), direction: "DEBIT", amount: input.amount },
-        { account: groupAvailable(input.groupId), direction: "CREDIT", amount: input.amount },
-      ],
-    },
-    executor,
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Reservations — the guard against double-spending an approved proposal
 // ---------------------------------------------------------------------------
 
@@ -178,7 +118,7 @@ export async function reserveForProposal(
       metadata: { proposalId: input.proposalId },
       legs: [
         { account: groupAvailable(input.groupId), direction: "DEBIT", amount: input.amount },
-        { account: groupLocked(input.groupId), direction: "CREDIT", amount: input.amount },
+        { account: groupReserved(input.groupId), direction: "CREDIT", amount: input.amount },
       ],
     },
     executor,
@@ -198,7 +138,7 @@ export async function releaseReservation(
       groupId: input.groupId,
       metadata: { proposalId: input.proposalId, reason: input.reason },
       legs: [
-        { account: groupLocked(input.groupId), direction: "DEBIT", amount: input.amount },
+        { account: groupReserved(input.groupId), direction: "DEBIT", amount: input.amount },
         { account: groupAvailable(input.groupId), direction: "CREDIT", amount: input.amount },
       ],
     },
@@ -213,7 +153,7 @@ export async function releaseReservation(
 /**
  * Money genuinely leaving for a destination bank account.
  *
- *   DR GROUP_LOCKED     the reserved money is spent
+ *   DR GROUP_RESERVED   the reserved money is spent
  *   CR PSP_SETTLEMENT   cash leaves the Paystack balance
  *
  * Posted only when the transfer webhook confirms success. If it fails, the
@@ -236,7 +176,7 @@ export async function postPayout(
       groupId: input.groupId,
       metadata: { releaseId: input.releaseId, destination: input.destination },
       legs: [
-        { account: groupLocked(input.groupId), direction: "DEBIT", amount: input.amount },
+        { account: groupReserved(input.groupId), direction: "DEBIT", amount: input.amount },
         { account: systemAccount("PSP_SETTLEMENT"), direction: "CREDIT", amount: input.amount },
       ],
     },

@@ -61,10 +61,10 @@ describe("reconciliation on a healthy ledger", () => {
         fee: Money.fromMajor(850),
       });
     }
-    await ops.lockFunds({
+    await ops.reserveForProposal({
       groupId: GROUPS[0],
       amount: Money.fromMajor(100_000),
-      lockId: "l-1",
+      proposalId: "l-1",
     });
     await ops.reserveForProposal({
       groupId: GROUPS[0],
@@ -198,7 +198,7 @@ describe("property: any sequence of valid operations keeps the books sound", () 
     // Mirror of the ledger, maintained independently, so the assertions are
     // not just the ledger agreeing with itself.
     const expected = new Map(
-      GROUPS.map((id) => [id, { available: 0n, locked: 0n }]),
+      GROUPS.map((id) => [id, { available: 0n, reserved: 0n }]),
     );
     const openReservations: { groupId: string; amount: bigint; id: string }[] = [];
     let operations = 0;
@@ -234,13 +234,13 @@ describe("property: any sequence of valid operations keeps the books sound", () 
         const amount = state.available / 2n;
         if (amount <= 0n) continue;
 
-        await ops.lockFunds({
+        await ops.reserveForProposal({
           groupId,
           amount: Money.fromMinor(amount),
-          lockId: `prop-l-${step}`,
+          proposalId: `prop-l-${step}`,
         });
         state.available -= amount;
-        state.locked += amount;
+        state.reserved += amount;
         operations++;
         continue;
       }
@@ -257,7 +257,7 @@ describe("property: any sequence of valid operations keeps the books sound", () 
           proposalId: id,
         });
         state.available -= amount;
-        state.locked += amount;
+        state.reserved += amount;
         openReservations.push({ groupId, amount, id });
         operations++;
         continue;
@@ -276,7 +276,7 @@ describe("property: any sequence of valid operations keeps the books sound", () 
             releaseId: `prop-r-${step}`,
             destination: "Vendor",
           });
-          reservationState.locked -= reservation.amount;
+          reservationState.reserved -= reservation.amount;
         } else {
           await ops.releaseReservation({
             groupId: reservation.groupId,
@@ -284,7 +284,7 @@ describe("property: any sequence of valid operations keeps the books sound", () 
             proposalId: reservation.id,
             reason: "transfer failed",
           });
-          reservationState.locked -= reservation.amount;
+          reservationState.reserved -= reservation.amount;
           reservationState.available += reservation.amount;
         }
         operations++;
@@ -302,9 +302,9 @@ describe("property: any sequence of valid operations keeps the books sound", () 
       expect(actual.available.minor, `available for ${groupId}`).toBe(
         state.available,
       );
-      expect(actual.locked.minor, `locked for ${groupId}`).toBe(state.locked);
+      expect(actual.reserved.minor, `locked for ${groupId}`).toBe(state.reserved);
       expect(actual.available.isNegative()).toBe(false);
-      expect(actual.locked.isNegative()).toBe(false);
+      expect(actual.reserved.isNegative()).toBe(false);
     }
 
     // 2. The cached balance equals the balance derived from entries.
@@ -313,10 +313,10 @@ describe("property: any sequence of valid operations keeps the books sound", () 
       const derivedAvailable = await ledger.getBalance(
         ledger.groupAvailable(groupId),
       );
-      const derivedLocked = await ledger.getBalance(ledger.groupLocked(groupId));
+      const derivedLocked = await ledger.getBalance(ledger.groupReserved(groupId));
 
       expect(cached.available.equals(derivedAvailable)).toBe(true);
-      expect(cached.locked.equals(derivedLocked)).toBe(true);
+      expect(cached.reserved.equals(derivedLocked)).toBe(true);
     }
 
     // 3. Every invariant the reconciliation job knows about.

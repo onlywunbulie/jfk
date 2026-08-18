@@ -55,7 +55,6 @@ export const governedActionEnum = pgEnum("governed_action", [
   "CHANGE_GOVERNANCE",
   "REMOVE_MEMBER",
   "REMOVE_ADMIN",
-  "CHANGE_LOCK_RULE",
   "ROTATION_ORDER_CHANGE",
   "DISSOLVE_GROUP",
 ]);
@@ -257,7 +256,6 @@ export const DEFAULT_GOVERNANCE: Record<GovernedAction, number> = {
   CHANGE_GOVERNANCE: 750,
   REMOVE_MEMBER: 667,
   REMOVE_ADMIN: 750,
-  CHANGE_LOCK_RULE: 750,
   ROTATION_ORDER_CHANGE: 667,
   DISSOLVE_GROUP: 800,
 };

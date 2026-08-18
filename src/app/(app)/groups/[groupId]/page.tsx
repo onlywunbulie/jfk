@@ -100,7 +100,7 @@ export default async function GroupPage({
           {group.balance.total.format({ compact: true })}
         </p>
         <p className="mt-3 text-xs leading-relaxed text-ink-faint">
-          Locked money can&rsquo;t be spent until the group votes to release it.
+          Reserved money has already been voted through and is waiting to be sent.
         </p>
       </Card>
 
@@ -111,9 +111,9 @@ export default async function GroupPage({
           tone="inflow"
         />
         <StatTile
-          value={group.balance.locked.format({ compact: true })}
-          label="Locked"
-          tone="locked"
+          value={group.balance.reserved.format({ compact: true })}
+          label="Reserved"
+          tone="held"
         />
         <StatTile value={group.memberCount} label="Members" />
         <StatTile
@@ -285,7 +285,6 @@ const GOVERNANCE_LABELS: Record<string, string> = {
   CHANGE_GOVERNANCE: "Change these thresholds",
   REMOVE_MEMBER: "Remove a member",
   REMOVE_ADMIN: "Remove an admin",
-  CHANGE_LOCK_RULE: "Change the lock",
   ROTATION_ORDER_CHANGE: "Change payout order",
   DISSOLVE_GROUP: "Dissolve the group",
 };

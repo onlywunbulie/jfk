@@ -50,7 +50,7 @@ export function CycleCard({ cycle }: { cycle: CycleView }) {
       </div>
 
       {cycle.beneficiaryName && (
-        <p className="mt-4 rounded-lg bg-locked-soft px-3 py-2 text-sm text-locked">
+        <p className="mt-4 rounded-lg bg-held-soft px-3 py-2 text-sm text-held">
           This cycle pays out to <strong>{cycle.beneficiaryName}</strong> once
           everyone has contributed.
         </p>

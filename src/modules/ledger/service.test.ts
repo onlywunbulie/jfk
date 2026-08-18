@@ -58,7 +58,7 @@ describe("posting", () => {
 
     const balances = await ledger.getGroupBalances(GROUP);
     expect(balances.available.format()).toBe("₦50,000.00");
-    expect(balances.locked.isZero()).toBe(true);
+    expect(balances.reserved.isZero()).toBe(true);
     expect(balances.total.format()).toBe("₦50,000.00");
   });
 
@@ -235,44 +235,45 @@ describe("the database enforces balance, not just the application", () => {
 describe("locking", () => {
   it("moves money from available to locked without changing the total", async () => {
     await fund(Money.fromMajor(500_000));
-    await ops.lockFunds({
+    await ops.reserveForProposal({
       groupId: GROUP,
       amount: Money.fromMajor(300_000),
-      lockId: "lock-1",
+      proposalId: "lock-1",
     });
 
     const balances = await ledger.getGroupBalances(GROUP);
     expect(balances.available.format()).toBe("₦200,000.00");
-    expect(balances.locked.format()).toBe("₦300,000.00");
+    expect(balances.reserved.format()).toBe("₦300,000.00");
     expect(balances.total.format()).toBe("₦500,000.00");
   });
 
   it("returns the money on unlock", async () => {
     await fund(Money.fromMajor(500_000));
-    await ops.lockFunds({
+    await ops.reserveForProposal({
       groupId: GROUP,
       amount: Money.fromMajor(300_000),
-      lockId: "lock-1",
+      proposalId: "lock-1",
     });
-    await ops.unlockFunds({
+    await ops.releaseReservation({
       groupId: GROUP,
       amount: Money.fromMajor(300_000),
-      lockId: "lock-1",
+      proposalId: "lock-1",
+      reason: "no longer needed",
     });
 
     const balances = await ledger.getGroupBalances(GROUP);
     expect(balances.available.format()).toBe("₦500,000.00");
-    expect(balances.locked.isZero()).toBe(true);
+    expect(balances.reserved.isZero()).toBe(true);
   });
 
   it("refuses to lock more than is available", async () => {
     await fund(Money.fromMajor(100_000));
 
     await expect(
-      ops.lockFunds({
+      ops.reserveForProposal({
         groupId: GROUP,
         amount: Money.fromMajor(200_000),
-        lockId: "lock-too-big",
+        proposalId: "lock-too-big",
       }),
     ).rejects.toThrow(/Insufficient funds/);
 
@@ -302,7 +303,7 @@ describe("reservations — two proposals cannot spend the same naira", () => {
 
     const balances = await ledger.getGroupBalances(GROUP);
     expect(balances.available.format()).toBe("₦200,000.00");
-    expect(balances.locked.format()).toBe("₦300,000.00");
+    expect(balances.reserved.format()).toBe("₦300,000.00");
     expect(balances.total.format()).toBe("₦500,000.00");
   });
 
@@ -324,7 +325,7 @@ describe("reservations — two proposals cannot spend the same naira", () => {
 
     const after = await ledger.getGroupBalances(GROUP);
     expect(after.available.equals(before.available)).toBe(true);
-    expect(after.locked.equals(before.locked)).toBe(true);
+    expect(after.reserved.equals(before.reserved)).toBe(true);
     expect(after.total.equals(before.total)).toBe(true);
   });
 });
@@ -346,7 +347,7 @@ describe("payout", () => {
 
     const balances = await ledger.getGroupBalances(GROUP);
     expect(balances.available.format()).toBe("₦200,000.00");
-    expect(balances.locked.isZero()).toBe(true);
+    expect(balances.reserved.isZero()).toBe(true);
     expect(balances.total.format()).toBe("₦200,000.00");
 
     // Cash left the platform too.
@@ -374,7 +375,7 @@ describe("the JFK Empire worked example", () => {
 
     balances = await ledger.getGroupBalances(GROUP);
     expect(balances.available.format()).toBe("₦200,000.00");
-    expect(balances.locked.format()).toBe("₦300,000.00");
+    expect(balances.reserved.format()).toBe("₦300,000.00");
 
     // It executes.
     await ops.postPayout({
@@ -464,18 +465,20 @@ describe("reversal", () => {
 describe("statement", () => {
   it("signs amounts from the account's point of view", async () => {
     await fund(Money.fromMajor(50_000), "in-1");
-    await ops.lockFunds({
+    await ops.reserveForProposal({
       groupId: GROUP,
       amount: Money.fromMajor(20_000),
-      lockId: "lock-1",
+      proposalId: "lock-1",
     });
 
     const entries = await ledger.listEntries(ledger.groupAvailable(GROUP));
     const contribution = entries.find((e) => e.type === "CONTRIBUTION")!;
-    const lock = entries.find((e) => e.type === "FUND_LOCK")!;
+    const reservation = entries.find((e) => e.type === "RESERVATION")!;
 
+    // Money in is positive, money fenced off is negative — from this
+    // account's point of view, not the group's.
     expect(contribution.amount.format()).toBe("₦50,000.00");
-    expect(lock.amount.format()).toBe("-₦20,000.00");
+    expect(reservation.amount.format()).toBe("-₦20,000.00");
   });
 });
 
@@ -499,5 +502,39 @@ describe("group isolation", () => {
     expect((await ledger.getGroupBalances(other)).total.format()).toBe(
       "₦10,000.00",
     );
+  });
+});
+
+describe("the no-negative guard survives the GROUP_LOCKED rename", () => {
+  /**
+   * The guard is a plpgsql function that names the account purposes as string
+   * literals. Renaming the enum value does not rewrite the function body, so a
+   * migration that renames without rebuilding the function leaves the check
+   * matching nothing — silently, with no error. This asserts it still bites.
+   */
+  it("refuses to let a reserved account go negative", async () => {
+    await fund(Money.fromMajor(10_000));
+
+    // Reserve everything, then try to reserve more than remains.
+    await ops.reserveForProposal({
+      groupId: GROUP,
+      amount: Money.fromMajor(10_000),
+      proposalId: "p-1",
+    });
+
+    // Hand back more than was ever reserved: the reserved account would go
+    // negative, which the database must refuse at COMMIT.
+    await expect(
+      ops.releaseReservation({
+        groupId: GROUP,
+        amount: Money.fromMajor(25_000),
+        proposalId: "p-2",
+        reason: "over-release",
+      }),
+    ).rejects.toThrow(/negative/);
+
+    const balances = await ledger.getGroupBalances(GROUP);
+    expect(balances.reserved.format()).toBe("₦10,000.00");
+    expect(balances.available.isZero()).toBe(true);
   });
 });

@@ -104,7 +104,7 @@ for (const member of [geoffrey, amaka]) {
 
 // Two months of contributions into JFK Empire, so the ledger has real history.
 // Paystack's local-card fee: 1.5% + ₦100, capped at ₦2,000.
-const { postContribution, lockFunds } = await import(
+const { postContribution } = await import(
   "../src/modules/ledger/operations.js"
 );
 const { reconcileLedger, describeReport } = await import(
@@ -129,16 +129,6 @@ for (let cycle = 1; cycle <= 2; cycle += 1) {
     });
   }
 }
-
-// Lock most of it, the way a treasury group holding for a target would —
-// leaving enough available that the seeded proposal below can actually be
-// funded. Lock too much and the proposal is rejected before anyone votes.
-await lockFunds({
-  groupId: empire.groupId,
-  amount: Money.fromMajor(250_000),
-  lockId: "seed-empire-lock-1",
-  reason: "Locked until the group votes to release",
-});
 
 // One week of the rotating group.
 const ajoPlan = planCharge(Money.fromMajor(20_000), true);
