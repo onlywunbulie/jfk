@@ -11,6 +11,13 @@ const nextConfig: NextConfig = {
    * Argon2 is a native addon and must never be bundled either.
    */
   serverExternalPackages: ["@electric-sql/pglite", "@node-rs/argon2"],
+
+  /**
+   * Dev only. Lets a Cloudflare quick tunnel load the dev server's assets, so
+   * the app can be opened on a phone. Without it Next refuses `/_next/*` to
+   * any origin but localhost and the page arrives unhydrated.
+   */
+  allowedDevOrigins: ["*.trycloudflare.com"],
 };
 
 export default nextConfig;
