@@ -1,5 +1,6 @@
 import "server-only";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db, type Transaction } from "@/lib/db";
 import {
   accountBalances,
@@ -566,4 +567,100 @@ export async function listEntries(
       metadata: row.metadata,
     };
   });
+}
+
+export interface MonthlyRaised {
+  /** Calendar month in Lagos time, as `YYYY-MM`. */
+  month: string;
+  /** The instant that month begins in Lagos. */
+  start: Date;
+  raised: Money;
+}
+
+/**
+ * West Africa Time is UTC+1 with no daylight saving, so the month boundaries
+ * computed here and the `Africa/Lagos` bucketing in SQL cannot disagree.
+ */
+const LAGOS_OFFSET_MS = 60 * 60 * 1000;
+
+/**
+ * How much a group successfully raised in each of the last `months` calendar
+ * months, oldest first, ending with the month containing `now`.
+ *
+ * "Raised" is settled contributions credited to the group — the same net-of-
+ * fees figure its balance moved by. Promises, pending charges and failed
+ * attempts never reach the ledger, so they cannot be counted by accident. A
+ * contribution that was later reversed is taken back out of the month it was
+ * originally counted in, not the month the correction was posted: the question
+ * is what a month really brought in.
+ *
+ * Months with nothing raised are present as zero, so a chart has no gaps.
+ */
+export async function getMonthlyRaised(
+  groupId: string,
+  options: { months?: number; now?: Date; currency?: Currency } = {},
+): Promise<MonthlyRaised[]> {
+  const months = options.months ?? 12;
+  const currency = options.currency ?? "NGN";
+  const lagosNow = new Date(
+    (options.now ?? new Date()).getTime() + LAGOS_OFFSET_MS,
+  );
+
+  const buckets: MonthlyRaised[] = [];
+  for (let back = months - 1; back >= 0; back--) {
+    const first = new Date(
+      Date.UTC(lagosNow.getUTCFullYear(), lagosNow.getUTCMonth() - back, 1),
+    );
+    buckets.push({
+      month: first.toISOString().slice(0, 7),
+      start: new Date(first.getTime() - LAGOS_OFFSET_MS),
+      raised: Money.zero(currency),
+    });
+  }
+  if (buckets.length === 0) return buckets;
+
+  // A reversal points at the transaction it undoes; joining back to it gives
+  // both its type and the month the money was first counted in.
+  const original = alias(ledgerTransactions, "original");
+  const countedAt = sql`coalesce(${original.occurredAt}, ${ledgerTransactions.occurredAt})`;
+
+  const rows = await db
+    .select({
+      month: sql<string>`to_char(${countedAt} at time zone 'Africa/Lagos', 'YYYY-MM')`,
+      raised: sql<string>`sum(case when ${ledgerEntries.direction} = 'CREDIT' then ${ledgerEntries.amount} else -${ledgerEntries.amount} end)::text`,
+    })
+    .from(ledgerEntries)
+    .innerJoin(ledgerAccounts, eq(ledgerAccounts.id, ledgerEntries.accountId))
+    .innerJoin(
+      ledgerTransactions,
+      eq(ledgerTransactions.id, ledgerEntries.transactionId),
+    )
+    .leftJoin(
+      original,
+      and(
+        eq(ledgerTransactions.type, "REVERSAL"),
+        sql`${original.id} = ${ledgerTransactions.metadata}->>'reversedTransactionId'`,
+      ),
+    )
+    .where(
+      and(
+        eq(ledgerAccounts.ownerType, "GROUP"),
+        eq(ledgerAccounts.ownerId, groupId),
+        eq(ledgerAccounts.purpose, "GROUP_AVAILABLE"),
+        eq(ledgerAccounts.currency, currency),
+        or(
+          eq(ledgerTransactions.type, "CONTRIBUTION"),
+          eq(original.type, "CONTRIBUTION"),
+        ),
+        sql`${countedAt} >= ${buckets[0].start.toISOString()}::timestamptz`,
+      ),
+    )
+    .groupBy(sql`1`);
+
+  const byMonth = new Map(rows.map((row) => [row.month, BigInt(row.raised)]));
+
+  return buckets.map((bucket) => ({
+    ...bucket,
+    raised: Money.fromMinor(byMonth.get(bucket.month) ?? 0n, currency),
+  }));
 }

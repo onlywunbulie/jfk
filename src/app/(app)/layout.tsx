@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { listGroupsForUser } from "@/modules/groups/service";
 import { formatPermille } from "@/modules/governance/threshold";
 import { TabBar } from "@/components/tab-bar";
+import { TopBar } from "@/components/top-bar";
 import type { SidebarGroup } from "@/components/sidebar";
 import { CurrentGroupProbe } from "@/components/current-group-probe";
 
@@ -40,9 +41,10 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
 
   return (
     <div className="min-h-dvh">
-      <CurrentGroupProbe groups={sidebarGroups} user={user} />
+      <CurrentGroupProbe groups={sidebarGroups} />
 
       <div className="flex min-h-dvh flex-col lg:pl-[var(--sidebar-width)]">
+        <TopBar user={user} />
         {/*
           Mobile stays a centred narrow column. Desktop fills the space beside
           the sidebar rather than sitting in a centred box — the dead margins
@@ -50,7 +52,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           very large displays, where an uninterrupted 2000px row of text would
           be worse than a margin.
         */}
-        <div className="mx-auto w-full max-w-lg flex-1 px-5 pt-8 pb-6 lg:mx-0 lg:max-w-none lg:px-8 lg:pt-10 lg:pb-16 2xl:max-w-[112rem] 2xl:px-12">
+        <div className="mx-auto w-full max-w-lg flex-1 px-5 pt-8 pb-6 lg:mx-0 lg:max-w-none lg:px-8 lg:pt-6 lg:pb-16 2xl:max-w-[112rem] 2xl:px-12">
           {children}
         </div>
         <div className="lg:hidden">

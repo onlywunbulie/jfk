@@ -482,6 +482,111 @@ describe("statement", () => {
   });
 });
 
+describe("monthly raised — what each month really brought in", () => {
+  const NOW = new Date("2026-10-07T12:00:00Z");
+
+  async function contribute(amount: number, occurredAt: string) {
+    return ops.postContribution({
+      contributionId: crypto.randomUUID(),
+      groupId: GROUP,
+      memberUserId: OWNER,
+      charged: Money.fromMajor(amount),
+      fee: Money.zero(),
+      occurredAt: new Date(occurredAt),
+    });
+  }
+
+  const raisedIn = (
+    rows: Awaited<ReturnType<typeof ledger.getMonthlyRaised>>,
+    month: string,
+  ) => rows.find((row) => row.month === month)?.raised.format();
+
+  it("returns every month in the window, oldest first, with zeros for quiet ones", async () => {
+    await contribute(50_000, "2026-08-10T09:00:00Z");
+    await contribute(30_000, "2026-08-20T09:00:00Z");
+    await contribute(20_000, "2026-10-02T09:00:00Z");
+
+    const rows = await ledger.getMonthlyRaised(GROUP, { now: NOW });
+
+    expect(rows).toHaveLength(12);
+    expect(rows[0].month).toBe("2025-11");
+    expect(rows[11].month).toBe("2026-10");
+    expect(raisedIn(rows, "2026-08")).toBe("₦80,000.00");
+    expect(raisedIn(rows, "2026-09")).toBe("₦0.00");
+    expect(raisedIn(rows, "2026-10")).toBe("₦20,000.00");
+  });
+
+  it("counts what reached the group, net of the gateway fee", async () => {
+    await ops.postContribution({
+      contributionId: "with-fee",
+      groupId: GROUP,
+      memberUserId: OWNER,
+      charged: Money.fromMajor(10_150),
+      fee: Money.fromMajor(150),
+      occurredAt: new Date("2026-10-03T09:00:00Z"),
+    });
+
+    const rows = await ledger.getMonthlyRaised(GROUP, { now: NOW });
+    expect(raisedIn(rows, "2026-10")).toBe("₦10,000.00");
+  });
+
+  it("draws the month boundary at midnight in Lagos, not UTC", async () => {
+    // 23:30 UTC on 30 September is already 00:30 on 1 October in Lagos.
+    await contribute(5_000, "2026-09-30T23:30:00Z");
+    await contribute(7_000, "2026-09-30T22:30:00Z");
+
+    const rows = await ledger.getMonthlyRaised(GROUP, { now: NOW });
+    expect(raisedIn(rows, "2026-10")).toBe("₦5,000.00");
+    expect(raisedIn(rows, "2026-09")).toBe("₦7,000.00");
+  });
+
+  it("takes a reversed contribution out of the month it was counted in", async () => {
+    await contribute(40_000, "2026-08-05T09:00:00Z");
+    const mistaken = await contribute(25_000, "2026-08-06T09:00:00Z");
+    // The reversal is posted today, months after the contribution it undoes.
+    await ledger.reverse(mistaken.transactionId, "charged in error");
+
+    const rows = await ledger.getMonthlyRaised(GROUP, { now: NOW });
+    expect(raisedIn(rows, "2026-08")).toBe("₦40,000.00");
+    expect(rows.every((row) => !row.raised.isNegative())).toBe(true);
+  });
+
+  it("ignores money that only moved between the group's own pockets", async () => {
+    await contribute(60_000, "2026-10-01T09:00:00Z");
+    await ops.reserveForProposal({
+      groupId: GROUP,
+      amount: Money.fromMajor(20_000),
+      proposalId: "p-month",
+    });
+    await ops.releaseReservation({
+      groupId: GROUP,
+      amount: Money.fromMajor(20_000),
+      proposalId: "p-month",
+      reason: "cancelled",
+    });
+
+    const rows = await ledger.getMonthlyRaised(GROUP, { now: NOW });
+    expect(raisedIn(rows, "2026-10")).toBe("₦60,000.00");
+  });
+
+  it("leaves out contributions older than the window and other groups' money", async () => {
+    const OTHER = "019ff000-0000-7000-8000-00000000cccc";
+    await seedGroup(OTHER);
+    await contribute(9_000, "2025-10-15T09:00:00Z");
+    await ops.postContribution({
+      contributionId: "other-group",
+      groupId: OTHER,
+      memberUserId: OWNER,
+      charged: Money.fromMajor(99_000),
+      fee: Money.zero(),
+      occurredAt: new Date("2026-10-02T09:00:00Z"),
+    });
+
+    const rows = await ledger.getMonthlyRaised(GROUP, { now: NOW });
+    expect(rows.every((row) => row.raised.isZero())).toBe(true);
+  });
+});
+
 describe("group isolation", () => {
   it("keeps one group's money entirely separate from another's", async () => {
     const other = "019ff000-0000-7000-8000-00000000cccc";

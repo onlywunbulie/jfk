@@ -10,13 +10,7 @@ import { Sidebar, type SidebarGroup } from "./sidebar";
  * a context provider through every page for one string is more machinery than
  * the problem deserves. Reading the pathname is exact and costs nothing.
  */
-export function CurrentGroupProbe({
-  groups,
-  user,
-}: {
-  groups: SidebarGroup[];
-  user: { displayName: string; email: string };
-}) {
+export function CurrentGroupProbe({ groups }: { groups: SidebarGroup[] }) {
   const pathname = usePathname();
   const match = pathname.match(/^\/groups\/([^/]+)/);
   const currentId = match?.[1];
@@ -27,7 +21,6 @@ export function CurrentGroupProbe({
         ...group,
         isCurrent: group.id === currentId,
       }))}
-      user={user}
     />
   );
 }

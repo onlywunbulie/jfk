@@ -8,7 +8,7 @@ export function GroupCard({ group }: { group: GroupSummary }) {
   return (
     <Link
       href={`/groups/${group.id}`}
-      className="block rounded-[var(--radius-card)] border border-border bg-surface p-5 transition-colors duration-150 hover:border-border-strong hover:bg-raised"
+      className="block rounded-[var(--radius-card)] glass p-5 transition-colors duration-150 hover:border-white/20"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -51,7 +51,7 @@ function TypeBadge({ type }: { type: GroupSummary["type"] }) {
         "shrink-0 rounded-full px-2.5 py-1 text-[0.6875rem] font-medium " +
         (rotating
           ? "bg-held-soft text-held"
-          : "bg-accent-soft text-accent")
+          : "bg-white/10 text-ink")
       }
     >
       {rotating ? "Rotating" : "Treasury"}

@@ -24,7 +24,7 @@ export function StatTile({
   return (
     <div
       className={cn(
-        "relative rounded-[var(--radius-card)] bg-surface px-4 py-3.5",
+        "glass-subtle relative rounded-[var(--radius-card)] px-4 py-3.5",
         className,
       )}
     >

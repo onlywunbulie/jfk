@@ -22,31 +22,25 @@ export interface SidebarGroup {
  * which group you are in, what it holds, and what the group's bar for spending
  * is. On mobile this collapses away entirely and `TabBar` takes over.
  */
-export function Sidebar({
-  groups,
-  user,
-}: {
-  groups: SidebarGroup[];
-  user: { displayName: string; email: string };
-}) {
+export function Sidebar({ groups }: { groups: SidebarGroup[] }) {
   const pathname = usePathname();
   const current = groups.find((group) => group.isCurrent);
 
   return (
     <aside
-      className="fixed inset-y-0 left-0 z-40 hidden w-[var(--sidebar-width)] flex-col border-r border-border bg-surface lg:flex"
+      className="glass fixed inset-y-0 left-0 z-40 hidden w-[var(--sidebar-width)] flex-col border-y-0 border-l-0 lg:flex"
       aria-label="Sidebar"
     >
       <div className="flex items-center gap-2.5 px-5 py-5">
         <Mark />
-        <span className="text-[0.9375rem] font-semibold tracking-tight text-ink">
+        <span className="text-[1.0625rem] font-semibold tracking-tight text-ink">
           JFK
         </span>
       </div>
 
       {/* The group you are looking at, and its money, always in view. */}
       {current && (
-        <div className="mx-3 rounded-[var(--radius-card)] bg-raised p-4">
+        <div className="glass-strong mx-3 rounded-[var(--radius-card)] p-4">
           <p className="truncate text-sm font-medium text-ink">{current.name}</p>
           <p className="mt-1 text-xl font-semibold tracking-tight text-ink">
             {current.balance}
@@ -58,37 +52,38 @@ export function Sidebar({
         </div>
       )}
 
-      <nav className="mt-5 flex-1 overflow-y-auto px-3" aria-label="Primary">
+      <nav className="mt-2 flex-1 overflow-y-auto px-3 pb-3" aria-label="Primary">
         {current ? (
-          <ul className="space-y-0.5">
-            <NavItem
-              href={`/groups/${current.id}` as Route}
-              pathname={pathname}
-              icon={<DashboardIcon />}
-              exact
-            >
-              Dashboard
-            </NavItem>
-            <NavItem
-              href={`/groups/${current.id}/proposals` as Route}
-              pathname={pathname}
-              icon={<ProposalsIcon />}
-            >
-              Proposals
-            </NavItem>
-            <NavItem
-              href={`/groups/${current.id}/members` as Route}
-              pathname={pathname}
-              icon={<MembersIcon />}
-            >
-              Members
-            </NavItem>
-          </ul>
+          <>
+            <SectionLabel>Main menu</SectionLabel>
+            <ul className="space-y-0.5">
+              <NavItem
+                href={`/groups/${current.id}` as Route}
+                pathname={pathname}
+                icon={<DashboardIcon />}
+                exact
+              >
+                Dashboard
+              </NavItem>
+              <NavItem
+                href={`/groups/${current.id}/proposals` as Route}
+                pathname={pathname}
+                icon={<ProposalsIcon />}
+              >
+                Proposals
+              </NavItem>
+              <NavItem
+                href={`/groups/${current.id}/members` as Route}
+                pathname={pathname}
+                icon={<MembersIcon />}
+              >
+                Members
+              </NavItem>
+            </ul>
+          </>
         ) : null}
 
-        <p className="mt-6 mb-2 px-3 text-[0.6875rem] font-medium tracking-wider text-ink-faint uppercase">
-          Your groups
-        </p>
+        <SectionLabel>Your groups</SectionLabel>
         <ul className="space-y-0.5">
           {groups.map((group) => (
             <li key={group.id}>
@@ -98,7 +93,7 @@ export function Sidebar({
                   "flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
                   group.isCurrent
                     ? "text-ink"
-                    : "text-ink-muted hover:bg-raised hover:text-ink",
+                    : "text-ink-muted hover:bg-white/5 hover:text-ink",
                 )}
               >
                 <span className="truncate">{group.name}</span>
@@ -108,20 +103,20 @@ export function Sidebar({
               </Link>
             </li>
           ))}
+          <li>
+            <Link
+              href="/groups/new"
+              className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-muted transition-colors hover:bg-white/5 hover:text-ink"
+            >
+              <span className="grid size-[1.125rem] place-items-center text-base leading-none text-ink-faint">
+                +
+              </span>
+              New group
+            </Link>
+          </li>
         </ul>
 
-        <Link
-          href="/groups/new"
-          className="mt-2 flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-ink-muted transition-colors hover:bg-raised hover:text-ink"
-        >
-          <span className="grid size-4 place-items-center text-base leading-none">
-            +
-          </span>
-          New group
-        </Link>
-      </nav>
-
-      <div className="border-t border-border p-3">
+        <SectionLabel>General</SectionLabel>
         <ul className="space-y-0.5">
           <NavItem href="/groups" pathname={pathname} icon={<HomeIcon />} exact>
             All groups
@@ -129,28 +124,31 @@ export function Sidebar({
           <NavItem href="/wallet" pathname={pathname} icon={<WalletIcon />}>
             Wallet
           </NavItem>
+          <li>
+            {/* Sign out used to sit on the home screen, which is now a redirect. */}
+            <form action={signOutAction}>
+              <button
+                type="submit"
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-muted transition-colors hover:bg-white/5 hover:text-ink"
+              >
+                <span className="shrink-0 text-ink-faint">
+                  <SignOutIcon />
+                </span>
+                Log out
+              </button>
+            </form>
+          </li>
         </ul>
-
-        <div className="mt-2 flex items-center gap-2.5 rounded-lg px-3 py-2">
-          <Avatar name={user.displayName} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm text-ink">{user.displayName}</p>
-            <p className="truncate text-xs text-ink-faint">{user.email}</p>
-          </div>
-          {/* Sign out used to sit on the home screen, which is now a redirect. */}
-          <form action={signOutAction}>
-            <button
-              type="submit"
-              title="Sign out"
-              aria-label="Sign out"
-              className="grid size-7 shrink-0 place-items-center rounded-md text-ink-faint transition-colors hover:bg-raised hover:text-ink"
-            >
-              <SignOutIcon />
-            </button>
-          </form>
-        </div>
-      </div>
+      </nav>
     </aside>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mt-6 mb-2 border-b border-white/5 px-3 pb-2 text-[0.6875rem] font-medium tracking-wider text-ink-faint uppercase">
+      {children}
+    </p>
   );
 }
 
@@ -175,16 +173,23 @@ function NavItem({
         href={href}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
+          "relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
           active
-            ? "bg-raised font-medium text-ink"
-            : "text-ink-muted hover:bg-raised hover:text-ink",
+            ? "glass-subtle font-medium text-ink"
+            : "border border-transparent text-ink-muted hover:bg-white/5 hover:text-ink",
         )}
       >
-        <span className={cn("shrink-0", active ? "text-accent" : "text-ink-faint")}>
+        <span className={cn("shrink-0", active ? "text-ink" : "text-ink-faint")}>
           {icon}
         </span>
         {children}
+        {/* The one place the brand colour marks where you are. */}
+        {active && (
+          <span
+            aria-hidden="true"
+            className="absolute inset-y-2 right-0 w-[3px] rounded-l-full bg-accent"
+          />
+        )}
       </Link>
     </li>
   );
@@ -192,25 +197,8 @@ function NavItem({
 
 function Pill({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded-md bg-surface px-2 py-1 text-[0.6875rem] text-ink-muted">
+    <span className="rounded-md bg-black/30 px-2 py-1 text-[0.6875rem] text-ink-muted">
       {children}
-    </span>
-  );
-}
-
-function Avatar({ name }: { name: string }) {
-  const initials = name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-
-  return (
-    <span
-      aria-hidden="true"
-      className="grid size-7 shrink-0 place-items-center rounded-full bg-accent-soft text-[0.6875rem] font-medium text-accent"
-    >
-      {initials || "?"}
     </span>
   );
 }
@@ -273,7 +261,7 @@ function HomeIcon() {
 
 function SignOutIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true" {...stroke}>
+    <svg viewBox="0 0 24 24" className="size-[1.125rem]" aria-hidden="true" {...stroke}>
       <path d="M15 17v1.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2V7" />
       <path d="M19 12H9m10 0-3-3m3 3-3 3" />
     </svg>

@@ -21,7 +21,7 @@ export function ProposalCard({
   return (
     <Link
       href={`/groups/${groupId}/proposals/${proposal.id}`}
-      className="block rounded-[var(--radius-card)] border border-border bg-surface p-5 transition-colors hover:border-border-strong hover:bg-raised"
+      className="glass block rounded-[var(--radius-card)] p-5 transition-colors hover:border-white/20"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -52,7 +52,7 @@ export function ProposalCard({
         {proposal.yourVote ? (
           <span className="text-ink-faint">You voted {CHOICE[proposal.yourVote]}</span>
         ) : proposal.status === "OPEN" ? (
-          <span className="font-medium text-accent">Your vote needed</span>
+          <span className="font-medium text-ink">Your vote needed</span>
         ) : null}
       </div>
     </Link>
@@ -100,7 +100,7 @@ export function VoteBar({
 const CHOICE = { YES: "for", NO: "against", ABSTAIN: "abstain" } as const;
 
 const STATUS: Record<ProposalSummary["status"], { label: string; chip: string }> = {
-  OPEN: { label: "Voting", chip: "bg-accent-soft text-accent" },
+  OPEN: { label: "Voting", chip: "bg-white/10 text-ink" },
   APPROVED: { label: "Approved", chip: "bg-inflow-soft text-inflow" },
   REJECTED: { label: "Rejected", chip: "bg-danger-soft text-danger" },
   EXPIRED: { label: "Expired", chip: "bg-raised text-ink-muted" },

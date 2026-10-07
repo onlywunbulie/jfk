@@ -19,8 +19,8 @@ export function Card({
     <div
       {...props}
       className={cn(
-        "rounded-[var(--radius-card)] border border-border",
-        raised ? "bg-raised" : "bg-surface",
+        "rounded-[var(--radius-card)]",
+        raised ? "glass-strong" : "glass",
         inset && "p-5",
         className,
       )}
@@ -32,17 +32,32 @@ export function Card({
 
 export function CardHeader({
   title,
+  icon,
   action,
 }: {
   title: ReactNode;
+  icon?: ReactNode;
   action?: ReactNode;
 }) {
   return (
     <div className="mb-4 flex items-center justify-between gap-3">
-      <h2 className="text-sm font-medium tracking-wide text-ink-muted uppercase">
-        {title}
-      </h2>
+      <div className="flex min-w-0 items-center gap-2.5">
+        {icon && <IconTile>{icon}</IconTile>}
+        <h2 className="truncate text-[0.9375rem] font-medium text-ink">{title}</h2>
+      </div>
       {action}
     </div>
+  );
+}
+
+/** The small square that sits beside a card's title. */
+export function IconTile({ children }: { children: ReactNode }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="glass-subtle grid size-8 shrink-0 place-items-center rounded-lg text-ink-muted"
+    >
+      {children}
+    </span>
   );
 }

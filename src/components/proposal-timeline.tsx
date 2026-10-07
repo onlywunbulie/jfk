@@ -37,7 +37,7 @@ export function ProposalTimeline(props: TimelineProps) {
               aria-hidden="true"
               className={cn(
                 "absolute top-5 left-[0.4375rem] h-[calc(100%+0.35rem)] w-px",
-                stage.state === "done" ? "bg-accent/40" : "bg-border-strong",
+                stage.state === "done" ? "bg-white/40" : "bg-border-strong",
               )}
             />
           )}
@@ -69,7 +69,7 @@ function Marker({ state }: { state: StageState }) {
       aria-hidden="true"
       className={cn(
         "relative z-10 mt-0.5 grid size-3.5 shrink-0 place-items-center rounded-full border-2",
-        state === "done" && "border-accent bg-accent",
+        state === "done" && "border-ink bg-ink",
         state === "active" && "border-pending bg-canvas",
         state === "failed" && "border-danger bg-danger",
         state === "pending" && "border-border-strong bg-canvas",

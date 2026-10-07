@@ -25,7 +25,7 @@ export function TabBar() {
   return (
     <nav
       aria-label="Primary"
-      className="pb-safe sticky bottom-0 z-40 border-t border-border bg-canvas/85 backdrop-blur-xl"
+      className="pb-safe sticky bottom-0 z-40 glass border-x-0 border-b-0"
     >
       <ul className="mx-auto flex max-w-lg items-stretch">
         {TABS.map(({ href, label, icon: Icon }) => {

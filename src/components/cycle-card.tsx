@@ -1,6 +1,8 @@
 import type { CycleView, ContributionView } from "@/modules/contributions/service";
 import { Money } from "@/lib/money";
 import { cn } from "@/lib/cn";
+import { IconTile } from "@/components/ui/card";
+import { TargetIcon } from "@/components/ui/icons";
 
 /**
  * The current cycle at a glance: how much is in, who has paid, who hasn't.
@@ -15,28 +17,37 @@ export function CycleCard({ cycle }: { cycle: CycleView }) {
   const percent = total === 0 ? 0 : Math.round((paid / total) * 100);
 
   return (
-    <div className="rounded-[var(--radius-card)] border border-border bg-surface p-5">
-      <div className="flex items-baseline justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-medium tracking-wide text-ink-muted uppercase">
+    <div className="glass rounded-[var(--radius-card)] p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <IconTile>
+            <TargetIcon />
+          </IconTile>
+          <h2 className="truncate text-[0.9375rem] font-medium text-ink">
             {periodLabel(cycle)}
           </h2>
-          <p className="mt-1 text-lg font-semibold text-ink">
-            {cycle.collected.format({ compact: true })}
-            <span className="text-sm font-normal text-ink-faint">
-              {" "}
-              of {cycle.expectedTotal.format({ compact: true })}
-            </span>
-          </p>
         </div>
         <span className="shrink-0 text-sm text-ink-muted">
           {paid}/{total} paid
         </span>
       </div>
 
+      <div className="mt-4 flex items-baseline justify-between gap-3">
+        <p className="text-lg font-semibold text-ink">
+          {cycle.collected.format({ compact: true })}
+          <span className="text-sm font-normal text-ink-faint">
+            {" "}
+            / {cycle.expectedTotal.format({ compact: true })}
+          </span>
+        </p>
+        <span className="shrink-0 text-sm font-medium text-ink tabular-nums">
+          {percent}%
+        </span>
+      </div>
+
       {/* Progress toward a fully funded cycle. */}
       <div
-        className="mt-4 h-1.5 overflow-hidden rounded-full bg-canvas"
+        className="mt-3 h-1.5 overflow-hidden rounded-full bg-black/40"
         role="progressbar"
         aria-valuenow={percent}
         aria-valuemin={0}
@@ -158,7 +169,7 @@ export function CycleSummary({ cycle }: { cycle: CycleView | null }) {
 /** Zero-state when a group has no cycle yet. */
 export function NoCycleYet({ amount }: { amount: Money }) {
   return (
-    <div className="rounded-[var(--radius-card)] border border-dashed border-border bg-surface p-5 text-center">
+    <div className="glass rounded-[var(--radius-card)] border-dashed p-5 text-center">
       <p className="text-sm text-ink-muted">
         No contribution cycle has started yet. The first one opens on the
         group&rsquo;s next due date, and everyone will owe{" "}

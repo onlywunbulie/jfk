@@ -8,8 +8,12 @@
  * on screen. A light theme would halve the contrast budget for no user gain.
  *
  * Two colours carry meaning and must not be used decoratively:
- *   white  — "this is the action to take"
- *   violet — "this is JFK": active nav, links, focus, the mark
+ *   white — "this is the action to take"
+ *   red   — "this is JFK": the mark, the active nav marker, the one
+ *           highlighted bar on a chart
+ * Red is also what "something went wrong" looks like, so the brand red is a
+ * deep, saturated crimson and `danger` stays a pale coral, and the brand red
+ * is never used as running text beside a money state.
  * Everything else is semantic money state.
  */
 @theme {
@@ -30,9 +34,9 @@
   --color-ink-faint: #5a5a67;
 
   /* Brand. Identity, not action. */
-  --color-accent: #7b61ff;
-  --color-accent-hover: #8e78ff;
-  --color-accent-soft: #1a1633;
+  --color-accent: #ff2d46;
+  --color-accent-hover: #ff5468;
+  --color-accent-soft: #2a0d13;
 
   /* Semantic money states. These are load-bearing: the plan requires money
      in flight to be visually distinct from settled money. */
@@ -66,7 +70,8 @@
   }
 
   body {
-    background-color: var(--color-canvas);
+    /* No fill of its own: the canvas colour is on `html`, and a body
+       background would paint over the ambient light the glass sits on. */
     color: var(--color-ink);
     font-family: var(--font-sans);
     /* Contribution amounts sit in tables and lists; lining figures keep
@@ -76,7 +81,7 @@
 
   /* Focus is never removed, only restyled — keyboard users move real money. */
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--color-ink);
     outline-offset: 2px;
     border-radius: 4px;
   }
@@ -94,6 +99,68 @@
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
     }
+  }
+}
+
+/* In `components` rather than `utilities` so a border or radius utility on
+   the same element still wins over the pane's defaults. */
+@layer components {
+  /*
+   * Liquid glass.
+   *
+   * A surface is a pane, not a painted box: it lets the ambient light behind
+   * it through, blurred, and catches a highlight along its top edge. Three
+   * strengths, in the same order as the surface / raised / overlay steps.
+   */
+  .glass,
+  .glass-strong,
+  .glass-subtle {
+    border: 1px solid rgb(255 255 255 / 0.08);
+    -webkit-backdrop-filter: blur(28px) saturate(170%);
+    backdrop-filter: blur(28px) saturate(170%);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.1),
+      inset 0 -1px 0 rgb(0 0 0 / 0.25),
+      0 12px 40px -12px rgb(0 0 0 / 0.6);
+  }
+  .glass {
+    background: linear-gradient(
+      160deg,
+      rgb(255 255 255 / 0.065),
+      rgb(255 255 255 / 0.02) 55%,
+      rgb(255 255 255 / 0.035)
+    );
+  }
+  .glass-strong {
+    border-color: rgb(255 255 255 / 0.12);
+    background: linear-gradient(
+      160deg,
+      rgb(255 255 255 / 0.12),
+      rgb(255 255 255 / 0.04) 55%,
+      rgb(255 255 255 / 0.07)
+    );
+  }
+  .glass-subtle {
+    border-color: rgb(255 255 255 / 0.06);
+    background: rgb(255 255 255 / 0.04);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);
+  }
+
+  /*
+   * The light the glass refracts. Fixed behind everything, so panes pick up
+   * different colour as the page scrolls beneath them.
+   */
+  .ambient {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(42rem 30rem at 12% -6%, rgb(255 45 70 / 0.2), transparent 70%),
+      radial-gradient(36rem 28rem at 96% 8%, rgb(255 255 255 / 0.07), transparent 70%),
+      radial-gradient(48rem 34rem at 70% 108%, rgb(255 45 70 / 0.11), transparent 70%);
   }
 }
 

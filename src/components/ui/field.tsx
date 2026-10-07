@@ -32,7 +32,7 @@ export function Field({ label, hint, error, className, id, ...props }: FieldProp
           "transition-colors duration-150",
           error
             ? "border-danger focus:border-danger"
-            : "border-border focus:border-accent",
+            : "border-border focus:border-white/40",
           className,
         )}
       />

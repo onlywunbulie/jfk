@@ -59,7 +59,7 @@ export function VotePanel({
           rows={2}
           maxLength={500}
           placeholder="Say why, if you want to (optional)"
-          className="w-full resize-none rounded-xl border border-border bg-surface px-4 py-3 text-sm text-ink placeholder:text-ink-faint focus:border-accent"
+          className="w-full resize-none rounded-xl border border-border bg-surface px-4 py-3 text-sm text-ink placeholder:text-ink-faint focus:border-white/40"
         />
       </form>
 

@@ -137,7 +137,7 @@ function Avatar({ name }: { name: string }) {
   return (
     <span
       aria-hidden="true"
-      className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-sm font-medium text-accent"
+      className="grid size-10 shrink-0 place-items-center rounded-full bg-white/10 text-sm font-medium text-ink"
     >
       {initials || "?"}
     </span>

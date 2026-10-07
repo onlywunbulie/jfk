@@ -7,18 +7,18 @@ type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
 
 /**
- * White is the action colour, violet is the identity colour.
+ * White is the action colour, red is the identity colour.
  *
  * On a near-black ground white is the highest contrast available, so it reads
- * unambiguously as "this is the thing to press". Violet stays for nav, links
- * and focus — brand, not instruction. Using both for actions would make
- * neither mean anything.
+ * unambiguously as "this is the thing to press". Red stays for the mark, the
+ * active nav marker and focus — brand, not instruction. Using both for actions
+ * would make neither mean anything.
  */
 const VARIANTS: Record<Variant, string> = {
   primary:
     "bg-ink text-canvas hover:bg-white active:bg-ink/90 disabled:bg-ink/30 disabled:text-canvas/60",
   secondary:
-    "bg-raised text-ink border border-border hover:border-border-strong hover:bg-overlay",
+    "glass-subtle text-ink hover:border-white/20 hover:bg-white/10",
   ghost: "text-ink-muted hover:text-ink hover:bg-raised",
   danger: "bg-danger-soft text-danger border border-danger/30 hover:bg-danger/20",
 };

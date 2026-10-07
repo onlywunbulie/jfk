@@ -96,7 +96,7 @@ export function ProposalForm({
           maxLength={1000}
           required
           placeholder="Give people enough to decide on."
-          className="w-full resize-none rounded-xl border border-border bg-surface px-4 py-3 text-ink placeholder:text-ink-faint focus:border-accent"
+          className="w-full resize-none rounded-xl border border-border bg-surface px-4 py-3 text-ink placeholder:text-ink-faint focus:border-white/40"
         />
         {errorFor("reason") && (
           <p role="alert" className="text-sm text-danger">
@@ -129,7 +129,7 @@ export function ProposalForm({
 
       {/* --- Change the contribution ----------------------------------- */}
       {kind === "CHANGE_CONTRIBUTION" && (
-        <div className="space-y-6 rounded-xl border border-border bg-surface p-5">
+        <div className="space-y-6 glass rounded-xl p-5">
           <p className="text-sm text-ink-muted">
             Currently {contribution.amount} {contribution.cadence.toLowerCase()},
             due on day {contribution.dueDay}.
@@ -154,7 +154,7 @@ export function ProposalForm({
               id="newCadence"
               name="newCadence"
               defaultValue={contribution.cadence}
-              className="h-12 w-full rounded-xl border border-border bg-canvas px-4 text-ink focus:border-accent"
+              className="h-12 w-full rounded-xl border border-border bg-canvas px-4 text-ink focus:border-white/40"
             >
               <option value="MONTHLY">Monthly</option>
               <option value="WEEKLY">Weekly</option>
@@ -175,7 +175,7 @@ export function ProposalForm({
 
       {/* --- Change a threshold ---------------------------------------- */}
       {kind === "CHANGE_THRESHOLD" && (
-        <div className="space-y-6 rounded-xl border border-border bg-surface p-5">
+        <div className="space-y-6 glass rounded-xl p-5">
           <div className="space-y-2">
             <label
               htmlFor="thresholdAction"
@@ -186,7 +186,7 @@ export function ProposalForm({
             <select
               id="thresholdAction"
               name="thresholdAction"
-              className="h-12 w-full rounded-xl border border-border bg-canvas px-4 text-ink focus:border-accent"
+              className="h-12 w-full rounded-xl border border-border bg-canvas px-4 text-ink focus:border-white/40"
             >
               {currentThresholds.map((rule) => (
                 <option key={rule.action} value={rule.action}>
@@ -210,7 +210,7 @@ export function ProposalForm({
               id="newThreshold"
               name="newThreshold"
               defaultValue={667}
-              className="h-12 w-full rounded-xl border border-border bg-canvas px-4 text-ink focus:border-accent"
+              className="h-12 w-full rounded-xl border border-border bg-canvas px-4 text-ink focus:border-white/40"
             >
               {THRESHOLD_CHOICES.map((choice) => (
                 <option key={choice.permille} value={choice.permille}>
@@ -228,7 +228,7 @@ export function ProposalForm({
 
       {/* --- Remove someone -------------------------------------------- */}
       {(kind === "REMOVE_MEMBER" || kind === "REMOVE_ADMIN") && (
-        <div className="space-y-4 rounded-xl border border-border bg-surface p-5">
+        <div className="space-y-4 glass rounded-xl p-5">
           <MemberPicker
             options={kind === "REMOVE_ADMIN" ? admins : removable}
             emptyMessage={
@@ -287,7 +287,7 @@ function MemberPicker({
         id="targetUserId"
         name="targetUserId"
         required
-        className="h-12 w-full rounded-xl border border-border bg-canvas px-4 text-ink focus:border-accent"
+        className="h-12 w-full rounded-xl border border-border bg-canvas px-4 text-ink focus:border-white/40"
       >
         {options.map((member) => (
           <option key={member.userId} value={member.userId}>
@@ -318,7 +318,7 @@ function KindCard({
       className={cn(
         "w-full rounded-xl border p-4 text-left transition-colors",
         selected
-          ? "border-accent bg-accent-soft"
+          ? "border-white/40 bg-white/[0.07]"
           : "border-border bg-surface hover:border-border-strong",
       )}
     >
@@ -326,12 +326,12 @@ function KindCard({
         <span
           className={cn(
             "grid size-4 shrink-0 place-items-center rounded-full border-2",
-            selected ? "border-accent" : "border-border-strong",
+            selected ? "border-ink" : "border-border-strong",
           )}
         >
-          {selected && <span className="size-2 rounded-full bg-accent" />}
+          {selected && <span className="size-2 rounded-full bg-ink" />}
         </span>
-        <span className={cn("font-medium", selected ? "text-accent" : "text-ink")}>
+        <span className={cn("font-medium", selected ? "text-ink" : "text-ink-muted")}>
           {title}
         </span>
       </span>

@@ -35,7 +35,7 @@ export function ContributePanel({
         </p>
         <Link
           href="/wallet"
-          className="inline-block text-sm text-accent transition-opacity hover:opacity-80"
+          className="inline-block text-sm text-ink underline decoration-white/30 underline-offset-4 transition-colors hover:decoration-white"
         >
           Add a card →
         </Link>
