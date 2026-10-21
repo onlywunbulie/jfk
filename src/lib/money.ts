@@ -1,5 +1,6 @@
 /**
- * Money — an exact integer amount of minor units (kobo for NGN).
+ * Money — an exact integer amount of minor units (kobo for NGN, millionths of
+ * a dollar for USDC).
  *
  * Rules this type exists to enforce:
  *   1. Money is never a float. 0.1 + 0.2 !== 0.3, and a ledger that drifts by
@@ -9,14 +10,30 @@
  *      ways loses a kobo unless someone is explicitly handed it.
  *
  * Stored in Postgres as BIGINT (see `amount` columns in the ledger schema).
+ * For USDC the minor unit is exactly the token's on-chain base unit, so an
+ * amount read from or sent to the contract never needs converting.
  */
 
-export type Currency = "NGN";
+export type Currency = "NGN" | "USDC";
 
-/** Minor units per major unit, by currency. NGN: 100 kobo = ₦1. */
-const MINOR_UNITS: Record<Currency, number> = { NGN: 100 };
+/**
+ * Decimal places per currency: how many minor units make one major unit.
+ *
+ * NGN: 2 (100 kobo = ₦1). USDC: 6, matching the token contract, so $1 is
+ * 1,000,000 minor units and the smallest amount it can hold is $0.000001.
+ */
+const DECIMALS: Record<Currency, number> = { NGN: 2, USDC: 6 };
 
-const SYMBOLS: Record<Currency, string> = { NGN: "₦" };
+/**
+ * Decimal places shown by default. USDC is held to six places but read like
+ * dollars, to the cent; further places appear only when they carry a value
+ * (see `format`), so a display never rounds money out of existence.
+ */
+const DISPLAY_DECIMALS: Record<Currency, number> = { NGN: 2, USDC: 2 };
+
+const SYMBOLS: Record<Currency, string> = { NGN: "₦", USDC: "$" };
+
+const factorOf = (currency: Currency): bigint => 10n ** BigInt(DECIMALS[currency]);
 
 export class Money {
   readonly minor: bigint;
@@ -29,13 +46,16 @@ export class Money {
 
   // --- construction ---------------------------------------------------------
 
-  /** From minor units (kobo). The canonical constructor. */
+  /**
+   * From minor units (kobo; USDC base units). The canonical constructor, and
+   * the one to use for amounts read from the chain.
+   */
   static fromMinor(minor: bigint | number, currency: Currency = "NGN"): Money {
     if (typeof minor === "number") {
       if (!Number.isInteger(minor)) {
         throw new TypeError(
           `Money.fromMinor requires an integer, received ${minor}. ` +
-            `A fractional kobo means a rounding bug upstream.`,
+            `A fractional minor unit means a rounding bug upstream.`,
         );
       }
       if (!Number.isSafeInteger(minor)) {
@@ -46,21 +66,23 @@ export class Money {
   }
 
   /**
-   * From major units (naira). Accepts a number for ergonomics at trusted
-   * boundaries (config, tests, literals) but rejects anything that cannot be
-   * represented exactly, so `Money.fromMajor(0.001)` fails loudly.
+   * From major units (naira; dollars). Accepts a number for ergonomics at
+   * trusted boundaries (config, tests, literals) but rejects anything that
+   * cannot be represented exactly, so `Money.fromMajor(0.001)` fails loudly
+   * for naira while `Money.fromMajor("0.000001", "USDC")` is one base unit.
    */
   static fromMajor(major: number | string, currency: Currency = "NGN"): Money {
-    const factor = MINOR_UNITS[currency];
+    const scale = DECIMALS[currency];
     const asString = typeof major === "string" ? major.trim() : String(major);
 
+    // A number this small or large stringifies in exponent form ("1e-7"),
+    // which the pattern below rejects rather than misreads.
     if (!/^-?\d+(\.\d+)?$/.test(asString)) {
       throw new TypeError(`Money.fromMajor received a non-numeric value: "${major}"`);
     }
 
     const negative = asString.startsWith("-");
     const [whole, fraction = ""] = asString.replace("-", "").split(".");
-    const scale = String(factor).length - 1;
 
     if (fraction.length > scale) {
       throw new RangeError(
@@ -69,7 +91,7 @@ export class Money {
     }
 
     const padded = fraction.padEnd(scale, "0");
-    const minor = BigInt(whole) * BigInt(factor) + BigInt(padded || "0");
+    const minor = BigInt(whole) * factorOf(currency) + BigInt(padded || "0");
     return new Money(negative ? -minor : minor, currency);
   }
 
@@ -190,9 +212,12 @@ export class Money {
 
   // --- output ---------------------------------------------------------------
 
-  /** Exact major-unit decimal string, e.g. "50000.00". No symbol, no commas. */
+  /**
+   * Exact major-unit decimal string at the currency's full precision, e.g.
+   * "50000.00" or, for USDC, "50.000000". No symbol, no commas.
+   */
   toDecimalString(): string {
-    const scale = String(MINOR_UNITS[this.currency]).length - 1;
+    const scale = DECIMALS[this.currency];
     const negative = this.minor < 0n;
     const digits = (negative ? -this.minor : this.minor).toString().padStart(scale + 1, "0");
     const whole = digits.slice(0, digits.length - scale);
@@ -201,14 +226,25 @@ export class Money {
   }
 
   /**
-   * Display form: "₦50,000.00". Pass `compact` to drop a ".00" tail, which
-   * reads better in balance headlines where round numbers are the norm.
+   * Display form: "₦50,000.00", "$50.00". Pass `compact` to drop a ".00"
+   * tail, which reads better in balance headlines where round numbers are
+   * the norm.
+   *
+   * Shows the currency's display places, plus any further places that hold a
+   * non-zero digit: $50.000000 reads "$50.00", but $0.000001 reads
+   * "$0.000001", never "$0.00". Display is exact, never rounded.
    */
   format(options: { compact?: boolean; showSymbol?: boolean } = {}): string {
     const { compact = false, showSymbol = true } = options;
     const decimal = this.toDecimalString();
     const negative = decimal.startsWith("-");
-    const [whole, fraction] = decimal.replace("-", "").split(".");
+    const [whole, fullFraction] = decimal.replace("-", "").split(".");
+
+    const minimum = DISPLAY_DECIMALS[this.currency];
+    const significant = fullFraction.replace(/0+$/, "");
+    const fraction =
+      significant.length > minimum ? significant : fullFraction.slice(0, minimum);
+
     const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     const showFraction = !(compact && /^0+$/.test(fraction));
     const symbol = showSymbol ? SYMBOLS[this.currency] : "";

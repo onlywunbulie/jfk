@@ -46,12 +46,11 @@ describe("Money arithmetic", () => {
 
   it("refuses to mix currencies", () => {
     const ngn = Money.fromMajor(100, "NGN");
-    // A second currency does not exist yet; fake one to prove the guard fires.
-    const foreign = Object.assign(Object.create(Object.getPrototypeOf(ngn)), {
-      minor: 100n,
-      currency: "USD",
-    }) as Money;
-    expect(() => ngn.plus(foreign)).toThrow(/Cannot combine/);
+    const usdc = Money.fromMajor(100, "USDC");
+    expect(() => ngn.plus(usdc)).toThrow(/Cannot combine NGN with USDC/);
+    expect(() => usdc.compare(ngn)).toThrow(/Cannot combine/);
+    // Same digits, different money: equal minor units are not equal amounts.
+    expect(Money.fromMinor(100, "NGN").equals(Money.fromMinor(100, "USDC"))).toBe(false);
   });
 
   it("rejects fractional multiplication factors", () => {
@@ -171,5 +170,73 @@ describe("sumMoney", () => {
 
   it("returns zero for an empty list", () => {
     expect(sumMoney([]).isZero()).toBe(true);
+  });
+});
+
+describe("USDC — six decimal places, matching the token contract", () => {
+  it("counts a dollar as one million minor units", () => {
+    expect(Money.fromMajor(1, "USDC").minor).toBe(1_000_000n);
+    expect(Money.fromMajor("50", "USDC").minor).toBe(50_000_000n);
+  });
+
+  it("holds the smallest amount the chain can, and nothing smaller", () => {
+    expect(Money.fromMajor("0.000001", "USDC").minor).toBe(1n);
+    expect(() => Money.fromMajor("0.0000001", "USDC")).toThrow(/6 decimal places/);
+  });
+
+  it("rejects a float too small to write without an exponent", () => {
+    // String(1e-7) is "1e-7"; it must be refused, not misread as 1.
+    expect(() => Money.fromMajor(1e-7, "USDC")).toThrow(/non-numeric/);
+  });
+
+  it("round-trips an on-chain amount exactly", () => {
+    // What a balanceOf() call returns: a raw integer of base units.
+    const raw = 123_456_789_012n;
+    const money = Money.fromMinor(raw, "USDC");
+    expect(money.toDecimalString()).toBe("123456.789012");
+    expect(Money.fromMajor(money.toDecimalString(), "USDC").minor).toBe(raw);
+    expect(BigInt(money.toJSON().minor)).toBe(raw);
+  });
+
+  it("does the classic float trap exactly at six places too", () => {
+    const a = Money.fromMajor("0.1", "USDC");
+    const b = Money.fromMajor("0.2", "USDC");
+    expect(a.plus(b).equals(Money.fromMajor("0.3", "USDC"))).toBe(true);
+  });
+
+  it("reads like dollars: two places unless more carry a value", () => {
+    expect(Money.fromMajor(50, "USDC").format()).toBe("$50.00");
+    expect(Money.fromMajor(50, "USDC").format({ compact: true })).toBe("$50");
+    expect(Money.fromMajor("1234.5", "USDC").format()).toBe("$1,234.50");
+    expect(Money.fromMajor("0.123456", "USDC").format()).toBe("$0.123456");
+    expect(Money.fromMajor("10.5001", "USDC").format()).toBe("$10.5001");
+  });
+
+  it("never displays a real amount as zero", () => {
+    expect(Money.fromMinor(1n, "USDC").format()).toBe("$0.000001");
+    expect(Money.fromMinor(1n, "USDC").format({ compact: true })).toBe("$0.000001");
+    expect(Money.fromMinor(-1n, "USDC").format()).toBe("-$0.000001");
+  });
+
+  it("keeps full precision in the decimal string, even when display trims it", () => {
+    expect(Money.fromMajor(50, "USDC").toDecimalString()).toBe("50.000000");
+  });
+
+  it("splits a pot without losing a base unit", () => {
+    const pot = Money.fromMajor(100, "USDC");
+    const shares = pot.split(3);
+    expect(shares.map((s) => s.minor)).toEqual([33_333_334n, 33_333_333n, 33_333_333n]);
+    expect(sumMoney(shares, "USDC").equals(pot)).toBe(true);
+  });
+
+  it("takes a percentage to the nearest base unit", () => {
+    // 1.5% of $50 is exactly $0.75.
+    expect(Money.fromMajor(50, "USDC").percentage(150).format()).toBe("$0.75");
+    // 0.01% of $0.000050 is half a base unit: rounds half-up to one.
+    expect(Money.fromMinor(50n, "USDC").percentage(100).minor).toBe(1n);
+  });
+
+  it("sums only with an explicit currency for an empty list", () => {
+    expect(sumMoney([], "USDC").equals(Money.zero("USDC"))).toBe(true);
   });
 });

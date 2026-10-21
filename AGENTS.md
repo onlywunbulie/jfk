@@ -56,7 +56,7 @@ on the sign-in screen. Nothing is emailed.
 
 These exist because this app moves real money between real friends.
 
-1. **Money is `Money`** (`src/lib/money.ts`) — integer kobo in a `bigint`.
+1. **Money is `Money`** (`src/lib/money.ts`) — integer minor units in a `bigint` (kobo for NGN; base units, 6 decimals, for USDC).
    Never a float, never a `number` for an amount. Division must state where the
    remainder went (`split`), and amounts of different currencies never combine.
 2. **Balances are derived, never stored as a mutable field.** They come from
