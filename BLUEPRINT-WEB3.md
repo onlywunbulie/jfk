@@ -31,6 +31,7 @@ describes the code in this repo.
 | Token | **None** | Adds securities exposure and nothing a savings circle needs |
 | Notifications | Email and browser push | Web only |
 | Standout feature | **Cover a friend** | Private, interest-free help with a missed contribution, repaid automatically |
+| AI | **A group agent with a contract-limited wallet, and an in-app assistant** | The agent does housekeeping it can't abuse; the assistant answers questions and drafts proposals for a person to sign (§17) |
 
 ---
 
@@ -175,6 +176,8 @@ project, and keeping it small is a design goal. Responsibilities:
 6. **Cover-a-friend debts** (§9).
 7. **Membership changes** (add, remove, replace a wallet) go through the same proposal flow, and
    the module updates the Safe's owner list itself, so the two can never disagree.
+8. **The group's agent role** (§17): one address per group that may call only the housekeeping
+   functions. Every other function refuses it.
 
 **Why votes are signed off-chain and submitted together.** Casting each vote as its own
 transaction would mean fees per vote and a slow, noisy chain history. Signed messages (EIP-712)
@@ -447,12 +450,18 @@ Opening proposals, signed votes with passkey confirmation, automatic submission,
 Turn order, payouts, cover requests, automatic repayment from payouts, the two-in-a-row rule.
 *Done when a covered member's next payout repays their friend automatically.*
 
+**Phase 5b: The agent and the assistant (5–6 days).**
+The group agent's wallet (AgentKit) taking over the housekeeping jobs through its contract role,
+plus the in-app assistant: questions answered from the group's data, and proposals drafted for a
+human to sign. *Done when the agent collects a cycle and pays out a turn on its own, a test proves
+it can't do anything else, and "get mum a generator, about 400k" becomes a proposal draft.*
+
 **Phase 6: Notifications, polish, deploy (4–5 days).**
 Email and push, empty and error states for every wallet failure (passkey cancelled, pull failed,
 network slow), README, deployed link on testnet. *Done when a friend can open the link, get test
 dollars and see a group work end to end.*
 
-**About 5–7 weeks solo to a complete testnet app.** Phases 1 and 5 carry the real risk.
+**About 6–8 weeks solo to a complete testnet app.** Phases 1 and 5 carry the real risk.
 
 **Phase 7: The mainnet gate (open-ended; mostly not code).**
 Nothing on mainnet until every box is ticked:
@@ -503,6 +512,8 @@ group splits the pot by what each paid in.
 | The server is down or withholds votes | 🟡 Low | Money is never at risk; signed votes can be submitted by anyone |
 | Wallet or paymaster provider changes terms | 🟡 Low | Wrap them behind one interface, as Paystack is today |
 | Public chain reveals who contributed what | 🟡 Low among friends | Addresses aren't names; covered in §9; worth stating in the app |
+| The agent's key is stolen | 🟡 Low | The contract role only allows housekeeping that the rules already demand, so a thief can only trigger what would have happened anyway; paymaster limits cap any spam |
+| The assistant drafts something wrong | 🟡 Low | It only drafts. Every proposal is read and signed by a person before anything happens |
 | Scope creep into strangers, tokens or chat bots | 🟡 Medium | All three were considered and explicitly rejected; this plan is the contract |
 
 ---
@@ -534,6 +545,7 @@ the posts should show the engineering and the reasoning, not just screenshots.
 | Phase 3 | **The monthly chart filling up** from real testnet transactions, with a block explorer link |
 | Phase 4 | **Three phones voting**, and the payout landing on-chain. Video works best here |
 | Phase 5 | **Cover a friend**, the feature post. Lead with the human story: someone is short, a friend steps in, repaid automatically, nobody else knows |
+| Phase 5b | **The agent that can't steal.** A group agent with its own wallet doing the housekeeping, and a test showing the contract refusing it when it tries anything else. The answer to "would you let AI near your money?" |
 | Phase 6 | **Launch on testnet.** A link anyone can try with test dollars |
 | Phase 7 | **The audit and the road to real money**, including what the audit found. Honesty about findings builds more trust than a clean report |
 
@@ -547,3 +559,59 @@ why it went the way it did.
 - Anything that sounds like an investment: no "earn", "returns" or "yield" promises, and no
   suggestion of a token. JFK has no token, and saying so plainly heads off scam accusations.
 - A mainnet link before the mainnet gate (§13) is passed.
+
+---
+
+## 17. The agent and the assistant
+
+Decided 21 October 2026. Two pieces, both built on one rule: **AI helps people, but it never holds
+the group's money, never votes, and never signs for anyone.** Every money decision still needs a
+human's passkey.
+
+### The group agent: a wallet the contract keeps in check
+
+Each group gets an agent with its own wallet on Base (Coinbase AgentKit). The module gives that
+wallet one narrow role, set when the group is created:
+
+| The agent may | The agent may not |
+|---|---|
+| Collect contributions that are due | Open a proposal |
+| Close a vote whose deadline has passed | Vote, or submit a vote that wasn't signed by a member |
+| Pay out a rotating turn that's already owed | Move money anywhere the rules don't already send it |
+| Submit a proposal that has already passed with members' signed votes | Change any rule, member or threshold |
+
+These limits are enforced by the contract, not by the agent's instructions. Every function outside
+the left column refuses the agent's address. If its key were stolen, the thief could only trigger
+what the rules would have done anyway.
+
+This replaces the plain server jobs for those tasks; the jobs in §4 become the agent's schedule.
+Members can see the agent in the group's member list, labelled as such, with everything it has
+done.
+
+**Tests.** The invariant suite (§12) gains one rule: *nothing the agent's address calls can move
+money except an action the rules already require.* Fuzz it with random calls from that address.
+
+### The assistant: answers and drafts, in plain language
+
+Inside the app, members can ask:
+
+- "How much have we saved this year?"
+- "Who hasn't paid for October?"
+- "What did we spend on in the summer?"
+
+It answers from the group's indexed data (read-only). It can also **draft** a proposal: "get mum a
+generator, about 400k" becomes a filled-in proposal with the amount converted to dollars, a title
+and a reason. The member reads it and signs it with their passkey. The assistant never submits
+anything.
+
+Built with Claude through the Anthropic API, with read-only tools over the group's data and one
+`draft_proposal` tool that returns a draft to the screen.
+
+**Switched on per group, off by default.** Using the assistant sends group details to an AI
+provider, and the group should choose that knowingly. It also costs a little per question, so
+limit questions per member per day.
+
+### Deliberately not built
+
+An agent that invests the group's money, chases late members on its own, or votes for anyone.
+Each breaks the promise that nobody moves the money alone.
