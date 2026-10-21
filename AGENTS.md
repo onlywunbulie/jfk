@@ -129,3 +129,24 @@ vi.mock("@/lib/db", async () => ({ db: t.db }));
 This is how the financial invariants get tested for real rather than mocked.
 Test files run **sequentially** (`fileParallelism: false`) — each WASM Postgres
 is memory-hungry and parallel suites exhaust the heap.
+
+## The contract (`contracts/`)
+
+The onchain rebuild ([BLUEPRINT-WEB3.md](./BLUEPRINT-WEB3.md)) lives in
+`contracts/`, a Foundry project. `JfkModule` is a Safe module holding each
+group's rules; `JfkSetup` turns a new Safe into a group in the same transaction.
+
+```bash
+git submodule update --init --recursive   # forge-std, OpenZeppelin, Safe v1.4.1
+cd contracts
+forge test                                # unit, fuzz and invariant suites
+FOUNDRY_PROFILE=ci forge test             # the same, run ten times harder
+```
+
+- **Tests use the real Safe contracts** (v1.4.1, the audited release), never mocks.
+- **`test/Tally.fuzz.t.sol` ports `src/modules/governance/threshold.ts`.** If you
+  change the vote maths in either place, change both; the fuzz test exists to
+  catch them drifting apart.
+- **The contract is meant to hold real money after an audit.** No `owner`, no
+  upgrade path, no admin switch. Fixes ship as a new module that groups move to
+  by vote.

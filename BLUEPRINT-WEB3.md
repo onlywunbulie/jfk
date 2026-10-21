@@ -89,7 +89,7 @@ they go looking.
      ▼
   Next.js server ─────────────── Postgres
      │  ├─ group names, descriptions, proposal text (never put on-chain)
-     │  ├─ stores signed votes until they're submitted
+     │  ├─ notifies members when a vote is waiting
      │  ├─ indexer: copies contract events into Postgres for the dashboard
      │  ├─ jobs: collects due contributions, closes proposals, sends reminders
      │  └─ paymaster: pays network fees for app-initiated transactions
@@ -106,11 +106,11 @@ they go looking.
 
 Everything above the chain can be wrong, slow or offline without risking anyone's money:
 
-- The server **cannot forge a vote**. Votes are signed by members' wallets and the module checks
-  every signature.
+- The server **cannot forge or hide a vote**. Each member casts their vote from their own wallet,
+  straight to the contract, which does the counting.
 - The server **cannot move money**. Only the module can, and only when its rules are met.
-- The worst the server can do is **delay** things, by not submitting signed votes. Anyone holding
-  those signatures can submit them to the module directly, so even that is recoverable.
+- The worst the server can do is fail to **remind** people. Carrying out a passed proposal is
+  open to anyone, so nothing depends on the server being up.
 
 ### What lives where
 
@@ -118,8 +118,8 @@ Everything above the chain can be wrong, slow or offline without risking anyone'
 |---|---|
 | The money | Names, descriptions, profile details |
 | Who the members are (Safe owners) | Proposal titles and reasons |
-| Each group's rules: bars, turnout, cadence, amount, turn order | Signed votes waiting to be submitted |
-| Proposals, by hash and deadline | Notification preferences |
+| Each group's rules: bars, turnout, cadence, amount, turn order | Notification preferences |
+| Proposals, every vote, and the tally | Who has been reminded about what |
 | Contributions, payouts, cover debts | A fast copy of on-chain events |
 
 Text stays off-chain on purpose: it's cheaper, it's editable, and a blockchain is public forever.
@@ -167,10 +167,10 @@ project, and keeping it small is a design goal. Responsibilities:
    cadence, group type, turn order.
 2. **Proposals.** Opening a proposal records its hash, action, amount, recipient, deadline and a
    snapshot of who may vote.
-3. **Execute with signed votes.** Execution takes the proposal plus every signed vote (yes, no,
-   abstain), checks each signature against the snapshot, applies the turnout rule and the
-   action's bar, then instructs the Safe to pay. Same maths as today's governance module:
-   `approval = yes / (yes + no)`, abstentions count towards turnout only.
+3. **Count votes on-chain.** Each member casts yes, no or not sure from their own wallet, one
+   transaction per vote, and the contract keeps the tally. Once the proposal has passed, anyone
+   can carry it out. Same maths as today's governance module, checked by a fuzz test against a
+   port of it: `approval = yes / (yes + no)`, abstentions count towards turnout only.
 4. **Pull contributions** from members who pre-approved it (§7).
 5. **Rotating payouts** to whoever's turn it is.
 6. **Cover-a-friend debts** (§9).
@@ -179,10 +179,23 @@ project, and keeping it small is a design goal. Responsibilities:
 8. **The group's agent role** (§17): one address per group that may call only the housekeeping
    functions. Every other function refuses it.
 
-**Why votes are signed off-chain and submitted together.** Casting each vote as its own
-transaction would mean fees per vote and a slow, noisy chain history. Signed messages (EIP-712)
-cost nothing to produce, can't be forged, and land on-chain in one transaction when the proposal
-executes. Safe itself collects owner signatures the same way.
+**Why votes are cast on-chain, one at a time** (changed while building Phase 1). The first draft
+had members sign votes off-chain and the server submit them in one batch, to save fees. Building
+it showed the flaw: after the deadline, whoever submits the batch decides which votes go in, and
+could quietly leave out the "no" votes. Counting each vote on-chain removes that. The cost is a
+fee per vote, a fraction of a cent on Base, paid by the paymaster.
+
+**Who can vote.** Everyone who was a member when the proposal opened, provided they are still a
+member when they vote. Someone who joins mid-vote waits for the next one; someone who leaves or is
+removed keeps their place in the count but loses their voice. That second rule is stricter than
+the app today (which shrinks the count instead), and it can only make passing harder, never
+easier.
+
+**A turnout quirk, inherited from the app.** With a minimum turnout, a brand-new "no" vote can
+tip a proposal into passing by lifting turnout over the line (for example, 1 yes of 2 fails a 60%
+turnout; add 1 no and it's 2 of 2 at 50% approval, which passes a 50% bar). A member who wants
+something to fail may be better off not voting. It's how turnout rules work everywhere; worth
+knowing, and worth explaining in the app.
 
 ### When a member leaves
 
@@ -256,12 +269,13 @@ Unchanged from today's governance, plus one:
 | Action | Default bar |
 |---|---|
 | Spend a small amount (up to 20% of the pot) | Half of the group |
+| Add a member (new; joining is a vote on-chain) | Half of the group |
 | Spend a big amount | 2 out of every 3 |
 | Change how much people pay | 2 out of every 3 |
 | Change these rules | 3 out of every 4 |
 | Remove a member | 2 out of every 3 |
 | Move the group to a new module version | 3 out of every 4 |
-| Remove an admin | 3 out of every 4 |
+| Remove an admin (an app role; admins don't exist on-chain) | 3 out of every 4 |
 | Change whose turn is next | 2 out of every 3 |
 | Close the group | 4 out of every 5 |
 | **Replace a member's wallet** (new) | 3 out of every 4 |
@@ -305,10 +319,10 @@ Phase 3.
 2. The app records the text in Postgres and opens the proposal on-chain (hash, deadline, voter
    snapshot). Fee paid by the paymaster.
 3. Members are notified by email and push. Each one opens the proposal, taps **Yes**, **No** or
-   **Not sure**, and confirms with their passkey. That produces a signed vote, which the server
-   stores.
-4. As soon as the signed votes clear the bar *and* the turnout rule, the server submits them to
-   the module, which checks every one and pays the recipient from the Safe.
+   **Not sure**, and confirms with their passkey. That sends their vote to the contract.
+4. As soon as the votes clear the bar *and* the turnout rule (and nothing the remaining members
+   could do would change it), the proposal can be carried out. The app does it straight away;
+   anyone else could too. The Safe pays the recipient.
 5. If the deadline passes without enough votes, the proposal expires. Nothing moves.
 
 **Recipients.** A spend pays a wallet address. Paying a vendor's bank account directly needs an
@@ -428,9 +442,13 @@ Each phase ends with something you can demonstrate.
 suite passes and USDC amounts round-trip exactly.*
 
 **Phase 1: The contract (7–9 days) ← do not rush this.**
-`JfkModule`: rules, proposals, signed-vote execution, membership changes. Full Foundry suite
+`JfkModule`: rules, proposals, on-chain voting, membership changes, refunds and closing. Full Foundry suite
 including fuzz and invariant tests. Deployed to Base Sepolia. *Done when a scripted group passes a
-proposal and pays out on testnet, and a forged or insufficient vote set is refused.*
+proposal and pays out on testnet, and a short or late vote is refused.*
+
+*Status, 21 October 2026:* the contract and its suite are built (38 unit tests, 2 fuzz tests run
+2,000 times each against a port of the app's vote maths, 6 money invariants over random
+sequences). Not yet deployed to Base Sepolia: that needs a funded deployer wallet.
 
 **Phase 2: Wallets and groups (4–5 days).**
 Passkey sign-in, the create-group conversation deploying a Safe with the module enabled, invites
@@ -443,7 +461,7 @@ dashboard and monthly chart reading indexed data. *Done when a cycle collects fr
 the chart shows it.*
 
 **Phase 4: Voting (4–5 days).**
-Opening proposals, signed votes with passkey confirmation, automatic submission, expiry.
+Opening proposals, voting with passkey confirmation, carrying out passed proposals, expiry.
 *Done when a proposal passes from three phones and the payout appears on the block explorer.*
 
 **Phase 5: Rotating groups and cover a friend (5–6 days).**
@@ -509,7 +527,7 @@ group splits the pot by what each paid in.
 | A member feels cheated by forfeiture | 🟠 Medium | The rule is shown in plain words at setup and on the leave screen; the helper exception keeps covers fair |
 | Members lose access to their wallets | 🟠 Medium | Synced passkeys; the replace-wallet proposal |
 | A non-crypto friend finds wallets confusing | 🟠 Medium | No seed phrases, no gas, plain wording; never show an address unless asked |
-| The server is down or withholds votes | 🟡 Low | Money is never at risk; signed votes can be submitted by anyone |
+| The server is down | 🟡 Low | Money is never at risk; votes go straight to the contract and anyone can carry out a passed proposal |
 | Wallet or paymaster provider changes terms | 🟡 Low | Wrap them behind one interface, as Paystack is today |
 | Public chain reveals who contributed what | 🟡 Low among friends | Addresses aren't names; covered in §9; worth stating in the app |
 | The agent's key is stolen | 🟡 Low | The contract role only allows housekeeping that the rules already demand, so a thief can only trigger what would have happened anyway; paymaster limits cap any spam |
@@ -576,9 +594,9 @@ wallet one narrow role, set when the group is created:
 | The agent may | The agent may not |
 |---|---|
 | Collect contributions that are due | Open a proposal |
-| Close a vote whose deadline has passed | Vote, or submit a vote that wasn't signed by a member |
+| Close a vote whose deadline has passed | Vote |
 | Pay out a rotating turn that's already owed | Move money anywhere the rules don't already send it |
-| Submit a proposal that has already passed with members' signed votes | Change any rule, member or threshold |
+| Carry out a proposal the members already passed | Change any rule, member or threshold |
 
 These limits are enforced by the contract, not by the agent's instructions. Every function outside
 the left column refuses the agent's address. If its key were stolen, the thief could only trigger
