@@ -1,0 +1,19 @@
+{
+  "chainId": 84532,
+  "network": "Base Sepolia",
+  "deployedAt": "2026-10-22",
+  "contracts": {
+    "JfkModule": "0x3Ed964C55fA5f8744536cb9a850E3628e43c37f4",
+    "JfkSetup": "0xd3a66047dd75D959D492e667Cd4EBCfc1E25C532"
+  },
+  "dependencies": {
+    "SafeL2_v1_4_1": "0x29fcB43b46531BcA003ddC8FCB67FFE91900C762",
+    "SafeProxyFactory_v1_4_1": "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67",
+    "USDC": "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+  },
+  "demo": {
+    "note": "One-person group run end to end by script/DemoGroup.s.sol: create, pay in $1, propose $0.50, vote, pay out.",
+    "safe": "0xa3d7273bfD529972C538AF1CCE30A26b9bE9FefE",
+    "executeTx": "0x38ef5265f07f199805fac4d78a4aa3e6f4d3e1f0b3879ca7d62dbdcd08270cff"
+  }
+}

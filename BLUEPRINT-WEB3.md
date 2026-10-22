@@ -448,7 +448,9 @@ proposal and pays out on testnet, and a short or late vote is refused.*
 
 *Status, 21 October 2026:* the contract and its suite are built (38 unit tests, 2 fuzz tests run
 2,000 times each against a port of the app's vote maths, 6 money invariants over random
-sequences). Not yet deployed to Base Sepolia: that needs a funded deployer wallet.
+sequences). **Deployed to Base Sepolia on 22 October 2026** and run end to end by a script: a group
+created, paid into, a spend proposed, voted and paid out. Addresses in
+`contracts/deployments/base-sepolia.json`.
 
 **Phase 2: Wallets and groups (4–5 days).**
 Passkey sign-in, the create-group conversation deploying a Safe with the module enabled, invites
