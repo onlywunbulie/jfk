@@ -6,8 +6,8 @@ import { chain } from "./addresses";
  * The browser's connection to Base.
  *
  * One wallet only: the Base Account (Coinbase Smart Wallet), secured by a
- * passkey. No seed phrase, no browser extension. Members confirm with Face
- * ID, a fingerprint or their device's screen lock.
+ * passkey. No seed phrase, no browser extension. Members confirm with
+ * whatever unlocks their device: Face ID, a fingerprint, a PIN or their phone.
  */
 export const wagmiConfig = createConfig({
   chains: [chain],
