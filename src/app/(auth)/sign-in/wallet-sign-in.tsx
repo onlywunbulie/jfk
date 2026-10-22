@@ -109,8 +109,9 @@ export function WalletSignIn() {
         Continue with Base
       </Button>
       <p className="text-center text-xs leading-relaxed text-ink-faint">
-        Uses Face ID, your fingerprint or your screen lock. No password, and no
-        recovery phrase to write down. A Coinbase window opens to confirm.
+        Unlock with whatever unlocks your device: Face ID, a fingerprint, a PIN
+        or your phone. No password, and no recovery phrase to write down. A
+        Coinbase window opens to confirm.
       </p>
       {error && (
         <p role="alert" className="text-center text-sm text-danger">
