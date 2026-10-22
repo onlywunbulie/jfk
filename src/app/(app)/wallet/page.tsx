@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth/session";
 import { listPaymentMethods } from "@/modules/payments/service";
 import { listGroupsForUser } from "@/modules/groups/service";
 import { Card, CardHeader } from "@/components/ui/card";
+import { EXPLORER_URL, shortAddress } from "@/lib/chain/addresses";
 import { PaymentMethods } from "./payment-methods";
 
 export const metadata: Metadata = { title: "Wallet" };
@@ -38,7 +39,22 @@ export default async function WalletPage({
         <CardHeader title="Profile" />
         <dl className="space-y-3 text-sm">
           <Row label="Name" value={user.displayName} />
-          <Row label="Email" value={user.email} />
+          {user.walletAddress && (
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-ink-muted">Wallet</dt>
+              <dd>
+                <a
+                  href={`${EXPLORER_URL}/address/${user.walletAddress}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-mono text-ink underline decoration-white/30 underline-offset-4 hover:decoration-white"
+                >
+                  {shortAddress(user.walletAddress)}
+                </a>
+              </dd>
+            </div>
+          )}
+          <Row label="Email" value={user.email ?? "Not added"} />
           <Row
             label="Transaction PIN"
             value={user.hasPin ? "Set" : "Not set yet"}

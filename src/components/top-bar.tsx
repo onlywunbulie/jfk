@@ -6,7 +6,7 @@
 export function TopBar({
   user,
 }: {
-  user: { displayName: string; email: string };
+  user: { displayName: string };
 }) {
   // Lagos time, so the date agrees with the month boundaries the money uses.
   const today = new Date().toLocaleDateString("en-NG", {

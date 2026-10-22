@@ -32,7 +32,16 @@ export const users = pgTable(
   "users",
   {
     id: primaryId(),
-    email: text("email").notNull(),
+    /**
+     * Null for someone who signed in with their wallet and hasn't given an
+     * email. Email is then only for notifications, never for signing in.
+     */
+    email: text("email"),
+    /**
+     * The member's smart wallet on Base, lowercased. This is who they are
+     * on-chain: the address the group's Safe lists as an owner.
+     */
+    walletAddress: text("wallet_address"),
     phone: text("phone"),
     displayName: text("display_name").notNull(),
     avatarUrl: text("avatar_url"),
@@ -53,6 +62,7 @@ export const users = pgTable(
   (table) => [
     // Emails are stored lowercased by the service layer; this enforces it.
     uniqueIndex("users_email_unique").on(table.email),
+    uniqueIndex("users_wallet_address_unique").on(table.walletAddress),
   ],
 );
 

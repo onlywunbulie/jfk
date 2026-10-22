@@ -12,7 +12,7 @@ export const SESSION_COOKIE = "jfk_session";
 
 export type SessionUser = Pick<
   User,
-  "id" | "email" | "displayName" | "avatarUrl" | "emailVerifiedAt"
+  "id" | "email" | "walletAddress" | "displayName" | "avatarUrl" | "emailVerifiedAt"
 > & { hasPin: boolean };
 
 /**
@@ -62,6 +62,7 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
     .select({
       id: users.id,
       email: users.email,
+      walletAddress: users.walletAddress,
       displayName: users.displayName,
       avatarUrl: users.avatarUrl,
       emailVerifiedAt: users.emailVerifiedAt,

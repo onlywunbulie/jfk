@@ -70,7 +70,7 @@ for (const group of targets) {
     .where(eq(groupMembers.groupId, group.id));
 
   const chosen = emailFilter
-    ? members.filter((m) => m.email.toLowerCase() === emailFilter.toLowerCase())
+    ? members.filter((m) => m.email?.toLowerCase() === emailFilter.toLowerCase())
     : members;
 
   if (chosen.length === 0) continue;

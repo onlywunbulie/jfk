@@ -33,6 +33,8 @@ const serverEnvSchema = z.object({
   RESEND_API_KEY: z.string().optional().default(""),
   EMAIL_FROM: z.string().default("JFK <noreply@jfk.local>"),
   PAYSTACK_SECRET_KEY: z.string().optional().default(""),
+  /** Base RPC endpoint. The public one is rate-limited but fine for development. */
+  BASE_RPC_URL: z.url().optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

@@ -64,6 +64,13 @@
       "when": 1787026287201,
       "tag": "0008_smiling_kid_colt",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792631515570,
+      "tag": "0009_giant_thunderbolt_ross",
+      "breakpoints": true
     }
   ]
 }

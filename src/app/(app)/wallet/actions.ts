@@ -34,6 +34,11 @@ export async function startAddCardAction(): Promise<AddCardState> {
   }
 
   const email = (await getUserEmail(user.id)) ?? user.email;
+  // Paystack needs an email for a card. Wallet-only members pay in USDC
+  // instead, so they never reach here in practice.
+  if (!email) {
+    return { error: "Add an email to your profile before adding a card." };
+  }
   const reference = `jfk_tok_${uuidv7()}`;
   const amount = Money.fromMinor(TOKENIZATION_AMOUNT_KOBO);
 
