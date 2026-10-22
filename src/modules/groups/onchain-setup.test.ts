@@ -23,7 +23,7 @@ function setupFor(overrides: Partial<Parameters<typeof buildGroupSetup>[0]> = {}
 /** Unwrap Safe.setup, then the JfkSetup call inside it. */
 function decode(initializer: `0x${string}`) {
   const setup = decodeFunctionData({ abi: safeAbi, data: initializer });
-  const [owners, threshold, to, data, fallback] = setup.args as readonly [
+  const [owners, threshold, to, data, fallback] = setup.args as unknown as readonly [
     readonly string[], bigint, string, `0x${string}`, string,
   ];
   const inner = decodeFunctionData({ abi: jfkSetupAbi, data });

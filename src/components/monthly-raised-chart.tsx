@@ -1,5 +1,5 @@
 import type { MonthlyRaised } from "@/modules/ledger/service";
-import { Money } from "@/lib/money";
+import { Money, minorPerMajor, symbolOf, type Currency } from "@/lib/money";
 import { cn } from "@/lib/cn";
 import { Card, CardHeader } from "@/components/ui/card";
 import { BarsIcon } from "@/components/ui/icons";
@@ -24,7 +24,8 @@ export function MonthlyRaisedChart({ months }: { months: MonthlyRaised[] }) {
     (max, row) => (row.raised.minor > max ? row.raised.minor : max),
     0n,
   );
-  const ceiling = niceCeiling(peak);
+  const currency = months[0]?.raised.currency ?? "USDC";
+  const ceiling = niceCeiling(peak, currency);
   const nothingYet = peak === 0n;
   const lastIndex = months.length - 1;
 
@@ -54,7 +55,7 @@ export function MonthlyRaisedChart({ months }: { months: MonthlyRaised[] }) {
         >
           {[4n, 3n, 2n, 1n, 0n].map((step) => (
             <span key={step} className="leading-none">
-              {axisLabel((ceiling * step) / 4n)}
+              {axisLabel((ceiling * step) / 4n, currency)}
             </span>
           ))}
         </div>
@@ -166,26 +167,29 @@ function longLabel(month: string): string {
 
 /**
  * The top of the scale: the smallest round figure at or above the tallest bar
- * that also divides into four tidy gridlines.
+ * that also divides into four tidy gridlines. Worked out in whole units of the
+ * group's currency, then turned back into minor units.
  */
-function niceCeiling(peakMinor: bigint): bigint {
-  const major = (peakMinor + 99n) / 100n;
-  if (major <= 4n) return 400n;
+function niceCeiling(peakMinor: bigint, currency: Currency): bigint {
+  const unit = minorPerMajor(currency);
+  const major = (peakMinor + unit - 1n) / unit;
+  if (major <= 4n) return 4n * unit;
 
   const magnitude = 10n ** BigInt(major.toString().length - 1);
   for (const step of [1n, 2n, 4n, 6n, 8n, 10n]) {
-    if (step * magnitude >= major) return step * magnitude * 100n;
+    if (step * magnitude >= major) return step * magnitude * unit;
   }
-  return magnitude * 1000n;
+  return magnitude * 10n * unit;
 }
 
-/** Compact scale label: ₦500, ₦7.5k, ₦40k, ₦1.2m. */
-function axisLabel(minor: bigint): string {
-  const major = minor / 100n;
-  if (major < 1000n) return Money.fromMinor(minor).format({ compact: true });
+/** Compact scale label: $40, ₦7.5k, $1.2m. */
+function axisLabel(minor: bigint, currency: Currency): string {
+  const major = minor / minorPerMajor(currency);
+  if (major < 1000n) return Money.fromMinor(minor, currency).format({ compact: true });
 
   const unit = major >= 1_000_000n ? 1_000_000n : 1000n;
   const whole = major / unit;
   const tenth = ((major % unit) * 10n) / unit;
-  return `₦${whole}${tenth === 0n ? "" : `.${tenth}`}${unit === 1000n ? "k" : "m"}`;
+  const suffix = unit === 1000n ? "k" : "m";
+  return `${symbolOf(currency)}${whole}${tenth === 0n ? "" : `.${tenth}`}${suffix}`;
 }

@@ -272,8 +272,12 @@ function divideRoundHalfUp(numerator: bigint, denominator: bigint): bigint {
   return negative ? -rounded : rounded;
 }
 
-/** Sum a list, asserting a single currency. Empty list needs an explicit one. */
-export function sumMoney(amounts: Money[], currency: Currency = "NGN"): Money {
+/**
+ * Sum a list, asserting a single currency. The currency is required, not
+ * defaulted: a default of naira once crashed a dollar group's page by adding
+ * its dollars to a naira zero.
+ */
+export function sumMoney(amounts: Money[], currency: Currency): Money {
   return amounts.reduce((acc, m) => acc.plus(m), Money.zero(currency));
 }
 
@@ -281,4 +285,14 @@ export function sumMoney(amounts: Money[], currency: Currency = "NGN"): Money {
 export function toCurrency(value: string): Currency {
   if (value === "NGN" || value === "USDC") return value;
   throw new TypeError(`Unknown currency "${value}"`);
+}
+
+/** Minor units in one major unit: 100 for NGN, 1,000,000 for USDC. */
+export function minorPerMajor(currency: Currency): bigint {
+  return factorOf(currency);
+}
+
+/** The display symbol, for labels that build their own compact form. */
+export function symbolOf(currency: Currency): string {
+  return SYMBOLS[currency];
 }

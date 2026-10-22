@@ -91,7 +91,7 @@ describe("Money.split — remainder must never vanish", () => {
       "33.33",
       "33.33",
     ]);
-    expect(sumMoney(parts).equals(Money.fromMajor(100))).toBe(true);
+    expect(sumMoney(parts, "NGN").equals(Money.fromMajor(100))).toBe(true);
   });
 
   it("splits evenly when it divides cleanly", () => {
@@ -103,14 +103,14 @@ describe("Money.split — remainder must never vanish", () => {
   it("preserves the total for every split size up to 50", () => {
     const total = Money.fromMajor("123456.78");
     for (let n = 1; n <= 50; n++) {
-      expect(sumMoney(total.split(n)).equals(total)).toBe(true);
+      expect(sumMoney(total.split(n), "NGN").equals(total)).toBe(true);
     }
   });
 
   it("preserves the total when splitting a negative amount", () => {
     const total = Money.fromMajor("-100.00");
     const parts = total.split(3);
-    expect(sumMoney(parts).equals(total)).toBe(true);
+    expect(sumMoney(parts, "NGN").equals(total)).toBe(true);
   });
 
   it("rejects a non-positive part count", () => {
@@ -165,11 +165,11 @@ describe("Money formatting", () => {
 describe("sumMoney", () => {
   it("sums a full cycle of contributions", () => {
     const contributions = Array.from({ length: 10 }, () => Money.fromMajor(50_000));
-    expect(sumMoney(contributions).format()).toBe("₦500,000.00");
+    expect(sumMoney(contributions, "NGN").format()).toBe("₦500,000.00");
   });
 
   it("returns zero for an empty list", () => {
-    expect(sumMoney([]).isZero()).toBe(true);
+    expect(sumMoney([], "NGN").isZero()).toBe(true);
   });
 });
 

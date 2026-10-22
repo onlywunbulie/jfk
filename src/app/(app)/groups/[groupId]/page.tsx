@@ -80,7 +80,7 @@ export default async function GroupPage({
 
   const thisMonth = monthly[monthly.length - 1].raised;
   const lastMonth = monthly[monthly.length - 2].raised;
-  const raisedInWindow = sumMoney(monthly.map((row) => row.raised));
+  const raisedInWindow = sumMoney(monthly.map((row) => row.raised), group.currency);
   const activeMonths = monthly.filter((row) => !row.raised.isZero()).length;
 
   return (
