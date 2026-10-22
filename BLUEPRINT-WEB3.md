@@ -16,17 +16,18 @@ describes the code in this repo.
 
 > ### Where we stopped (22 October 2026)
 >
-> - **Done:** Phase 0 (USDC in ), Phase 1 (contract deployed to Base Sepolia, addresses in
->   ), Phase 2 (sign-in with Base, dollar groups, starting a
->   group on-chain; first group ).
+> - **Done:** Phase 0 (USDC in `Money`), Phase 1 (contract deployed to Base Sepolia, addresses in
+>   `contracts/deployments/base-sepolia.json`), Phase 2 (sign-in with Base, dollar groups, starting
+>   a group on-chain; first group `0x2a7a348bccee61c5ef6c213efc0baa05841a5a70`).
 > - **Next:** Phase 3, paying in from the app. Blocked on one setup step: the Coinbase Developer
 >   Platform paymaster (Base Sepolia) is open in the CDP portal; its endpoint URL goes in
->    as  (never committed). Then build a server-side >   proxy so the key never reaches the browser, and allowlist USDC  plus JfkModule
->   , , , ,  in CDP.
+>   `.env.local` as `PAYMASTER_URL` (never committed). Then build a server-side `/api/paymaster`
+>   proxy so the key never reaches the browser, and allowlist USDC `approve` plus JfkModule
+>   `contribute`, `propose`, `vote`, `execute` and `leave` in CDP.
 > - **Still to prove:** two people on two devices in one started group.
-> - **Local setup:** Foundry lives in  (not on PATH). The deployer is
->   the encrypted keystore  (). The app's fee wallet (relayer) is
->   , key in  as .
+> - **Local setup:** Foundry lives in `%USERPROFILE%\.foundry\bin` (not on PATH). The deployer is
+>   the encrypted keystore `jfk-deployer` (`0x4596…182b`). The app's fee wallet (relayer) is
+>   `0xe2058d49dbE0031d2bc89a4050548A8FdB1659Ea`, its key in `.env.local` as `RELAYER_PRIVATE_KEY`.
 
 ---
 
