@@ -1,10 +1,9 @@
 import "server-only";
-import type { Hex } from "viem";
+import type { Address, Hex } from "viem";
 import { publicClient } from "@/lib/chain/client";
 
 /**
- * Does this signature really come from the wallet that the sign-in message
- * names?
+ * Did this wallet really sign this message?
  *
  * Goes to the chain because a smart wallet is a contract: its signatures are
  * checked by asking the contract (ERC-1271), or, for a wallet that hasn't
@@ -14,11 +13,9 @@ import { publicClient } from "@/lib/chain/client";
  * Its own module so tests can stand it in without a network.
  */
 export async function verifyWalletSignature(input: {
+  address: Address;
   message: string;
   signature: Hex;
 }): Promise<boolean> {
-  return publicClient().verifySiweMessage({
-    message: input.message,
-    signature: input.signature,
-  });
+  return publicClient().verifyMessage(input);
 }

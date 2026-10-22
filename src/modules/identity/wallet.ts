@@ -1,7 +1,7 @@
 import "server-only";
 import { eq } from "drizzle-orm";
-import { generateSiweNonce, parseSiweMessage, validateSiweMessage } from "viem/siwe";
-import type { Hex } from "viem";
+import { generateSiweNonce } from "viem/siwe";
+import { isAddress, type Address, type Hex } from "viem";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { chain, shortAddress } from "@/lib/chain/addresses";
@@ -10,16 +10,88 @@ import { verifyWalletSignature } from "./wallet-signature";
 /**
  * Signing in with a wallet ("Sign in with Ethereum", EIP-4361).
  *
- * The app hands out a one-time nonce, the wallet signs a standard message
- * containing it, and the server checks four things before trusting it: the
- * message is for this site, for this chain, still in date, and carries the
- * nonce we issued. Only then does it ask the chain whether the signature is
- * genuine. Proving you control the wallet *is* signing in; there's no
- * password or code.
+ * The app hands out a one-time nonce, the wallet signs a message containing
+ * it, and the server checks that the message is for this site and this
+ * network, carries the nonce we issued, and (if it says so) is still in date.
+ * Only then does it ask the chain whether the signature is genuine. Proving
+ * you control the wallet *is* signing in; there's no password or code.
  */
 
 export function newSignInNonce(): string {
   return generateSiweNonce();
+}
+
+export interface SignInMessage {
+  domain: string;
+  address: Address;
+  uri: string | null;
+  chainId: number | null;
+  nonce: string | null;
+  issuedAt: Date | null;
+  expirationTime: Date | null;
+  notBefore: Date | null;
+}
+
+/**
+ * Read a sign-in message, leniently.
+ *
+ * Base Account writes a shorter message than the standard: no "Version"
+ * or "Issued At" lines, and the site named without its port. A strict
+ * parser rejects that, so this one asks only for what the security checks
+ * need (site, address, network, nonce) and reads the rest when present.
+ */
+export function parseSignInMessage(text: string): SignInMessage | null {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const header =
+    /^(?:[a-zA-Z][a-zA-Z0-9+.-]*:\/\/)?(\S+) wants you to sign in with your Ethereum account:$/.exec(
+      lines[0] ?? "",
+    );
+  const address = (lines[1] ?? "").trim();
+  if (!header || !isAddress(address, { strict: false })) return null;
+
+  const field = (name: string): string | null => {
+    const line = lines.find((l) => l.startsWith(`${name}: `));
+    return line ? line.slice(name.length + 2).trim() : null;
+  };
+  const date = (name: string): Date | null => {
+    const value = field(name);
+    if (!value) return null;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+  const chainId = field("Chain ID");
+
+  return {
+    domain: header[1],
+    address: address as Address,
+    uri: field("URI"),
+    chainId: chainId && /^\d+$/.test(chainId) ? Number(chainId) : null,
+    nonce: field("Nonce"),
+    issuedAt: date("Issued At"),
+    expirationTime: date("Expiration Time"),
+    notBefore: date("Not Before"),
+  };
+}
+
+/**
+ * Is the message for the site the person is actually on?
+ *
+ * The message's site must be this host, with or without the port (Base
+ * Account drops it), and its URI, when given, must point at exactly this
+ * host. Together they stop a signature made for another site being replayed
+ * here.
+ */
+function isForThisSite(message: SignInMessage, host: string): boolean {
+  const hostname = host.split(":")[0];
+  if (message.domain !== host && message.domain !== hostname) return false;
+  if (message.uri) {
+    try {
+      if (new URL(message.uri).host !== host) return false;
+    } catch {
+      return false;
+    }
+  }
+  return true;
 }
 
 export type WalletSignInResult =
@@ -44,32 +116,24 @@ export async function signInWithWallet(input: {
   expectedNonce: string | null;
   now?: Date;
 }): Promise<WalletSignInResult> {
-  let parsed;
-  try {
-    parsed = parseSiweMessage(input.message);
-  } catch {
-    return { ok: false, reason: "unreadable_message" };
-  }
-  if (!parsed.address || !parsed.nonce || !parsed.domain) {
-    return { ok: false, reason: "unreadable_message" };
-  }
+  const parsed = parseSignInMessage(input.message);
+  if (!parsed) return { ok: false, reason: "unreadable_message" };
 
   // Each check below names the specific failure, so a wallet or a proxy
   // misconfiguration shows up as itself rather than as "sign-in failed".
-  if (parsed.domain !== input.host) return { ok: false, reason: "wrong_site" };
+  if (!isForThisSite(parsed, input.host)) return { ok: false, reason: "wrong_site" };
   if (parsed.chainId !== chain.id) return { ok: false, reason: "wrong_network" };
   if (!input.expectedNonce || parsed.nonce !== input.expectedNonce) {
     return { ok: false, reason: "wrong_nonce" };
   }
-  const inDate = validateSiweMessage({
-    message: parsed,
-    domain: input.host,
-    nonce: input.expectedNonce,
-    time: input.now ?? new Date(),
-  });
-  if (!inDate) return { ok: false, reason: "expired" };
+  // The nonce is single-use and lives ten minutes, which bounds a message
+  // with no dates. When the message does carry dates, they're honoured too.
+  const now = input.now ?? new Date();
+  if (parsed.expirationTime && parsed.expirationTime <= now) return { ok: false, reason: "expired" };
+  if (parsed.notBefore && parsed.notBefore > now) return { ok: false, reason: "expired" };
 
   const genuine = await verifyWalletSignature({
+    address: parsed.address,
     message: input.message,
     signature: input.signature,
   });

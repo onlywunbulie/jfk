@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useConnect, useConnectors, useSignMessage } from "wagmi";
+import { useAccount, useConnect, useConnectors, useDisconnect, useSignMessage } from "wagmi";
 import { numberToHex } from "viem";
 import { createSiweMessage } from "viem/siwe";
 import { Button } from "@/components/ui/button";
@@ -21,15 +21,43 @@ export function WalletSignIn() {
   const connectors = useConnectors();
   const { connectAsync } = useConnect();
   const { signMessageAsync } = useSignMessage();
+  const { isConnected } = useAccount();
+  const { disconnect } = useDisconnect();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Fetched ahead of the tap. Browsers only allow a pop-up that opens straight
+  // from a tap; a server round trip in between gets the Coinbase window
+  // blocked. A nonce is single-use, so a fresh one follows every attempt.
+  const [nonce, setNonce] = useState<string | null>(null);
+
+  // Being on this page means you're signed out of JFK. A wallet still
+  // connected from an earlier, unfinished attempt would make the next connect
+  // fail with "already connected", so let it go first.
+  useEffect(() => {
+    if (isConnected) disconnect();
+  }, [isConnected, disconnect]);
+
+  useEffect(() => {
+    if (nonce) return;
+    let cancelled = false;
+    startWalletSignInAction().then(({ nonce: fresh }) => {
+      if (!cancelled) setNonce(fresh);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [nonce]);
 
   async function signIn() {
+    // The nonce normally arrives within a moment of the page loading.
+    if (!nonce) {
+      setError("One moment, still getting ready. Tap again.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       const connector = connectors[0];
-      const { nonce } = await startWalletSignInAction();
 
       const result = await connectAsync({
         connector,
@@ -66,9 +94,12 @@ export function WalletSignIn() {
       router.replace(outcome.next);
       router.refresh();
     } catch (cause) {
+      // Kept for whoever debugs it; the dev server copies this into its log.
+      console.error("Wallet sign-in failed", cause);
       setError(describeWalletError(cause));
     } finally {
       setBusy(false);
+      setNonce(null);
     }
   }
 

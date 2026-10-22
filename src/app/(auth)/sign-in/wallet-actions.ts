@@ -38,7 +38,15 @@ export async function finishWalletSignInAction(
   input: z.input<typeof finishSchema>,
 ): Promise<FinishWalletSignInResult> {
   const parsed = finishSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "The wallet sent something unexpected. Try again." };
+  if (!parsed.success) {
+    // Sign-in messages and signatures are public data, safe to log.
+    console.warn("Wallet sign-in: unexpected shape", {
+      issues: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
+      keys: input && typeof input === "object" ? Object.keys(input) : typeof input,
+      signaturePrefix: typeof input?.signature === "string" ? input.signature.slice(0, 12) : typeof input?.signature,
+    });
+    return { ok: false, error: "The wallet sent something unexpected. Try again." };
+  }
 
   const cookieStore = await cookies();
   const expectedNonce = cookieStore.get(NONCE_COOKIE)?.value ?? null;
@@ -56,6 +64,7 @@ export async function finishWalletSignInAction(
   });
 
   if (!result.ok) {
+    console.warn(`Wallet sign-in refused: ${result.reason} host=${host} message=${JSON.stringify(parsed.data.message)} signature=${parsed.data.signature.slice(0, 20)}…(${parsed.data.signature.length} chars)`);
     const error = {
       unreadable_message: "The wallet sent something unexpected. Try again.",
       wrong_site: "That sign-in was meant for a different site.",

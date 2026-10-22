@@ -10,10 +10,17 @@ vi.mock("@/lib/db", async () => ({ db: t.db }));
 // The real check asks the chain. Here it recovers the signer locally, which is
 // exactly what the chain does for an ordinary (non-contract) wallet.
 vi.mock("./wallet-signature", () => ({
-  verifyWalletSignature: async ({ message, signature }: { message: string; signature: Hex }) => {
-    const { parseSiweMessage } = await import("viem/siwe");
+  verifyWalletSignature: async ({
+    address,
+    message,
+    signature,
+  }: {
+    address: string;
+    message: string;
+    signature: Hex;
+  }) => {
     const signer = await recoverMessageAddress({ message, signature });
-    return signer.toLowerCase() === parseSiweMessage(message).address?.toLowerCase();
+    return signer.toLowerCase() === address.toLowerCase();
   },
 }));
 
@@ -126,6 +133,47 @@ describe("signing in with a wallet", () => {
       now: NOW,
     });
     expect(result).toEqual({ ok: false, reason: "unreadable_message" });
+  });
+});
+
+describe("Base Account's shorter sign-in message", () => {
+  // The exact shape Base Account produced in testing on 22 October 2026: no
+  // Version or Issued At, and the site named without its port.
+  async function baseAccountMessage(overrides: { domain?: string; uri?: string; chainId?: number } = {}) {
+    const account = privateKeyToAccount(generatePrivateKey());
+    const message = [
+      `${overrides.domain ?? "localhost"} wants you to sign in with your Ethereum account:`,
+      account.address,
+      "",
+      `URI: ${overrides.uri ?? "http://localhost:3000"}`,
+      `Chain ID: ${overrides.chainId ?? 84532}`,
+      `Nonce: ${NONCE}`,
+    ].join("\n");
+    return { account, message, signature: await account.signMessage({ message }) };
+  }
+
+  it("is accepted", async () => {
+    const { account, message, signature } = await baseAccountMessage();
+    const result = await signInWithWallet({ message, signature, host: HOST, expectedNonce: NONCE, now: NOW });
+    expect(result).toMatchObject({ ok: true, isNewUser: true, address: account.address.toLowerCase() });
+  });
+
+  it("is refused when its URI points at another site", async () => {
+    const { message, signature } = await baseAccountMessage({ uri: "http://localhost:4000" });
+    const result = await signInWithWallet({ message, signature, host: HOST, expectedNonce: NONCE, now: NOW });
+    expect(result).toEqual({ ok: false, reason: "wrong_site" });
+  });
+
+  it("is refused when it names another site", async () => {
+    const { message, signature } = await baseAccountMessage({ domain: "evil.example", uri: "http://evil.example" });
+    const result = await signInWithWallet({ message, signature, host: HOST, expectedNonce: NONCE, now: NOW });
+    expect(result).toEqual({ ok: false, reason: "wrong_site" });
+  });
+
+  it("is refused on another network", async () => {
+    const { message, signature } = await baseAccountMessage({ chainId: 8453 });
+    const result = await signInWithWallet({ message, signature, host: HOST, expectedNonce: NONCE, now: NOW });
+    expect(result).toEqual({ ok: false, reason: "wrong_network" });
   });
 });
 
