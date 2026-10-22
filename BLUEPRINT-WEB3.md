@@ -457,6 +457,12 @@ Passkey sign-in, the create-group conversation deploying a Safe with the module 
 that add the joiner as an owner. *Done when two people on two phones are in the same on-chain
 group.*
 
+*Status, 22 October 2026:* built. Sign-in with Base Account (passkey); groups save in USDC;
+members gather first, then the owner starts the group and the app's relayer creates its Safe with
+every member as an owner. First real group started on Base Sepolia:
+`0x2a7a348bccee61c5ef6c213efc0baa05841a5a70` (fee 0.0000023 test ETH). Still to prove with two
+people on two phones.
+
 **Phase 3: Contributions and the index (5–6 days).**
 Allowance on joining, scheduled pulls, "Pay now", the test-USDC faucet button, the indexer, and the
 dashboard and monthly chart reading indexed data. *Done when a cycle collects from two members and
