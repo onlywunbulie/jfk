@@ -14,6 +14,20 @@ describes the code in this repo.
 > standard from the first line**: real money is the target, so nothing gets built as a
 > prototype to be hardened later.
 
+> ### Where we stopped (22 October 2026)
+>
+> - **Done:** Phase 0 (USDC in ), Phase 1 (contract deployed to Base Sepolia, addresses in
+>   ), Phase 2 (sign-in with Base, dollar groups, starting a
+>   group on-chain; first group ).
+> - **Next:** Phase 3, paying in from the app. Blocked on one setup step: the Coinbase Developer
+>   Platform paymaster (Base Sepolia) is open in the CDP portal; its endpoint URL goes in
+>    as  (never committed). Then build a server-side >   proxy so the key never reaches the browser, and allowlist USDC  plus JfkModule
+>   , , , ,  in CDP.
+> - **Still to prove:** two people on two devices in one started group.
+> - **Local setup:** Foundry lives in  (not on PATH). The deployer is
+>   the encrypted keystore  (). The app's fee wallet (relayer) is
+>   , key in  as .
+
 ---
 
 ## 1. Decisions
