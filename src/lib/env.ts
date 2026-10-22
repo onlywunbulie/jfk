@@ -35,6 +35,14 @@ const serverEnvSchema = z.object({
   PAYSTACK_SECRET_KEY: z.string().optional().default(""),
   /** Base RPC endpoint. The public one is rate-limited but fine for development. */
   BASE_RPC_URL: z.url().optional(),
+  /**
+   * The app wallet that pays network fees for starting groups on-chain.
+   * Testnet only. It is never an owner of any Safe and has no power over one.
+   */
+  RELAYER_PRIVATE_KEY: z
+    .string()
+    .regex(/^0x[0-9a-fA-F]{64}$/, "must be a 0x-prefixed 32-byte hex key")
+    .optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

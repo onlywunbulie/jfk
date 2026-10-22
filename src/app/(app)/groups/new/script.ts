@@ -116,13 +116,14 @@ function describeTurnout(pct: string): string {
 }
 
 /**
- * "50000" → "₦50,000". Works on the digits as text, so a contribution amount
- * is never passed through a float on its way to the screen.
+ * "50" → "$50", "1250.5" → "$1,250.50". Works on the digits as text, so a
+ * contribution amount is never passed through a float on its way to the
+ * screen.
  */
-export function formatNaira(amount: string): string {
+export function formatDollars(amount: string): string {
   const [whole, fraction] = amount.split(".");
   const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return `₦${grouped}${fraction ? `.${fraction}` : ""}`;
+  return `$${grouped}${fraction ? `.${fraction.padEnd(2, "0")}` : ""}`;
 }
 
 /** The rules a group of this kind has, in the order they are listed and asked. */
@@ -229,18 +230,19 @@ export function buildScript(answers: Answers): Question[] {
     {
       id: "amount",
       kind: "text",
-      ask: "How much will each person pay in each time?",
-      detail: "In naira. Everyone pays the same amount.",
-      placeholder: "50000",
+      ask: "How much will each person pay in each time, in dollars?",
+      detail:
+        "The group saves in digital dollars (USDC), so savings keep their value. Everyone pays the same amount.",
+      placeholder: "50",
       inputMode: "decimal",
-      // People type "₦50,000" as readily as "50000".
-      normalise: (raw) => raw.replace(/[₦,\s]/g, ""),
+      // People type "$50" or "1,000" as readily as "50".
+      normalise: (raw) => raw.replace(/[$,\s]/g, ""),
       validate: (value) => {
-        if (!/^\d+(\.\d{1,2})?$/.test(value)) return "Enter an amount like 50000.";
+        if (!/^\d+(\.\d{1,2})?$/.test(value)) return "Enter an amount like 50 or 12.50.";
         if (!/[1-9]/.test(value)) return "The amount must be more than zero.";
         return null;
       },
-      display: formatNaira,
+      display: formatDollars,
     },
     {
       id: "cadence",

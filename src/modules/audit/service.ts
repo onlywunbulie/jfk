@@ -8,6 +8,7 @@ import type { Database, Transaction } from "@/lib/db";
  */
 export type AuditAction =
   | "group.created"
+  | "group.started_on_chain"
   | "group.settings.updated"
   | "group.dissolved"
   | "member.invited"

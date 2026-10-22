@@ -10,7 +10,7 @@ import {
   answer,
   buildScript,
   describeThreshold,
-  formatNaira,
+  formatDollars,
   resolveThresholds,
   rulesFor,
   summariseTurnout,
@@ -668,7 +668,7 @@ function Summary({ answers }: { answers: Answers }) {
       </p>
 
       <div className="mt-4 grid grid-cols-2 gap-2">
-        <Tile value={formatNaira(answers.amount ?? "0")} label="Each person pays" />
+        <Tile value={formatDollars(answers.amount ?? "0")} label="Each person pays" />
         <Tile value={weekly ? "Once a week" : "Once a month"} label="How often" />
       </div>
 

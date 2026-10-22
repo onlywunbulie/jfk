@@ -16,7 +16,7 @@ import {
   type MemberRole,
 } from "@/lib/db/schema";
 import { randomToken } from "@/lib/ids";
-import { Money } from "@/lib/money";
+import { Money, toCurrency, type Currency } from "@/lib/money";
 import { assertCan, type PolicyContext } from "@/lib/auth/policy";
 import { recordAudit } from "@/modules/audit/service";
 import {
@@ -144,6 +144,7 @@ export async function createGroup(
         name: input.name.trim(),
         description: input.description?.trim() || null,
         type: input.type,
+        currency: input.contributionAmount.currency,
         ownerId,
       })
       .returning({ id: groups.id });
@@ -265,6 +266,7 @@ export async function previewInvite(code: string): Promise<InvitePreview | null>
       groupId: groups.id,
       groupName: groups.name,
       groupType: groups.type,
+      currency: groups.currency,
       contributionAmount: groupSettings.contributionAmount,
       cadence: groupSettings.cadence,
       expiresAt: groupInvites.expiresAt,
@@ -300,7 +302,7 @@ export async function previewInvite(code: string): Promise<InvitePreview | null>
     groupName: row.groupName,
     groupType: row.groupType,
     memberCount,
-    contributionAmount: Money.fromMinor(row.contributionAmount),
+    contributionAmount: Money.fromMinor(row.contributionAmount, toCurrency(row.currency)),
     cadence: row.cadence,
   };
 }
@@ -309,7 +311,14 @@ export type AcceptInviteResult =
   | { ok: true; groupId: string; alreadyMember: boolean }
   | {
       ok: false;
-      reason: "not_found" | "expired" | "exhausted" | "revoked" | "wrong_email" | "removed";
+      reason:
+        | "not_found"
+        | "expired"
+        | "exhausted"
+        | "revoked"
+        | "wrong_email"
+        | "removed"
+        | "started_on_chain";
     };
 
 /**
@@ -333,6 +342,15 @@ export async function acceptInvite(
 
     if (!invite) return { ok: false as const, reason: "not_found" as const };
     if (invite.revokedAt) return { ok: false as const, reason: "revoked" as const };
+
+    // Once a group's Safe exists, a new member must be voted in on-chain; an
+    // invite link alone can no longer add them.
+    const [target] = await tx
+      .select({ safeAddress: groups.safeAddress })
+      .from(groups)
+      .where(eq(groups.id, invite.groupId))
+      .limit(1);
+    if (target?.safeAddress) return { ok: false as const, reason: "started_on_chain" as const };
     if (invite.expiresAt.getTime() <= Date.now()) {
       return { ok: false as const, reason: "expired" as const };
     }
@@ -676,6 +694,13 @@ export interface GroupSummary {
   contributionAmount: Money;
   cadence: Cadence;
   status: "ACTIVE" | "DISSOLVING" | "DISSOLVED";
+  /**
+   * NGN for groups from the Paystack era, USDC for groups that live on-chain.
+   * Every amount on this summary is in this currency.
+   */
+  currency: Currency;
+  /** The group's Safe once it has started on-chain, otherwise null. */
+  safeAddress: string | null;
   /** Live from the ledger. Zero for a group that has never received money. */
   balance: GroupBalances;
 }
@@ -689,6 +714,8 @@ export async function listGroupsForUser(userId: string): Promise<GroupSummary[]>
       type: groups.type,
       status: groups.status,
       role: groupMembers.role,
+      currency: groups.currency,
+      safeAddress: groups.safeAddress,
       contributionAmount: groupSettings.contributionAmount,
       cadence: groupSettings.cadence,
       memberCount: sql<number>`(
@@ -711,16 +738,16 @@ export async function listGroupsForUser(userId: string): Promise<GroupSummary[]>
   // One balance query for all of them rather than one per card.
   const balances = await getBalancesForGroups(rows.map((r) => r.id));
 
-  return rows.map((row) => ({
-    ...row,
-    memberCount: Number(row.memberCount),
-    contributionAmount: Money.fromMinor(row.contributionAmount),
-    balance: balances.get(row.id) ?? {
-      available: Money.zero(),
-      reserved: Money.zero(),
-      total: Money.zero(),
-    },
-  }));
+  return rows.map((row) => {
+    const currency = toCurrency(row.currency);
+    return {
+      ...row,
+      currency,
+      memberCount: Number(row.memberCount),
+      contributionAmount: Money.fromMinor(row.contributionAmount, currency),
+      balance: balanceIn(currency, balances.get(row.id)),
+    };
+  });
 }
 
 export interface MemberView {
@@ -786,6 +813,8 @@ export async function getGroupDetail(
       description: groups.description,
       type: groups.type,
       status: groups.status,
+      currency: groups.currency,
+      safeAddress: groups.safeAddress,
       contributionAmount: groupSettings.contributionAmount,
       cadence: groupSettings.cadence,
       dueDay: groupSettings.dueDay,
@@ -808,12 +837,26 @@ export async function getGroupDetail(
     .where(eq(governanceRules.groupId, groupId))
     .orderBy(asc(governanceRules.action));
 
+  const currency = toCurrency(row.currency);
   return {
     ...row,
+    currency,
     role: membership.role,
     memberCount: membership.activeMemberCount,
-    contributionAmount: Money.fromMinor(row.contributionAmount),
-    balance: await getGroupBalances(groupId),
+    contributionAmount: Money.fromMinor(row.contributionAmount, currency),
+    balance: balanceIn(currency, await getGroupBalances(groupId)),
     governance,
   };
+}
+
+
+/**
+ * The ledger only knows naira, the Paystack-era money. A USDC group's money
+ * lives in its Safe on-chain and is read from there (Phase 3); until then it
+ * shows as zero dollars rather than as a naira figure that means nothing.
+ */
+function balanceIn(currency: Currency, ledger: GroupBalances | undefined): GroupBalances {
+  if (currency === "NGN" && ledger) return ledger;
+  const zero = Money.zero(currency);
+  return { available: zero, reserved: zero, total: zero };
 }

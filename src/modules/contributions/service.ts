@@ -526,11 +526,22 @@ export async function getArrears(groupId: string): Promise<ArrearsRow[]> {
   }));
 }
 
-/** Groups that may need a cycle opened. */
+/**
+ * Groups that may need a cycle opened.
+ *
+ * Naira groups only. These cycles charge saved cards through Paystack; a USDC
+ * group's contributions are paid on-chain and are scheduled there instead.
+ */
 export async function findGroupsNeedingCycles() {
   return db
     .select({ id: groups.id, name: groups.name })
     .from(groups)
     .innerJoin(groupSettings, eq(groupSettings.groupId, groups.id))
-    .where(and(eq(groups.status, "ACTIVE"), ne(groupSettings.contributionAmount, 0n)));
+    .where(
+      and(
+        eq(groups.status, "ACTIVE"),
+        eq(groups.currency, "NGN"),
+        ne(groupSettings.contributionAmount, 0n),
+      ),
+    );
 }

@@ -34,6 +34,9 @@ import { SimulatePanel } from "./simulate-panel";
 import { getArrears, getCurrentCycle } from "@/modules/contributions/service";
 import { CycleCard, NoCycleYet } from "@/components/cycle-card";
 import { listProposals } from "@/modules/governance/service";
+import { getOnChainStatus } from "@/modules/groups/onchain";
+import { EXPLORER_URL, shortAddress } from "@/lib/chain/addresses";
+import { StartOnChain } from "./start-on-chain";
 
 export async function generateMetadata({
   params,
@@ -57,15 +60,20 @@ export default async function GroupPage({
   // those must be indistinguishable.
   if (!group) notFound();
 
-  const [entries, preview, methods, cycle, arrears, proposalList, monthly] =
+  // A USDC group's money lives on-chain; the card-charging Contribute panel
+  // and the naira ledger only apply to groups from the Paystack era.
+  const onChainGroup = group.currency === "USDC";
+
+  const [entries, preview, methods, cycle, arrears, proposalList, monthly, onChain] =
     await Promise.all([
       listEntries(groupAvailable(groupId), { limit: 20 }),
-      previewContribution(groupId),
+      onChainGroup ? null : previewContribution(groupId),
       listPaymentMethods(user.id),
       getCurrentCycle(groupId, user.id),
       getArrears(groupId),
       listProposals(groupId, user.id),
-      getMonthlyRaised(groupId),
+      getMonthlyRaised(groupId, { currency: group.currency }),
+      getOnChainStatus(groupId, user.id),
     ]);
 
   const openProposals = (proposalList ?? []).filter((p) => p.status === "OPEN").length;
@@ -115,6 +123,30 @@ export default async function GroupPage({
           </ButtonLink>
         </div>
       </header>
+
+      {onChain?.eligible && !onChain.started && (
+        <StartOnChain
+          groupId={groupId}
+          isOwner={onChain.isOwner}
+          members={onChain.members}
+          inviteHref={`/groups/${groupId}/members`}
+        />
+      )}
+
+      {onChain?.safeAddress && (
+        <p className="text-sm text-ink-muted">
+          Started on Base. The group&rsquo;s money is held by its own shared wallet,{" "}
+          <a
+            href={`${EXPLORER_URL}/address/${onChain.safeAddress}`}
+            target="_blank"
+            rel="noreferrer"
+            className="font-mono text-ink underline decoration-white/30 underline-offset-4 hover:decoration-white"
+          >
+            {shortAddress(onChain.safeAddress)}
+          </a>
+          , which anyone can check.
+        </p>
+      )}
 
       {/* Row one: the money on the left, how it has been arriving on the right. */}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.75fr)] lg:items-stretch">

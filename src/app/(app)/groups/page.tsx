@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/auth/session";
 import { listGroupsForUser } from "@/modules/groups/service";
-import { sumMoney } from "@/lib/money";
+import { sumMoney, type Currency } from "@/lib/money";
 import { GroupCard } from "@/components/group-card";
 import { Card } from "@/components/ui/card";
 import { ButtonLink } from "@/components/ui/button";
@@ -19,7 +19,17 @@ export default async function GroupsPage() {
   const user = await requireUser();
   const groups = await listGroupsForUser(user.id);
 
-  const total = sumMoney(groups.map((group) => group.balance.total));
+  // Naira and dollars never add together. Dollars lead: every new group is
+  // on-chain in USDC, and naira only remains on groups from before.
+  const currencies: Currency[] = groups.some((g) => g.currency === "NGN")
+    ? groups.some((g) => g.currency === "USDC") ? ["USDC", "NGN"] : ["NGN"]
+    : ["USDC"];
+  const totals = currencies.map((currency) =>
+    sumMoney(
+      groups.filter((g) => g.currency === currency).map((g) => g.balance.total),
+      currency,
+    ),
+  );
 
   return (
     <main className="animate-rise space-y-8">
@@ -29,7 +39,7 @@ export default async function GroupsPage() {
             {greeting()}, {user.displayName.split(" ")[0]}
           </p>
           <h1 className="mt-1 text-[2.5rem] leading-none font-semibold tracking-tight">
-            {total.format({ compact: true })}
+            {totals.map((t) => t.format({ compact: true })).join(" · ")}
           </h1>
           <p className="mt-2 text-sm text-ink-faint">
             {groups.length === 0

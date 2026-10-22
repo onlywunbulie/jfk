@@ -276,3 +276,9 @@ function divideRoundHalfUp(numerator: bigint, denominator: bigint): bigint {
 export function sumMoney(amounts: Money[], currency: Currency = "NGN"): Money {
   return amounts.reduce((acc, m) => acc.plus(m), Money.zero(currency));
 }
+
+/** Read a currency code stored as text. Anything unrecognised is an error, not a guess. */
+export function toCurrency(value: string): Currency {
+  if (value === "NGN" || value === "USDC") return value;
+  throw new TypeError(`Unknown currency "${value}"`);
+}

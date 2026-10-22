@@ -37,3 +37,10 @@ export type ContributeState = {
 };
 
 export const initialContributeState: ContributeState = { status: "idle" };
+
+export type StartOnChainState = {
+  safeAddress?: string;
+  error?: string;
+};
+
+export const initialStartOnChainState: StartOnChainState = {};

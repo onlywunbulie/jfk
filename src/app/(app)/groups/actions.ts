@@ -8,6 +8,7 @@ import { requireUser } from "@/lib/auth/session";
 import { ForbiddenError, assertCan, explain } from "@/lib/auth/policy";
 import { Money } from "@/lib/money";
 import * as groupsService from "@/modules/groups/service";
+import { startGroupOnChain } from "@/modules/groups/onchain";
 import { chargeContribution } from "@/modules/payments/contribute";
 import type { GovernedAction } from "@/lib/db/schema";
 import { ALL_GOVERNED_ACTIONS } from "./new/governance-options";
@@ -20,6 +21,7 @@ import type {
   CreateGroupState,
   InviteState,
   MemberActionState,
+  StartOnChainState,
 } from "./state";
 
 async function clientIp(): Promise<string | null> {
@@ -36,7 +38,7 @@ const createGroupSchema = z.object({
   amount: z
     .string()
     .trim()
-    .regex(/^\d+(\.\d{1,2})?$/, "Enter an amount like 50000")
+    .regex(/^\d+(\.\d{1,2})?$/, "Enter an amount like 50 or 12.50")
     .refine((v) => Number(v) > 0, "The amount must be more than zero"),
   cadence: z.enum(["WEEKLY", "MONTHLY"]),
   dueDay: z.coerce.number().int().min(1).max(28),
@@ -74,7 +76,8 @@ export async function createGroupAction(
       name: input.name,
       description: input.description ?? null,
       type: input.type,
-      contributionAmount: Money.fromMajor(input.amount),
+      // Every group made from here on lives on-chain and saves in USDC.
+      contributionAmount: Money.fromMajor(input.amount, "USDC"),
       cadence: input.cadence,
       dueDay: input.dueDay,
       membersCanPropose: input.membersCanPropose === "on",
@@ -303,4 +306,35 @@ export async function simulateContributionAction(
 function forbiddenMessage(error: unknown): string {
   if (error instanceof ForbiddenError) return explain(error.decision);
   throw error;
+}
+
+/**
+ * The owner starts the group on-chain: its Safe is created with every member
+ * in it. The app pays the network fee.
+ */
+export async function startOnChainAction(
+  _prev: StartOnChainState,
+  formData: FormData,
+): Promise<StartOnChainState> {
+  const user = await requireUser();
+  const groupId = String(formData.get("groupId") ?? "");
+
+  const result = await startGroupOnChain(groupId, user.id, { ip: await clientIp() });
+  if (!result.ok) {
+    const error = {
+      not_found: "That group doesn't exist.",
+      not_owner: "Only the person who created the group can start it.",
+      not_usdc: "This group was made before JFK moved on-chain, so it can't start there.",
+      already_started: "This group has already started.",
+      members_without_wallets: "Everyone needs to sign in with Base before the group can start.",
+      no_relayer: "The app isn't set up to pay network fees yet. Add RELAYER_PRIVATE_KEY to .env.local.",
+      relayer_out_of_funds: "The app's fee wallet is out of test ETH. Top it up and try again.",
+      reverted: "The network refused to create the group's wallet. Try again.",
+      not_confirmed: "The group's wallet was created but didn't check out. Nothing was recorded; tell the developer.",
+    }[result.reason];
+    return { error };
+  }
+
+  revalidatePath(`/groups/${groupId}`);
+  return { safeAddress: result.safeAddress };
 }

@@ -73,6 +73,14 @@ export const groups = pgTable(
     type: groupTypeEnum("type").notNull().default("TREASURY"),
     currency: text("currency").notNull().default("NGN"),
 
+    /**
+     * The group's Safe on Base, once it has been started on-chain. Null while
+     * the group is still gathering its members. Lowercased.
+     */
+    safeAddress: text("safe_address"),
+    /** When the Safe was created. */
+    startedOnChainAt: timestamp("started_on_chain_at", { withTimezone: true }),
+
     /** Exactly one owner. Denormalised for cheap lookups; group_members is truth. */
     ownerId: text("owner_id")
       .notNull()
@@ -82,7 +90,10 @@ export const groups = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (table) => [index("groups_owner_idx").on(table.ownerId)],
+  (table) => [
+    index("groups_owner_idx").on(table.ownerId),
+    uniqueIndex("groups_safe_address_unique").on(table.safeAddress),
+  ],
 );
 
 // ---------------------------------------------------------------------------

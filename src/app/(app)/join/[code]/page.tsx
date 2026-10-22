@@ -15,6 +15,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   revoked: "That invite was cancelled.",
   wrong_email: "That invite was addressed to a different email.",
   removed: "You're no longer able to join this group.",
+  started_on_chain:
+    "This group has already started on-chain, so new members are voted in. Ask a member to propose adding you.",
 };
 
 export default async function JoinPage({

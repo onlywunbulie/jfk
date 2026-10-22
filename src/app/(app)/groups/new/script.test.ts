@@ -3,7 +3,7 @@ import { DEFAULT_GOVERNANCE } from "@/lib/db/schema";
 import {
   answer,
   buildScript,
-  formatNaira,
+  formatDollars,
   resolveThresholds,
   toFormFields,
   type Answers,
@@ -120,7 +120,8 @@ describe("validating what was typed", () => {
 
   it("accepts an amount however people write it, and nothing that isn't one", () => {
     const amount = text({}, "amount");
-    expect(amount.normalise("₦50,000")).toBe("50000");
+    expect(amount.normalise("$1,000")).toBe("1000");
+    expect(amount.normalise("$ 50")).toBe("50");
     expect(amount.validate("50000")).toBeNull();
     expect(amount.validate("2500.50")).toBeNull();
     expect(amount.validate("0")).toMatch(/more than zero/);
@@ -206,10 +207,11 @@ describe("what gets posted at the end", () => {
   });
 });
 
-describe("formatNaira", () => {
-  it("groups thousands without touching the kobo", () => {
-    expect(formatNaira("50000")).toBe("₦50,000");
-    expect(formatNaira("1250000.50")).toBe("₦1,250,000.50");
-    expect(formatNaira("500")).toBe("₦500");
+describe("formatDollars", () => {
+  it("groups thousands and always shows cents as two digits", () => {
+    expect(formatDollars("50")).toBe("$50");
+    expect(formatDollars("1250000.50")).toBe("$1,250,000.50");
+    expect(formatDollars("12.5")).toBe("$12.50");
+    expect(formatDollars("0.05")).toBe("$0.05");
   });
 });
