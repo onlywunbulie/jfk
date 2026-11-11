@@ -7,26 +7,25 @@ type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
 
 /**
- * White is the action colour, red is the identity colour.
+ * Orange is the action colour, and the brand.
  *
- * On a near-black ground white is the highest contrast available, so it reads
- * unambiguously as "this is the thing to press". Red stays for the mark, the
- * active nav marker and focus — brand, not instruction. Using both for actions
- * would make neither mean anything.
+ * One clear first choice per screen: the orange button. Everything else is a
+ * quieter grey. A disabled button looks clearly off: grey, not faded orange.
  */
 const VARIANTS: Record<Variant, string> = {
   primary:
-    "bg-ink text-canvas hover:bg-white active:bg-ink/90 disabled:bg-ink/30 disabled:text-canvas/60",
+    "bg-accent text-accent-ink hover:bg-accent-hover disabled:bg-overlay disabled:text-ink-faint",
   secondary:
-    "glass-subtle text-ink hover:border-white/20 hover:bg-white/10",
+    "bg-raised text-ink border border-border hover:bg-overlay disabled:text-ink-faint",
   ghost: "text-ink-muted hover:text-ink hover:bg-raised",
   danger: "bg-danger-soft text-danger border border-danger/30 hover:bg-danger/20",
 };
 
+// Rounded rectangles on the 10px control radius, never capsules.
 const SIZES: Record<Size, string> = {
-  sm: "h-9 px-3.5 text-sm rounded-lg",
-  md: "h-11 px-5 text-[0.9375rem] rounded-xl",
-  lg: "h-14 px-6 text-base rounded-2xl",
+  sm: "h-9 px-3.5 text-sm rounded-[var(--radius-control)]",
+  md: "h-11 px-5 text-base rounded-[var(--radius-control)]",
+  lg: "h-14 px-6 text-base rounded-[var(--radius-control)]",
 };
 
 /**
@@ -46,7 +45,7 @@ export function buttonClasses({
   className?: string;
 } = {}): string {
   return cn(
-    "inline-flex items-center justify-center gap-2 font-medium",
+    "inline-flex items-center justify-center gap-2 font-medium whitespace-nowrap",
     "transition-[background-color,border-color,transform] duration-150",
     "active:scale-[0.98] disabled:cursor-not-allowed disabled:active:scale-100",
     VARIANTS[variant],

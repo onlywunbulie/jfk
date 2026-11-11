@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0b0b10",
+  themeColor: "#0b0b0c",
   // Wallet-style app: the layout is designed for the viewport, not for zooming.
   // `maximumScale` is deliberately left alone so pinch-zoom still works.
   width: "device-width",
@@ -32,7 +32,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
-        <div aria-hidden="true" className="ambient" />
         <WalletProvider>{children}</WalletProvider>
       </body>
     </html>

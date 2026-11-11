@@ -729,3 +729,31 @@ export async function listProposals(
     })),
   );
 }
+
+/**
+ * How many open votes are waiting on this person, per group. Drives the
+ * badges on the group rail: one query for every group, not one per icon.
+ */
+export async function countVotesAwaitingUser(userId: string): Promise<Map<string, number>> {
+  const rows = await db
+    .select({ groupId: proposals.groupId, waiting: count() })
+    .from(proposals)
+    .innerJoin(
+      groupMembers,
+      and(
+        eq(groupMembers.groupId, proposals.groupId),
+        eq(groupMembers.userId, userId),
+        eq(groupMembers.status, "ACTIVE"),
+      ),
+    )
+    .where(
+      and(
+        eq(proposals.status, "OPEN"),
+        sql`${proposals.closesAt} > now()`,
+        sql`not exists (select 1 from ${votes} v where v.proposal_id = ${proposals.id} and v.user_id = ${userId})`,
+      ),
+    )
+    .groupBy(proposals.groupId);
+
+  return new Map(rows.map((row) => [row.groupId, Number(row.waiting)]));
+}

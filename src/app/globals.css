@@ -1,64 +1,74 @@
 @import "tailwindcss";
 
 /**
- * JFK design tokens.
+ * JFK design tokens: black and orange, Discord-style (decided 11 November 2026).
  *
- * Dark-only by decision, not by default (BLUEPRINT.md §5): this is a treasury,
- * and committing to one deep, quiet ground lets money be the brightest thing
- * on screen. A light theme would halve the contrast budget for no user gain.
+ * Dark-only by decision: one deep, quiet ground lets money and people be the
+ * brightest things on screen.
  *
- * Two colours carry meaning and must not be used decoratively:
- *   white — "this is the action to take"
- *   red   — "this is JFK": the mark, the active nav marker, the one
- *           highlighted bar on a chart
- * Red is also what "something went wrong" looks like, so the brand red is a
- * deep, saturated crimson and `danger` stays a pale coral, and the brand red
- * is never used as running text beside a money state.
+ * Orange is JFK. It marks what to do (primary buttons), what's yours (the
+ * selected group and channel) and what's waiting on you (badges). Because it
+ * means all of that, it's never decoration.
+ *
+ * Red is only for "something went wrong", so it never competes with orange.
  * Everything else is semantic money state.
+ *
+ * Surfaces are solid. The earlier glass look was dropped entirely: no blur,
+ * no translucency, no glow. Separation comes from three steps of grey and a
+ * faint line.
  */
 @theme {
-  /* Ground — pushed nearly to black so cards float rather than sit in a box. */
-  --color-canvas: #08080b;
-  --color-surface: #101014;
-  --color-raised: #17171d;
-  --color-overlay: #1e1e26;
+  /* Ground, darkest to lightest. The rail is the darkest thing on screen,
+     the way Discord's server column sits behind everything else. */
+  --color-rail: #060607;
+  --color-canvas: #0b0b0c;
+  --color-surface: #121214;
+  --color-raised: #1a1a1d;
+  --color-overlay: #232327;
 
-  /* Low-contrast borders. The separation should come from surface lift,
-     not from drawing lines around everything. */
-  --color-border: #1f1f27;
-  --color-border-strong: #2e2e3a;
+  --color-border: #26262a;
+  --color-border-strong: #34343a;
 
-  /* Text — three steps is enough; more becomes mush. */
-  --color-ink: #f7f7f9;
-  --color-ink-muted: #8f8f9e;
-  --color-ink-faint: #5a5a67;
+  /* Text: three steps. */
+  --color-ink: #f5f5f6;
+  --color-ink-muted: #a1a1aa;
+  --color-ink-faint: #6b6b74;
 
-  /* Brand. Identity, not action. */
-  --color-accent: #ff2d46;
-  --color-accent-hover: #ff5468;
-  --color-accent-soft: #2a0d13;
+  /* Brand and action. Black text sits on it: 8:1 contrast. */
+  --color-accent: #ff7a1a;
+  --color-accent-hover: #ff8f3d;
+  --color-accent-ink: #0b0b0c;
+  --color-accent-soft: #2b1606;
 
-  /* Semantic money states. These are load-bearing: the plan requires money
-     in flight to be visually distinct from settled money. */
+  /* Semantic money states. `pending` leans yellow so it can't be mistaken
+     for the brand orange. */
   --color-inflow: #34d399;
-  --color-inflow-soft: #10261f;
-  --color-pending: #fbbf24;
-  --color-pending-soft: #2a2110;
-  --color-danger: #f87171;
-  --color-danger-soft: #2c1618;
+  --color-inflow-soft: #0f2a20;
+  --color-pending: #facc15;
+  --color-pending-soft: #2a2408;
+  --color-danger: #f05252;
+  --color-danger-soft: #2c1414;
   --color-held: #60a5fa;
   --color-held-soft: #12203a;
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
-  --radius-card: 0.875rem;
-  --radius-sheet: 1.25rem;
+  /* Corner scale: 10 buttons and inputs, 16 cards, 20 big cards, 28 sheets. */
+  --radius-control: 0.625rem;
+  --radius-card: 1rem;
+  --radius-big: 1.25rem;
+  --radius-sheet: 1.75rem;
 
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Departures: quicker and plainer than arrivals. */
+  --ease-depart: cubic-bezier(0.4, 0, 1, 1);
+  /* The one spring everything moves on (stiffness 180, damping 22). */
+  --ease-spring: linear(0, 0.033 3.3%, 0.11 6.7%, 0.212 10%, 0.323 13.3%, 0.434 16.7%, 0.538 20%, 0.632 23.3%, 0.713 26.7%, 0.782 30%, 0.839 33.3%, 0.885 36.7%, 0.921 40%, 0.949 43.3%, 0.97 46.7%, 0.985 50%, 0.995 53.3%, 1.002 56.7%, 1.007 60%, 1.009 63.3%, 1.01 66.7%, 1.01 73.3%, 1.009 76.7%, 1.008 80%, 1.006 83.3%, 1.005 86.7%, 1.004 90%, 1.003 93.3%, 1);
 
-  /* Sidebar width, referenced by the shell and by sticky offsets. */
-  --sidebar-width: 17rem;
+  /* Shell widths, referenced by the layout and sticky offsets. */
+  --rail-width: 4.5rem;
+  --sidebar-width: 15rem;
 }
 
 @layer base {
@@ -70,25 +80,23 @@
   }
 
   body {
-    /* No fill of its own: the canvas colour is on `html`, and a body
-       background would paint over the ambient light the glass sits on. */
+    background-color: var(--color-canvas);
     color: var(--color-ink);
     font-family: var(--font-sans);
-    /* Contribution amounts sit in tables and lists; lining figures keep
-       columns from jittering as digits change. */
+    /* Amounts sit in tables and lists; lining figures keep columns still. */
     font-variant-numeric: tabular-nums;
   }
 
-  /* Focus is never removed, only restyled — keyboard users move real money. */
+  /* Focus is never removed, only restyled: keyboard users move real money. */
   :focus-visible {
-    outline: 2px solid var(--color-ink);
+    outline: 2px solid var(--color-accent);
     outline-offset: 2px;
     border-radius: 4px;
   }
 
   ::selection {
     background: var(--color-accent);
-    color: white;
+    color: var(--color-accent-ink);
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -103,69 +111,41 @@
 }
 
 /* In `components` rather than `utilities` so a border or radius utility on
-   the same element still wins over the pane's defaults. */
+   the same element still wins over the panel's defaults. */
 @layer components {
   /*
-   * Liquid glass.
-   *
-   * A surface is a pane, not a painted box: it lets the ambient light behind
-   * it through, blurred, and catches a highlight along its top edge. Three
-   * strengths, in the same order as the surface / raised / overlay steps.
+   * Panels. The class names are the ones the glass used, so every screen
+   * picks up the solid look without being touched; the names will be
+   * renamed as each screen is restyled.
    */
   .glass,
   .glass-strong,
   .glass-subtle {
-    border: 1px solid rgb(255 255 255 / 0.08);
-    -webkit-backdrop-filter: blur(28px) saturate(170%);
-    backdrop-filter: blur(28px) saturate(170%);
-    box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.1),
-      inset 0 -1px 0 rgb(0 0 0 / 0.25),
-      0 12px 40px -12px rgb(0 0 0 / 0.6);
+    border: 1px solid var(--color-border);
   }
   .glass {
-    background: linear-gradient(
-      160deg,
-      rgb(255 255 255 / 0.065),
-      rgb(255 255 255 / 0.02) 55%,
-      rgb(255 255 255 / 0.035)
-    );
+    background: var(--color-surface);
   }
   .glass-strong {
-    border-color: rgb(255 255 255 / 0.12);
-    background: linear-gradient(
-      160deg,
-      rgb(255 255 255 / 0.12),
-      rgb(255 255 255 / 0.04) 55%,
-      rgb(255 255 255 / 0.07)
-    );
+    background: var(--color-raised);
   }
   .glass-subtle {
-    border-color: rgb(255 255 255 / 0.06);
-    background: rgb(255 255 255 / 0.04);
-    -webkit-backdrop-filter: blur(16px);
-    backdrop-filter: blur(16px);
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);
+    background: var(--color-raised);
+    border-color: transparent;
   }
 
-  /*
-   * The light the glass refracts. Fixed behind everything, so panes pick up
-   * different colour as the page scrolls beneath them.
-   */
-  .ambient {
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    pointer-events: none;
-    background:
-      radial-gradient(42rem 30rem at 12% -6%, rgb(255 45 70 / 0.2), transparent 70%),
-      radial-gradient(36rem 28rem at 96% 8%, rgb(255 255 255 / 0.07), transparent 70%),
-      radial-gradient(48rem 34rem at 70% 108%, rgb(255 45 70 / 0.11), transparent 70%);
+  /* Squircle corners where the browser supports them. */
+  @supports (corner-shape: squircle) {
+    .glass,
+    .glass-strong,
+    .glass-subtle {
+      corner-shape: squircle;
+    }
   }
 }
 
 @layer utilities {
-  /* Money in flight. Amber and breathing — never mistakable for settled. */
+  /* Money in flight. Yellow and breathing: never mistakable for settled. */
   @keyframes jfk-pulse {
     0%,
     100% {
@@ -179,21 +159,37 @@
     animation: jfk-pulse 1.8s var(--ease-out-quint) infinite;
   }
 
-  @keyframes jfk-rise {
+  /*
+   * Screens used to fade up on arrival. Content now simply appears in place,
+   * which reads as steadier; only overlays and dims fade. The class stays so
+   * no screen has to change, and does nothing.
+   */
+  .animate-rise {
+    animation: none;
+  }
+
+  /* A message or card arriving: rises a little and settles on the spring. */
+  @keyframes jfk-arrive {
     from {
-      opacity: 0;
-      transform: translateY(8px);
+      transform: translateY(10px);
     }
     to {
-      opacity: 1;
       transform: none;
     }
   }
-  .animate-rise {
-    animation: jfk-rise 0.35s var(--ease-out-quint) both;
+  .animate-arrive {
+    animation: jfk-arrive 600ms var(--ease-spring) both;
   }
 
-  /* Safe-area padding for the PWA tab bar on notched phones. */
+  /* Buttons give under the finger. */
+  .press {
+    transition: transform 90ms var(--ease-out-quint);
+  }
+  .press:active {
+    transform: scale(0.97);
+  }
+
+  /* Safe-area padding for anything pinned to the bottom on notched phones. */
   .pb-safe {
     padding-bottom: max(env(safe-area-inset-bottom), 0.5rem);
   }

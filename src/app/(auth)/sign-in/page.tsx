@@ -6,7 +6,7 @@ import { SignInForm } from "./sign-in-form";
 import { WalletSignIn } from "./wallet-sign-in";
 
 export const metadata: Metadata = {
-  title: "Sign in · JFK",
+  title: "Sign in",
 };
 
 export default async function SignInPage() {

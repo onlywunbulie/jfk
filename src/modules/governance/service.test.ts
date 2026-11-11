@@ -481,3 +481,42 @@ describe("listing", () => {
     expect(await governance.listProposals(groupId, stranger.id)).toBeNull();
   });
 });
+
+describe("the badge on the group rail", () => {
+  it("counts open votes each member hasn't cast yet", async () => {
+    const { groupId, ids } = await seedFundedGroup();
+    const opened = await governance.createProposal(ids[0], {
+      groupId,
+      title: "Buy a generator",
+      reason: "The office keeps losing power",
+      amount: Money.fromMajor(20_000),
+      destination: "Chuka's supplier",
+    });
+    if (!opened.ok) throw new Error("proposal failed");
+
+    expect((await governance.countVotesAwaitingUser(ids[1])).get(groupId)).toBe(1);
+
+    await governance.castVote(opened.proposalId, ids[1], "YES");
+    expect((await governance.countVotesAwaitingUser(ids[1])).get(groupId)).toBeUndefined();
+    // Someone else voting doesn't clear your badge.
+    expect((await governance.countVotesAwaitingUser(ids[2])).get(groupId)).toBe(1);
+  });
+
+  it("ignores votes that have closed", async () => {
+    const { groupId, ids } = await seedFundedGroup();
+    const opened = await governance.createProposal(ids[0], {
+      groupId,
+      title: "Old idea",
+      reason: "Never decided",
+      amount: Money.fromMajor(20_000),
+      destination: "Nobody",
+    });
+    if (!opened.ok) throw new Error("proposal failed");
+    await t.db
+      .update(proposals)
+      .set({ closesAt: new Date(Date.now() - 60_000) })
+      .where(eq(proposals.id, opened.proposalId));
+
+    expect((await governance.countVotesAwaitingUser(ids[1])).get(groupId)).toBeUndefined();
+  });
+});
