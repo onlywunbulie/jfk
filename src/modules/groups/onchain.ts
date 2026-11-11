@@ -13,6 +13,7 @@ import {
 } from "@/lib/db/schema";
 import { Money, toCurrency } from "@/lib/money";
 import { recordAudit } from "@/modules/audit/service";
+import { announce } from "@/modules/chat/events";
 import { getMembership } from "./service";
 import { buildGroupSetup, predictSafeAddress } from "./onchain-setup";
 import { confirmGroupSafe, deploySafe, hasCode, proxyCreationCode } from "./onchain-chain";
@@ -156,6 +157,7 @@ export async function startGroupOnChain(
       subjectId: groupId,
       after: { safeAddress, txHash, members: wallets },
     });
+    await announce(groupId, { type: "group_started", safeAddress }, tx);
   });
 
   return { ok: true, safeAddress, txHash };

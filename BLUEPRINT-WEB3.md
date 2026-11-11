@@ -25,6 +25,10 @@ describes the code in this repo.
 >   proxy so the key never reaches the browser, and allowlist USDC `approve` plus JfkModule
 >   `contribute`, `propose`, `vote`, `execute` and `leave` in CDP.
 > - **Still to prove:** two people on two devices in one started group.
+> - **Redesign (11 November 2026):** Discord-style, black and orange, no glass. Done: the shell (group
+>   rail with badges, channel sidebar, profile bar, phone slide-in menu) and each group's `# general`
+>   chat, where proposals appear as cards with vote buttons and decisions, joins and the on-chain
+>   start are announced. Next: restyle the inner pages (overview, votes, members), then Phase 3.
 > - **Local setup:** Foundry lives in `%USERPROFILE%\.foundry\bin` (not on PATH). The deployer is
 >   the encrypted keystore `jfk-deployer` (`0x4596…182b`). The app's fee wallet (relayer) is
 >   `0xe2058d49dbE0031d2bc89a4050548A8FdB1659Ea`, its key in `.env.local` as `RELAYER_PRIVATE_KEY`.

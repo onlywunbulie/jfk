@@ -221,6 +221,11 @@ function GroupChannels({ group, pathname }: { group: ShellGroup; pathname: strin
         </p>
       </div>
 
+      <Section label="💬 Chat">
+        <Channel href={`${base}/chat` as Route} pathname={pathname}>
+          general
+        </Channel>
+      </Section>
       <Section label="💰 Money">
         <Channel href={base as Route} pathname={pathname} exact>
           overview

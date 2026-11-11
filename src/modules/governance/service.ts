@@ -20,6 +20,7 @@ import { getMembership } from "@/modules/groups/service";
 import { getGroupBalances } from "@/modules/ledger/service";
 import { reserveForProposal } from "@/modules/ledger/operations";
 import { recordAudit } from "@/modules/audit/service";
+import { announce } from "@/modules/chat/events";
 import { evaluate, whatIsNeeded, type ProposalOutcome } from "./threshold";
 import {
   KIND_ACTION,
@@ -197,6 +198,7 @@ export async function createProposal(
         eligibleVoterCount,
       },
     });
+    await announce(input.groupId, { type: "proposal_opened", proposalId: created.id }, tx);
 
     return created.id;
   });
@@ -439,6 +441,15 @@ export async function evaluateProposal(
         subjectId: proposalId,
         after: { ...tally, reason: outcome.reason },
       });
+      await announce(
+        proposal.groupId,
+        {
+          type: "proposal_decided",
+          proposalId,
+          outcome: atDeadline && outcome.reason === "quorum_missed" ? "expired" : "rejected",
+        },
+        tx,
+      );
     });
     return outcome;
   }
@@ -480,6 +491,7 @@ export async function evaluateProposal(
         subjectId: proposalId,
         after: { ...tally, kind: payload.kind },
       });
+      await announce(proposal.groupId, { type: "proposal_decided", proposalId, outcome: "approved" }, tx);
       return;
     }
 
@@ -516,6 +528,7 @@ export async function evaluateProposal(
             detail: error instanceof Error ? error.message : String(error),
           },
         });
+        await announce(proposal.groupId, { type: "proposal_decided", proposalId, outcome: "rejected" }, tx);
         return;
       }
     }
@@ -527,6 +540,7 @@ export async function evaluateProposal(
       subjectId: proposalId,
       after: { ...tally, amount: proposal.amount },
     });
+    await announce(proposal.groupId, { type: "proposal_decided", proposalId, outcome: "approved" }, tx);
   });
 
   // Re-read: the reservation may have flipped it back to rejected.

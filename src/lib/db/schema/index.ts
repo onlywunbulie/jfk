@@ -10,3 +10,4 @@ export * from "./ledger";
 export * from "./payments";
 export * from "./contributions";
 export * from "./governance";
+export * from "./chat";

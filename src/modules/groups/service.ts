@@ -19,6 +19,7 @@ import { randomToken } from "@/lib/ids";
 import { Money, toCurrency, type Currency } from "@/lib/money";
 import { assertCan, type PolicyContext } from "@/lib/auth/policy";
 import { recordAudit } from "@/modules/audit/service";
+import { announce } from "@/modules/chat/events";
 import {
   getBalancesForGroups,
   getGroupBalances,
@@ -433,6 +434,7 @@ export async function acceptInvite(
       subjectId: userId,
       after: { via: "invite", code },
     });
+    await announce(invite.groupId, { type: "member_joined", userId }, tx);
 
     return {
       ok: true as const,
