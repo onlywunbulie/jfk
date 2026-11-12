@@ -2,13 +2,14 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
 import type { Route } from "next";
-import type { ReactNode } from "react";
 import { requireUser } from "@/lib/auth/session";
 import { getGroupDetail, listMembers } from "@/modules/groups/service";
 import { findChannel } from "@/components/shell/channels";
-import { EXPLORER_URL } from "@/lib/chain/addresses";
 import { DEFAULT_GOVERNANCE, type GovernedAction, type GroupType } from "@/lib/db/schema/groups";
 import { contractThresholds } from "@/modules/groups/onchain-setup";
+import { ChannelIntro, DateDivider, Detail, RallMessage, VaultFootnote, longDate } from "./parts";
+import { Transactions } from "./transactions";
+import { ProposeForm, type Recipient } from "./propose";
 
 export async function generateMetadata({
   params,
@@ -22,8 +23,9 @@ export async function generateMetadata({
  * under the header, as in the wireframe. Members only; anyone else sees a
  * 404, the same as a group that doesn't exist.
  */
-export default async function ChannelPage({ params }: PageProps<"/groups/[groupId]/[channel]">) {
+export default async function ChannelPage({ params, searchParams }: PageProps<"/groups/[groupId]/[channel]">) {
   const { groupId, channel: slug } = await params;
+  const query = await searchParams;
   const channel = findChannel(slug);
   if (!channel) notFound();
 
@@ -131,6 +133,97 @@ export default async function ChannelPage({ params }: PageProps<"/groups/[groupI
     );
   }
 
+  if (channel.slug === "general") {
+    // UI only: sample numbers until the vault's balance is read from Base.
+    const s = GENERAL_SAMPLE;
+    const now = new Date();
+    return (
+      <div className="flex min-h-full flex-col justify-end">
+        <ChannelIntro title="The group's money">Where the money stands, updated by Rall every day.</ChannelIntro>
+        <DateDivider date={now} label="Today" />
+        <RallMessage
+          sentAt={now}
+          footnote={
+            <p className="border-t border-border pt-3 text-xs text-ink-faint">
+              <Link
+                href={`/groups/${group.id}/transactions` as Route}
+                className="underline decoration-ink-faint/50 underline-offset-4 transition-colors hover:text-ink hover:decoration-ink"
+              >
+                Everything in #transactions
+              </Link>
+            </p>
+          }
+        >
+          <Detail label="In the pot">
+            <span className="font-semibold tabular-nums">{s.pot}</span> <span className="text-inflow tabular-nums">{s.change}</span>
+          </Detail>
+          <Detail label="This round">
+            {s.paid} of {s.members} paid · {s.collected} of {s.expected}
+            <span className="text-ink-muted"> · Late: {s.late.join(", ")}</span>
+          </Detail>
+          <Detail label="Next due">{s.nextDue}</Detail>
+          <Detail label="Up for a vote">
+            {s.vote.amount} for the {s.vote.what}
+            <span className="text-ink-muted"> · closes {s.vote.closes}</span>
+          </Detail>
+          {group.type === "ROTATING" && (
+            <Detail label="Next payout">
+              {s.payout.who} on {s.payout.when}, {s.payout.amount}
+            </Detail>
+          )}
+          <Detail label="Latest">
+            <ul className="space-y-1">
+              {s.activity.map((item) => (
+                <li key={item.what}>
+                  {item.what}{" "}
+                  <span className={item.inflow ? "text-inflow tabular-nums" : "text-ink-muted tabular-nums"}>{item.amount}</span>
+                </li>
+              ))}
+            </ul>
+          </Detail>
+        </RallMessage>
+      </div>
+    );
+  }
+
+  if (channel.slug === "propose") {
+    const saved = Object.fromEntries(
+      group.governance.map((rule) => [rule.action, rule.thresholdPermille]),
+    ) as Partial<Record<GovernedAction, number>>;
+    const [small, large] = contractThresholds(saved);
+    const recipients: Recipient[] = members
+      .filter((member) => member.userId !== user.id)
+      .map((member) => ({ id: member.memberId, name: member.displayName, note: "Member" }));
+    return (
+      <>
+        <ChannelIntro title="Propose a spend">Ask the group to pay for something. Nothing moves until they vote.</ChannelIntro>
+        <div className="mt-8">
+          <ProposeForm
+            recipients={recipients}
+            rules={{
+              // UI only: the sample pot until the vault's balance is read from Base.
+              pot: 4200,
+              smallPercent: percent(small),
+              largePercent: percent(large),
+              votingDays: 3,
+            }}
+          />
+        </div>
+      </>
+    );
+  }
+
+  if (channel.slug === "transactions") {
+    const filter = typeof query.filter === "string" ? query.filter : "all";
+    return (
+      <Transactions
+        base={`/groups/${group.id}`}
+        filter={filter === "mine" || filter === "in" || filter === "out" ? filter : "all"}
+        rotating={group.type === "ROTATING"}
+      />
+    );
+  }
+
   if (channel.slug === "roles") {
     return (
       <div className="flex min-h-full flex-col justify-end">
@@ -170,6 +263,25 @@ export default async function ChannelPage({ params }: PageProps<"/groups/[groupI
   return null;
 }
 
+/** #general's sample overview, for this UI-only step. */
+const GENERAL_SAMPLE = {
+  pot: "USDC 4,200",
+  change: "+USDC 800 since 1 Nov",
+  paid: 6,
+  members: 8,
+  collected: "USDC 600",
+  expected: "USDC 800",
+  late: ["Femi", "Kemi"],
+  nextDue: "1 December",
+  vote: { what: "Airbnb deposit", amount: "USDC 400", closes: "Friday" },
+  payout: { who: "Amaka", when: "1 December", amount: "USDC 800" },
+  activity: [
+    { what: "Tunde paid in", amount: "+100", inflow: true },
+    { what: "Amaka paid in", amount: "+100", inflow: true },
+    { what: "Generator repair", amount: "−400", inflow: false },
+  ],
+};
+
 /**
  * The contract's votable actions in plain words, in the contract's own order
  * (JfkModule's Rule enum: SPEND_SMALL … MIGRATE_MODULE).
@@ -200,25 +312,6 @@ function ordinal(n: number): string {
   return `${n}${({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th"}`;
 }
 
-// Dates are shown in Lagos time, rendered on the server, so every member
-// sees the same thing.
-const TIME_ZONE = "Africa/Lagos";
-
-function longDate(date: Date): string {
-  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: TIME_ZONE }).format(date);
-}
-
-function stamp(date: Date): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: TIME_ZONE,
-  }).format(date);
-}
 
 /**
  * What kind of group this is. Rallied groups do one of three things.
@@ -242,97 +335,4 @@ const USE_CASES: Record<UseCaseKind, { label: string; description: string }> = {
   },
 };
 
-/**
- * The top of a designed channel: a round # tile, a large title, then one
- * line underneath.
- */
-function ChannelIntro({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <header>
-      <span aria-hidden="true" className="grid size-[68px] place-items-center rounded-full bg-raised text-ink">
-        <svg viewBox="0 0 20 20" className="size-10" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
-          <path d="M8 3.5 6.5 16.5M13.5 3.5 12 16.5M4 7.5h12.5M3.5 12.5H16" />
-        </svg>
-      </span>
-      <h2 className="mt-4 text-[2rem] leading-tight font-extrabold tracking-tight text-balance text-ink">
-        {title}
-      </h2>
-      <p className="mt-2 max-w-2xl text-base leading-relaxed text-pretty text-ink-muted">{children}</p>
-    </header>
-  );
-}
 
-/** A hairline across the card with the day the group was created in the middle. */
-function DateDivider({ date }: { date: Date }) {
-  return (
-    <div role="separator" aria-label={`Created ${longDate(date)}`} className="mt-6 flex items-center gap-2">
-      <span className="h-px flex-1 bg-border" />
-      <time dateTime={date.toISOString()} className="text-xs font-semibold text-ink-faint">
-        {longDate(date)}
-      </time>
-      <span className="h-px flex-1 bg-border" />
-    </div>
-  );
-}
-
-/**
- * The group's details, posted by Rall, Rallied's agent: avatar, name with an
- * AGENT tag and the time, then the details in a rounded bubble.
- */
-function RallMessage({ sentAt, footnote, children }: { sentAt: Date; footnote: ReactNode; children: ReactNode }) {
-  return (
-    <article aria-label="Message from Rall" className="mt-4 flex gap-4 py-1">
-      <span
-        aria-hidden="true"
-        className="grid size-10 shrink-0 place-items-center rounded-full bg-accent text-base font-bold text-accent-ink"
-      >
-        R
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-base font-semibold text-ink">Rall</span>
-          <span className="rounded-[4px] bg-raised px-1.5 py-px text-[0.6875rem] leading-4 font-semibold text-ink-muted">
-            AGENT
-          </span>
-          <time dateTime={sentAt.toISOString()} className="text-xs text-ink-faint">
-            {stamp(sentAt)}
-          </time>
-        </p>
-
-        <div className="mt-2 w-fit max-w-xl space-y-3 rounded-3xl bg-raised px-5 py-4 text-sm leading-relaxed">
-          <dl className="space-y-2">{children}</dl>
-          {footnote}
-        </div>
-      </div>
-    </article>
-  );
-}
-
-/**
- * Only once the group's vault exists on Base: a small line at the foot of
- * Rall's message that opens the vault in the chain's explorer (BaseScan), so
- * anyone can check the money for themselves.
- */
-function VaultFootnote({ address }: { address: string }) {
-  return (
-    <p className="border-t border-border pt-3 text-xs text-ink-faint">
-      <a
-        href={`${EXPLORER_URL}/address/${address}`}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex items-center gap-1 underline decoration-ink-faint/50 underline-offset-4 transition-colors hover:text-ink hover:decoration-ink"
-      >
-        BaseScan
-      </a>
-    </p>
-  );
-}
-
-function Detail({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-3">
-      <dt className="shrink-0 text-ink-muted sm:w-28">{label}</dt>
-      <dd className="min-w-0 text-pretty text-ink">{children}</dd>
-    </div>
-  );
-}

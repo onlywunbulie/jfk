@@ -67,12 +67,6 @@ export const CHANNEL_SECTIONS: ChannelSection[] = [
         icon: <ArrowsIcon />,
         promise: "Every dollar in and out of the group, each with a link to check it on Base.",
       },
-      {
-        slug: "accountant",
-        label: "accountant",
-        icon: <SparkIcon />,
-        promise: "Rallied's own agent. Ask it anything about the group's money.",
-      },
     ],
   },
   {
