@@ -257,9 +257,9 @@ function HomeSidebar({ pathname }: { pathname: string }) {
 
 function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="px-2 pt-5">
+    <div className="px-2 pt-6">
       <p className="mb-1 px-2 text-xs font-semibold text-ink-faint">{label}</p>
-      <ul className="space-y-0.5">{children}</ul>
+      <ul className="space-y-1">{children}</ul>
     </div>
   );
 }
