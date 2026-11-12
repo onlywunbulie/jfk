@@ -7,7 +7,8 @@ import { requireUser } from "@/lib/auth/session";
 import { getGroupDetail, listMembers } from "@/modules/groups/service";
 import { findChannel } from "@/components/shell/channels";
 import { EXPLORER_URL } from "@/lib/chain/addresses";
-import type { GroupType } from "@/lib/db/schema/groups";
+import { DEFAULT_GOVERNANCE, type GovernedAction, type GroupType } from "@/lib/db/schema/groups";
+import { contractThresholds } from "@/modules/groups/onchain-setup";
 
 export async function generateMetadata({
   params,
@@ -80,10 +81,17 @@ export default async function ChannelPage({ params }: PageProps<"/groups/[groupI
       group.cadence === "MONTHLY"
         ? `every month, due on the ${ordinal(group.dueDay)}`
         : `every week, due on ${WEEKDAYS[group.dueDay - 1] ?? "Monday"}`;
-    const thresholds = group.governance.filter(
-      // The payout order only exists in rotating groups.
-      (rule) => rule.action !== "ROTATION_ORDER_CHANGE" || group.type === "ROTATING",
-    );
+    // The same numbers the contract is set up with, in the contract's order,
+    // so this list can't disagree with what's enforced on Base.
+    const saved = Object.fromEntries(
+      group.governance.map((rule) => [rule.action, rule.thresholdPermille]),
+    ) as Partial<Record<GovernedAction, number>>;
+    const onChain = contractThresholds(saved);
+    const thresholds = [
+      ...CONTRACT_RULES.map((label, i) => ({ label, permille: onChain[i] })),
+      // Admins live in Rallied, not in the contract, but changing them is still a vote.
+      { label: "Adding or removing an admin", permille: saved.REMOVE_ADMIN ?? DEFAULT_GOVERNANCE.REMOVE_ADMIN },
+    ];
 
     return (
       <div className="flex min-h-full flex-col justify-end">
@@ -103,13 +111,18 @@ export default async function ChannelPage({ params }: PageProps<"/groups/[groupI
           <Detail label="To pass">
             <ul className="space-y-1">
               {thresholds.map((rule) => (
-                <li key={rule.action}>
-                  {ACTION_LABELS[rule.action] ?? rule.action}{" "}
-                  <span className="text-ink-muted">· {percent(rule.thresholdPermille)} must agree</span>
+                <li key={rule.label}>
+                  {rule.label} <span className="text-ink-muted">· {percent(rule.permille)} must agree</span>
                 </li>
               ))}
             </ul>
           </Detail>
+          {/*
+            The group's ceiling on AI. No setting exists yet, so this shows the
+            default; when the group votes it on, it reads "Every vote needs a
+            human tap".
+          */}
+          <Detail label="AI votes">Members&rsquo; AIs can vote within their own limits</Detail>
           <Detail label="Leaving">You give up what you&rsquo;ve paid in</Detail>
           <Detail label="Voted out">You get back what you paid in</Detail>
           <Detail label="Closing">The pot is split by how much each person paid in</Detail>
@@ -118,20 +131,60 @@ export default async function ChannelPage({ params }: PageProps<"/groups/[groupI
     );
   }
 
+  if (channel.slug === "roles") {
+    return (
+      <div className="flex min-h-full flex-col justify-end">
+        <ChannelIntro title={`Who's in ${group.name}`}>
+          Everyone in the group, and who looks after it.
+        </ChannelIntro>
+        <DateDivider date={group.createdAt} />
+        <RallMessage
+          sentAt={group.createdAt}
+          footnote={group.safeAddress ? <VaultFootnote address={group.safeAddress} /> : null}
+        >
+          <Detail label="Members">
+            <ul className="space-y-2">
+              {members.map((member) => (
+                <li key={member.memberId} className="flex items-center gap-2">
+                  <span
+                    aria-hidden="true"
+                    className="grid size-6 shrink-0 place-items-center rounded-full bg-overlay text-xs font-semibold text-ink"
+                  >
+                    {member.displayName.trim().charAt(0).toUpperCase() || "?"}
+                  </span>
+                  <span className="min-w-0 truncate">{member.displayName}</span>
+                  {member.role !== "MEMBER" && (
+                    <span className="shrink-0 rounded-[4px] bg-overlay px-1.5 py-px text-[0.6875rem] leading-4 font-semibold text-ink-muted">
+                      {member.role === "OWNER" ? "OWNER" : "ADMIN"}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </Detail>
+        </RallMessage>
+      </div>
+    );
+  }
+
   return null;
 }
 
-/** Each vote-governed action, in plain words. */
-const ACTION_LABELS: Record<string, string> = {
-  FUND_RELEASE_SMALL: "A small spend",
-  FUND_RELEASE_LARGE: "A large spend",
-  CHANGE_CONTRIBUTION: "Changing what everyone pays",
-  CHANGE_GOVERNANCE: "Changing the rules",
-  REMOVE_MEMBER: "Removing a member",
-  REMOVE_ADMIN: "Removing an admin",
-  ROTATION_ORDER_CHANGE: "Changing the payout order",
-  DISSOLVE_GROUP: "Closing the group",
-};
+/**
+ * The contract's votable actions in plain words, in the contract's own order
+ * (JfkModule's Rule enum: SPEND_SMALL … MIGRATE_MODULE).
+ */
+const CONTRACT_RULES = [
+  "A small spend",
+  "A large spend",
+  "Adding a member",
+  "Removing a member",
+  "Replacing a member's lost wallet",
+  "Changing what everyone pays",
+  "Changing the rules",
+  "Closing the group",
+  "Moving to a new version of Rallied",
+] as const;
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
