@@ -18,6 +18,15 @@ const nextConfig: NextConfig = {
    * any origin but localhost and the page arrives unhydrated.
    */
   allowedDevOrigins: ["*.trycloudflare.com"],
+
+  experimental: {
+    /**
+     * Dev only. Turbopack's on-disk cache writes and compacts hundreds of MB
+     * in the background; on a spinning disk that stalled reloads for 15–95s.
+     * Off, a restart compiles from scratch, but reloads stay fast.
+     */
+    turbopackFileSystemCacheForDev: false,
+  },
 };
 
 export default nextConfig;

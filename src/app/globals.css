@@ -20,14 +20,14 @@
 @theme {
   /* Ground, darkest to lightest. The rail is the darkest thing on screen,
      the way Discord's server column sits behind everything else. */
-  --color-rail: #060607;
-  --color-canvas: #0b0b0c;
-  --color-surface: #121214;
-  --color-raised: #1a1a1d;
-  --color-overlay: #232327;
+  --color-rail: #111113;
+  --color-canvas: #18181b;
+  --color-surface: #1e1e22;
+  --color-raised: #26262b;
+  --color-overlay: #303036;
 
-  --color-border: #26262a;
-  --color-border-strong: #34343a;
+  --color-border: #303036;
+  --color-border-strong: #42424a;
 
   /* Text: three steps. */
   --color-ink: #f5f5f6;
@@ -51,8 +51,7 @@
   --color-held: #60a5fa;
   --color-held-soft: #12203a;
 
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
   /* Corner scale: 10 buttons and inputs, 16 cards, 20 big cards, 28 sheets. */
   --radius-control: 0.625rem;
@@ -67,8 +66,8 @@
   --ease-spring: linear(0, 0.033 3.3%, 0.11 6.7%, 0.212 10%, 0.323 13.3%, 0.434 16.7%, 0.538 20%, 0.632 23.3%, 0.713 26.7%, 0.782 30%, 0.839 33.3%, 0.885 36.7%, 0.921 40%, 0.949 43.3%, 0.97 46.7%, 0.985 50%, 0.995 53.3%, 1.002 56.7%, 1.007 60%, 1.009 63.3%, 1.01 66.7%, 1.01 73.3%, 1.009 76.7%, 1.008 80%, 1.006 83.3%, 1.005 86.7%, 1.004 90%, 1.003 93.3%, 1);
 
   /* Shell widths, referenced by the layout and sticky offsets. */
-  --rail-width: 4.5rem;
-  --sidebar-width: 15rem;
+  --rail-width: 2.6875rem;
+  --sidebar-width: 20.125rem;
 }
 
 @layer base {

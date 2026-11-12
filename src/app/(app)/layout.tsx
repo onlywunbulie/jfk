@@ -25,7 +25,10 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     id: group.id,
     name: group.name,
     memberCount: group.memberCount,
-    balance: group.balance.total.format({ compact: true }),
+    // "USDC 15000": the currency's code, then the amount, as the wireframe has it.
+    balance: `${group.balance.total.currency} ${group.balance.total
+      .format({ compact: true, showSymbol: false })
+      .replaceAll(",", "")}`,
     waiting: waiting.get(group.id) ?? 0,
   }));
 

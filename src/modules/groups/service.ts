@@ -794,6 +794,7 @@ export async function listMembers(
 
 export interface GroupDetail extends GroupSummary {
   description: string | null;
+  createdAt: Date;
   membersCanPropose: boolean;
   quorumPct: number;
   dueDay: number;
@@ -817,6 +818,7 @@ export async function getGroupDetail(
       status: groups.status,
       currency: groups.currency,
       safeAddress: groups.safeAddress,
+      createdAt: groups.createdAt,
       contributionAmount: groupSettings.contributionAmount,
       cadence: groupSettings.cadence,
       dueDay: groupSettings.dueDay,

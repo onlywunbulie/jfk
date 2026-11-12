@@ -96,6 +96,12 @@ export const CHANNEL_SECTIONS: ChannelSection[] = [
         icon: <SlidersIcon />,
         promise: "Change how much people pay or how many must agree. Changes need a vote too.",
       },
+      {
+        slug: "votes",
+        label: "votes",
+        icon: <BadgeIcon />,
+        promise: "Every open vote in the group, and the ones waiting on you.",
+      },
     ],
   },
 ];
