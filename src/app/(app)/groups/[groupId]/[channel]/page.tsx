@@ -9,7 +9,8 @@ import { DEFAULT_GOVERNANCE, type GovernedAction, type GroupType } from "@/lib/d
 import { contractThresholds } from "@/modules/groups/onchain-setup";
 import { ChannelIntro, DateDivider, Detail, RallMessage, VaultFootnote, longDate } from "./parts";
 import { Transactions } from "./transactions";
-import { ProposeForm, type Recipient } from "./propose";
+import { ProposeChannel } from "./propose";
+import { ManageRoles, type Assistant, type Person } from "./manage-roles";
 
 export async function generateMetadata({
   params,
@@ -191,25 +192,54 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
       group.governance.map((rule) => [rule.action, rule.thresholdPermille]),
     ) as Partial<Record<GovernedAction, number>>;
     const [small, large] = contractThresholds(saved);
-    const recipients: Recipient[] = members
-      .filter((member) => member.userId !== user.id)
-      .map((member) => ({ id: member.memberId, name: member.displayName, note: "Member" }));
     return (
-      <>
-        <ChannelIntro title="Propose a spend">Ask the group to pay for something. Nothing moves until they vote.</ChannelIntro>
-        <div className="mt-8">
-          <ProposeForm
-            recipients={recipients}
-            rules={{
-              // UI only: the sample pot until the vault's balance is read from Base.
-              pot: 4200,
-              smallPercent: percent(small),
-              largePercent: percent(large),
-              votingDays: 3,
-            }}
-          />
-        </div>
-      </>
+      <div className="flex min-h-full flex-col justify-end">
+        <ChannelIntro title="Propose a spend">
+          Ask your Claude to propose. Its drafts land here for you to check and send to a vote.
+        </ChannelIntro>
+        <ProposeChannel
+          base={`/groups/${group.id}`}
+          rules={{
+            // UI only: the sample pot until the vault's balance is read from Base.
+            pot: 4200,
+            smallPercent: percent(small),
+            largePercent: percent(large),
+            votingDays: 3,
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (channel.slug === "manage-roles") {
+    const saved = Object.fromEntries(
+      group.governance.map((rule) => [rule.action, rule.thresholdPermille]),
+    ) as Partial<Record<GovernedAction, number>>;
+    const onChain = contractThresholds(saved);
+    const owner = members.find((member) => member.role === "OWNER");
+    // UI only: which AI each person uses is a sample until connections exist.
+    const sampleAssistants: Assistant[] = ["Claude", "ChatGPT", "Grok", null];
+    const people: Person[] = members.map((member, i) => ({
+      id: member.memberId,
+      name: member.displayName,
+      admin: member.role === "ADMIN",
+      startedGroup: member.role === "OWNER",
+      isYou: member.userId === user.id,
+      assistant: member.userId === user.id ? "Claude" : sampleAssistants[i % sampleAssistants.length],
+    }));
+    return (
+      <ManageRoles
+          base={`/groups/${group.id}`}
+          people={people}
+          startedBy={owner?.displayName ?? "Unknown"}
+          startedOn={longDate(group.createdAt)}
+          rules={{
+            addMember: percent(onChain[2]),
+            removeMember: percent(onChain[3]),
+            replaceWallet: percent(onChain[4]),
+            admin: percent(saved.REMOVE_ADMIN ?? DEFAULT_GOVERNANCE.REMOVE_ADMIN),
+          }}
+        />
     );
   }
 
@@ -246,11 +276,13 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
                     {member.displayName.trim().charAt(0).toUpperCase() || "?"}
                   </span>
                   <span className="min-w-0 truncate">{member.displayName}</span>
-                  {member.role !== "MEMBER" && (
+                  {member.role === "ADMIN" && (
                     <span className="shrink-0 rounded-[4px] bg-overlay px-1.5 py-px text-[0.6875rem] leading-4 font-semibold text-ink-muted">
-                      {member.role === "OWNER" ? "OWNER" : "ADMIN"}
+                      ADMIN
                     </span>
                   )}
+                  {/* Starting the group is a fact, not a power. */}
+                  {member.role === "OWNER" && <span className="shrink-0 text-xs text-ink-faint">started the group</span>}
                 </li>
               ))}
             </ul>

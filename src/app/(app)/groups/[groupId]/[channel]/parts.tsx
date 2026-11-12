@@ -47,14 +47,24 @@ export function ChannelIntro({ title, children }: { title: string; children: Rea
   );
 }
 
-/** A hairline across the card with the day the group was created in the middle. */
-export function DateDivider({ date, label }: { date: Date; label?: string }) {
+/**
+ * A hairline across the card with a label in the middle: a real date (shown
+ * as "25 August 2026"), or plain words like "Waiting for you". Pass one or
+ * the other. Never pass `new Date()` from a client component: the server and
+ * the browser render it at different moments and hydration breaks.
+ */
+export function DateDivider({ date, label }: { date?: Date; label?: string }) {
+  const text = label ?? (date ? longDate(date) : "");
   return (
-    <div role="separator" aria-label={label ?? `Created ${longDate(date)}`} className="mt-6 flex items-center gap-2">
+    <div role="separator" aria-label={text} className="mt-6 flex items-center gap-2">
       <span className="h-px flex-1 bg-border" />
-      <time dateTime={date.toISOString()} className="text-xs font-semibold text-ink-faint">
-        {label ?? longDate(date)}
-      </time>
+      {date ? (
+        <time dateTime={date.toISOString()} className="text-xs font-semibold text-ink-faint">
+          {text}
+        </time>
+      ) : (
+        <span className="text-xs font-semibold text-ink-faint">{text}</span>
+      )}
       <span className="h-px flex-1 bg-border" />
     </div>
   );
@@ -68,11 +78,15 @@ export function RallMessage({
   sentAt,
   time,
   highlight = false,
+  body = "details",
   footnote,
   children,
 }: {
-  sentAt: Date;
-  /** Shown instead of the full date and time, e.g. "09:14" under a day divider. */
+  /** "details" for label/value rows (Detail), "text" for plain sentences. */
+  body?: "details" | "text";
+  /** A real moment, shown as "25/08/2026, 07:40". Omit it when `time` says it all. */
+  sentAt?: Date;
+  /** Shown instead of the full date and time, e.g. "09:14" or "Pinned". */
   time?: string;
   /** Marks the viewer's own entry with a subtle outline. */
   highlight?: boolean;
@@ -93,9 +107,13 @@ export function RallMessage({
           <span className="rounded-[4px] bg-raised px-1.5 py-px text-[0.6875rem] leading-4 font-semibold text-ink-muted">
             AGENT
           </span>
-          <time dateTime={sentAt.toISOString()} className="text-xs text-ink-faint">
-            {time ?? stamp(sentAt)}
-          </time>
+          {sentAt ? (
+            <time dateTime={sentAt.toISOString()} className="text-xs text-ink-faint">
+              {time ?? stamp(sentAt)}
+            </time>
+          ) : (
+            time && <span className="text-xs text-ink-faint">{time}</span>
+          )}
         </p>
 
         <div
@@ -104,7 +122,7 @@ export function RallMessage({
             highlight && "ring-1 ring-border-strong",
           )}
         >
-          <dl className="space-y-2">{children}</dl>
+          {body === "details" ? <dl className="space-y-2">{children}</dl> : <div>{children}</div>}
           {footnote}
         </div>
       </div>

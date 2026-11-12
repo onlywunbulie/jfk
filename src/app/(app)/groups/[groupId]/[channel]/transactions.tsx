@@ -67,17 +67,17 @@ export function Transactions({ base, filter, rotating }: { base: string; filter:
       <div className="sticky -top-6 z-10 -mx-4 -mt-6 flex flex-wrap items-end justify-between gap-4 border-b border-border bg-canvas px-4 py-4 lg:-mx-8 lg:px-8">
         <YourMoney rotating={rotating} />
 
-        <nav aria-label="Filter transactions" className="flex flex-wrap gap-2">
+        <nav aria-label="Filter transactions" className="flex flex-wrap gap-5">
           {FILTERS.map((option) => (
             <Link
               key={option.value}
               href={href(option.value)}
               aria-current={filter === option.value ? "page" : undefined}
               className={cn(
-                "press inline-flex h-8 items-center rounded-full border px-4 text-sm transition-colors",
+                "press py-1 text-sm underline-offset-[6px] transition-colors",
                 filter === option.value
-                  ? "border-ink bg-ink text-canvas"
-                  : "border-border text-ink-muted hover:border-border-strong hover:text-ink",
+                  ? "text-ink underline decoration-ink decoration-2"
+                  : "text-ink-muted hover:text-ink",
               )}
             >
               {option.label}
@@ -98,7 +98,7 @@ export function Transactions({ base, filter, rotating }: { base: string; filter:
             const entries = shown.filter((entry) => entry.day === day);
             return (
               <section key={day} aria-label={day}>
-                <DateDivider date={new Date()} label={day} />
+                <DateDivider label={day} />
                 <DayAsRows entries={entries} />
               </section>
             );
