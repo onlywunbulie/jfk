@@ -5,6 +5,8 @@ import { listGroupsForUser } from "@/modules/groups/service";
 import { Card, CardHeader } from "@/components/ui/card";
 import { EXPLORER_URL, shortAddress } from "@/lib/chain/addresses";
 import { PaymentMethods } from "./payment-methods";
+import { Button } from "@/components/ui/button";
+import { signOutAction } from "../actions";
 
 export const metadata: Metadata = { title: "Wallet" };
 
@@ -61,6 +63,11 @@ export default async function WalletPage({
             tone={user.hasPin ? "default" : "pending"}
           />
         </dl>
+        <form action={signOutAction} className="mt-5 border-t border-border pt-4">
+          <Button type="submit" variant="secondary" size="sm">
+            Log out
+          </Button>
+        </form>
       </Card>
 
       <Card>

@@ -7,7 +7,7 @@ const CADENCE_LABEL = { WEEKLY: "weekly", MONTHLY: "monthly" } as const;
 export function GroupCard({ group }: { group: GroupSummary }) {
   return (
     <Link
-      href={`/groups/${group.id}`}
+      href={`/groups/${group.id}/general`}
       className="block rounded-[var(--radius-card)] glass p-5 transition-colors duration-150 hover:border-white/20"
     >
       <div className="flex items-start justify-between gap-3">

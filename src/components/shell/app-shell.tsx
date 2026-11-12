@@ -5,41 +5,41 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Route } from "next";
 import { cn } from "@/lib/cn";
-import { signOutAction } from "@/app/(app)/actions";
+import {
+  CHANNEL_SECTIONS,
+  DEFAULT_CHANNEL,
+  GearIcon,
+  HomeIcon,
+  MenuIcon,
+  PeopleIcon,
+  PlusIcon,
+  WalletIcon,
+  findChannel,
+} from "./channels";
 
 export interface ShellGroup {
   id: string;
   name: string;
   memberCount: number;
-  /** Already formatted in the group's currency, e.g. "$1,800". */
+  /** Already formatted in the group's currency, e.g. "$15,000". */
   balance: string;
   /** Open votes this person hasn't cast yet. Drives the badge. */
   waiting: number;
 }
 
-export interface ShellUser {
-  displayName: string;
-  /** Their Base wallet, shortened, or null for an email-only account. */
-  wallet: string | null;
-}
-
 /**
- * The app's frame, after Discord: a rail of group icons, the open group's
- * channels beside it, and a profile bar at the bottom. On a phone the rail
- * and channels live in a menu that slides in from the left.
+ * Rallied's frame, from the wireframe of 12 November 2026: a rail of square
+ * group icons with settings at the foot, then two floating cards, the group's
+ * sidebar and the main card with the open channel's name across its top.
+ *
+ * On a phone the rail and sidebar live in a menu that slides in from the
+ * left, and the main card fills the screen.
  */
-export function AppShell({
-  groups,
-  user,
-  children,
-}: {
-  groups: ShellGroup[];
-  user: ShellUser;
-  children: ReactNode;
-}) {
+export function AppShell({ groups, children }: { groups: ShellGroup[]; children: ReactNode }) {
   const pathname = usePathname();
-  const currentId = pathname.match(/^\/groups\/([^/]+)/)?.[1];
-  const current = groups.find((group) => group.id === currentId) ?? null;
+  const match = pathname.match(/^\/groups\/([^/]+)(?:\/([^/]+))?/);
+  const current = groups.find((group) => group.id === match?.[1]) ?? null;
+  const title = titleFor(pathname, current, match?.[2]);
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Going somewhere closes the menu. Keyed on the path, so it only fires on a
@@ -50,137 +50,120 @@ export function AppShell({
     setMenuOpen(false);
   }
 
-  const nav = <Navigation groups={groups} current={current} pathname={pathname} user={user} />;
+  const nav = (
+    <>
+      <Rail groups={groups} currentId={current?.id ?? null} pathname={pathname} />
+      <SidebarCard current={current} pathname={pathname} />
+    </>
+  );
 
   return (
-    <div className="min-h-dvh">
-      {/* Desktop: always there. */}
-      <div className="fixed inset-y-0 left-0 z-40 hidden lg:flex">{nav}</div>
+    <div className="flex min-h-dvh bg-canvas">
+      {/* Desktop: rail plus the sidebar card, always there. */}
+      <div className="sticky top-0 hidden h-dvh shrink-0 lg:flex">{nav}</div>
 
-      {/* Phone: slides in over the page. */}
+      {/* Phone: the same, sliding in over the page. */}
       <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)}>
         {nav}
       </MobileMenu>
 
-      <div className="flex min-h-dvh flex-col lg:pl-[calc(var(--rail-width)+var(--sidebar-width))]">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-canvas px-4 lg:hidden">
-          <button
-            type="button"
-            onClick={() => setMenuOpen(true)}
-            aria-label="Open groups and channels"
-            className="press -ml-2 grid size-10 place-items-center rounded-[var(--radius-control)] text-ink-muted hover:text-ink"
-          >
-            <MenuIcon />
-          </button>
-          <p className="min-w-0 truncate text-base font-semibold">
-            {current ? current.name : "JFK"}
-          </p>
-          {current && current.waiting > 0 && (
-            <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1.5 text-[0.625rem] font-bold text-accent-ink">
-              {current.waiting}
-            </span>
-          )}
-        </header>
+      <main className="flex min-h-dvh min-w-0 flex-1 flex-col lg:h-dvh lg:py-3 lg:pr-3">
+        <section
+          aria-label={title.label}
+          className="flex min-h-0 flex-1 flex-col bg-surface lg:rounded-[var(--radius-card)] lg:border lg:border-border"
+        >
+          <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4 lg:static lg:rounded-t-[var(--radius-card)]">
+            <button
+              type="button"
+              onClick={() => setMenuOpen(true)}
+              aria-label="Open groups and channels"
+              className="press -ml-2 grid size-10 place-items-center rounded-[var(--radius-control)] text-ink-muted hover:text-ink lg:hidden"
+            >
+              <MenuIcon />
+            </button>
+            {title.icon && <span className="text-ink-faint">{title.icon}</span>}
+            <h1 className="min-w-0 truncate text-base font-semibold">{title.label}</h1>
+          </header>
 
-        <div className="mx-auto w-full max-w-lg flex-1 px-4 pt-6 pb-10 lg:mx-0 lg:max-w-none lg:px-8 lg:pt-8 lg:pb-16 2xl:max-w-[112rem] 2xl:px-12">
-          {children}
-        </div>
-      </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 lg:px-8">{children}</div>
+        </section>
+      </main>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Rail + channels + profile: the same on desktop and in the phone menu
-// ---------------------------------------------------------------------------
-
-function Navigation({
-  groups,
-  current,
-  pathname,
-  user,
-}: {
-  groups: ShellGroup[];
-  current: ShellGroup | null;
-  pathname: string;
-  user: ShellUser;
-}) {
-  return (
-    <div className="flex h-full">
-      <Rail groups={groups} currentId={current?.id ?? null} />
-      <aside
-        aria-label={current ? `${current.name} channels` : "Home"}
-        className="flex h-full w-[var(--sidebar-width)] flex-col border-r border-border bg-surface"
-      >
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {current ? (
-            <GroupChannels group={current} pathname={pathname} />
-          ) : (
-            <HomeChannels pathname={pathname} />
-          )}
-        </div>
-        <ProfileBar user={user} />
-      </aside>
-    </div>
-  );
+/** What the main card's header says for the page you're on. */
+function titleFor(pathname: string, group: ShellGroup | null, segment: string | undefined) {
+  const channel = group ? findChannel(segment ?? DEFAULT_CHANNEL) : undefined;
+  if (channel) return { label: channel.label, icon: channel.icon };
+  if (pathname === "/groups/new") return { label: "new group", icon: <PlusIcon /> };
+  if (pathname === "/groups") return { label: "all groups", icon: <HomeIcon /> };
+  if (pathname.startsWith("/wallet")) return { label: "settings", icon: <GearIcon /> };
+  if (group) return { label: group.name, icon: null };
+  return { label: "Rallied", icon: null };
 }
 
-function Rail({ groups, currentId }: { groups: ShellGroup[]; currentId: string | null }) {
+// ---------------------------------------------------------------------------
+// The rail
+// ---------------------------------------------------------------------------
+
+function Rail({ groups, currentId, pathname }: { groups: ShellGroup[]; currentId: string | null; pathname: string }) {
   return (
     <nav
       aria-label="Your groups"
-      className="flex h-full w-[var(--rail-width)] flex-col items-center gap-2 overflow-y-auto bg-rail py-3"
+      className="flex h-full w-[var(--rail-width)] flex-col items-center gap-2 bg-rail py-3"
     >
-      <RailItem href="/groups" label="Home: all your groups" selected={currentId === null}>
-        <Mark />
-      </RailItem>
-      <span aria-hidden="true" className="my-1 h-0.5 w-8 rounded-full bg-border" />
-
-      {groups.map((group) => (
-        <RailItem
-          key={group.id}
-          href={`/groups/${group.id}` as Route}
-          label={group.waiting > 0 ? `${group.name}: ${group.waiting} waiting on you` : group.name}
-          selected={group.id === currentId}
-          badge={group.waiting}
-        >
-          <span className="text-base font-semibold">{initials(group.name)}</span>
+      <div className="flex min-h-0 w-full flex-1 flex-col items-center gap-2 overflow-y-auto">
+        <RailItem href="/groups" label="Home: all your groups" selected={currentId === null && pathname === "/groups"}>
+          <HomeIcon />
         </RailItem>
-      ))}
+        <span aria-hidden="true" className="my-1 h-px w-6 bg-border-strong" />
 
-      <RailItem href="/groups/new" label="Create a group" selected={false} quiet>
-        <PlusIcon />
+        {groups.map((group) => (
+          <RailItem
+            key={group.id}
+            href={`/groups/${group.id}/${DEFAULT_CHANNEL}` as Route}
+            label={group.waiting > 0 ? `${group.name}: ${group.waiting} waiting on you` : group.name}
+            selected={group.id === currentId}
+            badge={group.waiting}
+          >
+            <span className="text-sm font-semibold">{initials(group.name)}</span>
+          </RailItem>
+        ))}
+
+        <RailItem href="/groups/new" label="Create a group" selected={pathname === "/groups/new"}>
+          <PlusIcon />
+        </RailItem>
+      </div>
+
+      <RailItem href="/wallet" label="Settings" selected={pathname.startsWith("/wallet")}>
+        <GearIcon />
       </RailItem>
     </nav>
   );
 }
 
-/**
- * A round icon that becomes a rounded square when selected, with the orange
- * marker on the rail's left edge, as Discord does it.
- */
+/** A square icon on the rail. Selected turns orange with a marker at the rail's edge. */
 function RailItem({
   href,
   label,
   selected,
   badge = 0,
-  quiet = false,
   children,
 }: {
   href: Route;
   label: string;
   selected: boolean;
   badge?: number;
-  quiet?: boolean;
   children: ReactNode;
 }) {
   return (
-    <div className="group/rail relative flex w-full justify-center">
+    <div className="group/rail relative flex w-full shrink-0 justify-center">
       <span
         aria-hidden="true"
         className={cn(
           "absolute top-1/2 left-0 w-1 -translate-y-1/2 rounded-r-full bg-accent transition-[height] duration-300 ease-[var(--ease-spring)]",
-          selected ? "h-10" : "h-0 group-hover/rail:h-5",
+          selected ? "h-8" : "h-0 group-hover/rail:h-4",
         )}
       />
       <Link
@@ -189,17 +172,13 @@ function RailItem({
         aria-label={label}
         aria-current={selected ? "page" : undefined}
         className={cn(
-          "press relative grid size-12 place-items-center transition-[border-radius,background-color,color] duration-300 ease-[var(--ease-spring)]",
-          selected
-            ? "rounded-[var(--radius-card)] bg-accent text-accent-ink"
-            : quiet
-              ? "rounded-full bg-raised text-inflow hover:rounded-[var(--radius-card)] hover:bg-inflow hover:text-canvas"
-              : "rounded-full bg-raised text-ink hover:rounded-[var(--radius-card)] hover:bg-overlay",
+          "press relative grid size-11 place-items-center rounded-[var(--radius-control)] transition-colors",
+          selected ? "bg-accent text-accent-ink" : "bg-raised text-ink-muted hover:bg-overlay hover:text-ink",
         )}
       >
         {children}
         {badge > 0 && (
-          <span className="absolute -right-1 -bottom-1 grid h-5 min-w-5 place-items-center rounded-full border-[3px] border-rail bg-accent px-1 text-[0.625rem] font-bold text-accent-ink">
+          <span className="absolute -top-1.5 -right-1.5 grid h-5 min-w-5 place-items-center rounded-full border-2 border-rail bg-accent px-1 text-[0.625rem] font-semibold text-accent-ink">
             {badge > 99 ? "99+" : badge}
           </span>
         )}
@@ -208,60 +187,69 @@ function RailItem({
   );
 }
 
-function GroupChannels({ group, pathname }: { group: ShellGroup; pathname: string }) {
+// ---------------------------------------------------------------------------
+// The sidebar card
+// ---------------------------------------------------------------------------
+
+function SidebarCard({ current, pathname }: { current: ShellGroup | null; pathname: string }) {
+  return (
+    <div className="h-full py-3 pr-3 lg:pl-0">
+      <aside
+        aria-label={current ? `${current.name} channels` : "Home"}
+        className="flex h-full w-[var(--sidebar-width)] flex-col overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface"
+      >
+        <div className="min-h-0 flex-1 overflow-y-auto pb-3">
+          {current ? <GroupSidebar group={current} pathname={pathname} /> : <HomeSidebar pathname={pathname} />}
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function GroupSidebar({ group, pathname }: { group: ShellGroup; pathname: string }) {
   const base = `/groups/${group.id}`;
   return (
     <>
       {/* The banner stays blank until a member uploads a real image. */}
-      <div aria-hidden="true" className="h-20 border-b border-border bg-raised" />
-      <div className="border-b border-border px-4 py-3">
-        <p className="truncate text-base font-semibold">{group.name}</p>
-        <p className="mt-0.5 text-xs text-ink-muted">
-          {group.memberCount} member{group.memberCount === 1 ? "" : "s"} · {group.balance}
-        </p>
-      </div>
+      <div className="h-20 bg-raised" aria-hidden="true" />
+      <p className="truncate px-4 pt-3 text-base font-semibold">{group.name}</p>
 
-      <Section label="💬 Chat">
-        <Channel href={`${base}/chat` as Route} pathname={pathname}>
-          general
-        </Channel>
+      <Section label="Group stats">
+        <Stat icon={<WalletIcon />}>Balance: {group.balance}</Stat>
+        <Stat icon={<PeopleIcon />}>Members: {group.memberCount}</Stat>
       </Section>
-      <Section label="💰 Money">
-        <Channel href={base as Route} pathname={pathname} exact>
-          overview
-        </Channel>
-      </Section>
-      <Section label="🗳️ Decisions">
-        <Channel href={`${base}/proposals` as Route} pathname={pathname} badge={group.waiting}>
-          votes
-        </Channel>
-      </Section>
-      <Section label="👥 People">
-        <Channel href={`${base}/members` as Route} pathname={pathname}>
-          members
-        </Channel>
-      </Section>
+
+      {CHANNEL_SECTIONS.map((section) => (
+        <Section key={section.label} label={section.label}>
+          {section.channels.map((channel) => {
+            const href = `${base}/${channel.slug}`;
+            return (
+              <ChannelLink key={channel.slug} href={href as Route} active={pathname === href} icon={channel.icon}>
+                {channel.label}
+              </ChannelLink>
+            );
+          })}
+        </Section>
+      ))}
     </>
   );
 }
 
-function HomeChannels({ pathname }: { pathname: string }) {
+function HomeSidebar({ pathname }: { pathname: string }) {
   return (
     <>
-      <div className="border-b border-border px-4 py-4">
-        <p className="text-base font-semibold">Home</p>
-        <p className="mt-0.5 text-xs text-ink-muted">Everything across your groups</p>
-      </div>
-      <Section label="🏠 You">
-        <Channel href="/groups" pathname={pathname} exact>
+      <div className="h-20 bg-raised" aria-hidden="true" />
+      <p className="px-4 pt-3 text-base font-semibold">Home</p>
+      <Section label="You">
+        <ChannelLink href="/groups" active={pathname === "/groups"} icon={<HomeIcon />}>
           all groups
-        </Channel>
-        <Channel href="/wallet" pathname={pathname}>
-          wallet
-        </Channel>
-        <Channel href="/groups/new" pathname={pathname}>
+        </ChannelLink>
+        <ChannelLink href="/groups/new" active={pathname === "/groups/new"} icon={<PlusIcon />}>
           new group
-        </Channel>
+        </ChannelLink>
+        <ChannelLink href="/wallet" active={pathname.startsWith("/wallet")} icon={<GearIcon />}>
+          settings
+        </ChannelLink>
       </Section>
     </>
   );
@@ -270,88 +258,47 @@ function HomeChannels({ pathname }: { pathname: string }) {
 function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="px-2 pt-5">
-      <p className="mb-1 px-2 text-xs font-semibold tracking-wide text-ink-faint uppercase">{label}</p>
+      <p className="mb-1 px-2 text-xs font-semibold text-ink-faint">{label}</p>
       <ul className="space-y-0.5">{children}</ul>
     </div>
   );
 }
 
-function Channel({
+/** Group stats are information, not links, so they never look clickable. */
+function Stat({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return (
+    <li className="flex h-8 items-center gap-2 px-2 text-sm text-ink-muted">
+      <span className="text-ink-faint">{icon}</span>
+      <span className="truncate tabular-nums">{children}</span>
+    </li>
+  );
+}
+
+function ChannelLink({
   href,
-  pathname,
-  exact = false,
-  badge = 0,
+  active,
+  icon,
   children,
 }: {
   href: Route;
-  pathname: string;
-  exact?: boolean;
-  badge?: number;
+  active: boolean;
+  icon: ReactNode;
   children: ReactNode;
 }) {
-  const active = exact ? pathname === href : pathname.startsWith(href);
   return (
     <li>
       <Link
         href={href}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "flex h-9 items-center gap-2 rounded-[var(--radius-control)] px-2 text-base transition-colors",
-          active
-            ? "bg-raised font-semibold text-ink"
-            : badge > 0
-              ? "font-semibold text-ink hover:bg-raised"
-              : "text-ink-muted hover:bg-raised hover:text-ink",
+          "press flex h-9 items-center gap-2 rounded-[var(--radius-control)] px-2 text-sm transition-colors",
+          active ? "bg-ink font-semibold text-canvas" : "text-ink-muted hover:bg-raised hover:text-ink",
         )}
       >
-        <span aria-hidden="true" className="text-xl leading-none text-ink-faint">
-          #
-        </span>
-        <span className="min-w-0 flex-1 truncate">{children}</span>
-        {badge > 0 && (
-          <span className="grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1.5 text-[0.625rem] font-bold text-accent-ink">
-            {badge}
-          </span>
-        )}
+        <span className={active ? "text-canvas" : "text-ink-faint"}>{icon}</span>
+        <span className="min-w-0 truncate">{children}</span>
       </Link>
     </li>
-  );
-}
-
-function ProfileBar({ user }: { user: ShellUser }) {
-  return (
-    <div className="flex items-center gap-2 border-t border-border bg-rail/60 px-2 py-2">
-      <span
-        aria-hidden="true"
-        className="grid size-9 shrink-0 place-items-center rounded-full bg-accent text-sm font-semibold text-accent-ink"
-      >
-        {initials(user.displayName)}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold">{user.displayName}</p>
-        <p className={cn("truncate text-xs text-ink-faint", user.wallet && "font-mono")}>
-          {user.wallet ?? "Signed in with email"}
-        </p>
-      </div>
-      <Link
-        href="/wallet"
-        title="Wallet and profile"
-        aria-label="Wallet and profile"
-        className="press grid size-9 place-items-center rounded-[var(--radius-control)] text-ink-muted hover:bg-raised hover:text-ink"
-      >
-        <GearIcon />
-      </Link>
-      <form action={signOutAction}>
-        <button
-          type="submit"
-          title="Log out"
-          aria-label="Log out"
-          className="press grid size-9 place-items-center rounded-[var(--radius-control)] text-ink-muted hover:bg-raised hover:text-ink"
-        >
-          <LogOutIcon />
-        </button>
-      </form>
-    </div>
   );
 }
 
@@ -447,7 +394,7 @@ function MobileMenu({ open, onClose, children }: { open: boolean; onClose: () =>
         }}
         style={{ touchAction: "pan-y" }}
         className={cn(
-          "absolute inset-y-0 left-0 flex max-w-[calc(100vw-3.5rem)] overflow-hidden",
+          "absolute inset-y-0 left-0 flex max-w-[calc(100vw-3.5rem)] overflow-hidden bg-canvas",
           open
             ? "translate-x-0 transition-transform duration-[600ms] ease-[var(--ease-spring)]"
             : "-translate-x-full transition-transform duration-300 ease-[var(--ease-depart)]",
@@ -459,8 +406,6 @@ function MobileMenu({ open, onClose, children }: { open: boolean; onClose: () =>
   );
 }
 
-// ---------------------------------------------------------------------------
-
 /** "Lagos Boys" → "LB", "Brothers" → "B". */
 function initials(name: string): string {
   return (
@@ -470,57 +415,5 @@ function initials(name: string): string {
       .slice(0, 2)
       .map((word) => word[0]?.toUpperCase() ?? "")
       .join("") || "?"
-  );
-}
-
-function Mark() {
-  return (
-    <svg viewBox="0 0 40 40" className="size-7" role="img" aria-label="JFK">
-      <circle cx="14" cy="14" r="9" className="fill-current opacity-70" />
-      <circle cx="26" cy="14" r="9" className="fill-current opacity-40" />
-      <circle cx="20" cy="25" r="9" className="fill-current" />
-    </svg>
-  );
-}
-
-const stroke = {
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 1.75,
-  strokeLinecap: "round",
-  strokeLinejoin: "round",
-} as const;
-
-function MenuIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="size-6" aria-hidden="true" {...stroke}>
-      <path d="M4 7h16M4 12h16M4 17h16" />
-    </svg>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="size-6" aria-hidden="true" {...stroke}>
-      <path d="M12 5v14M5 12h14" />
-    </svg>
-  );
-}
-
-function GearIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="size-5" aria-hidden="true" {...stroke}>
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
-    </svg>
-  );
-}
-
-function LogOutIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="size-5" aria-hidden="true" {...stroke}>
-      <path d="M15 17v1.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2V7" />
-      <path d="M19 12H9m10 0-3-3m3 3-3 3" />
-    </svg>
   );
 }

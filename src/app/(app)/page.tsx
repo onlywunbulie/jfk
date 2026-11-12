@@ -18,5 +18,6 @@ export default async function LandingPage() {
 
   if (groups.length === 0) redirect("/groups");
 
-  redirect(`/groups/${groups[0].id}`);
+  // A group opens on its ledger overview.
+  redirect(`/groups/${groups[0].id}/general`);
 }
