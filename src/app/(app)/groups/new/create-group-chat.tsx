@@ -67,24 +67,20 @@ export function CreateGroupChat({ heading }: { heading: React.ReactNode }) {
   }, [currentId]);
 
   return (
-    // A frame exactly as tall as the space left on screen, so the page itself
+    // A frame exactly as tall as the main card's body, so the body itself
     // never scrolls: only the conversation inside it does. That is what keeps
-    // the typing box and the summary where they are however long the thread
-    // gets. The subtracted heights are the shell above and below this frame
-    // (top bar and back link; tab bar on a phone).
+    // the heading, the typing box and the summary where they are however long
+    // the thread gets.
     //
     // The conversation stops growing at a comfortable reading width; the
-    // summary takes whatever is left, out to the edge of the screen.
-    <div className="flex h-[calc(100dvh-10.5rem-env(safe-area-inset-bottom))] flex-col gap-4 lg:grid lg:h-[calc(100dvh-8.75rem)] lg:grid-cols-[minmax(0,56rem)_minmax(18rem,1fr)] lg:grid-rows-1 lg:gap-6 xl:grid-cols-[minmax(0,56rem)_minmax(21rem,1fr)] xl:gap-8">
+    // summary takes whatever is left, out to the edge of the card.
+    <div className="flex h-full flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,56rem)_minmax(18rem,1fr)] lg:grid-rows-1 lg:gap-6 xl:grid-cols-[minmax(0,56rem)_minmax(21rem,1fr)] xl:gap-8">
       <div className="flex min-h-0 flex-1 flex-col lg:h-full">
-        {/* The page title heads this column, so the summary beside it starts
-            level with the title rather than below it. */}
-        <div className="mb-7 hidden shrink-0 lg:block">{heading}</div>
+        {/* The page title heads this column and stays put while the thread
+            scrolls under it. Beside it, the summary starts level with it. */}
+        <div className="mb-5 shrink-0 lg:mb-7">{heading}</div>
 
         <div className="-mr-2 min-h-0 flex-1 overflow-y-auto pr-2 [scrollbar-width:thin]">
-          {/* On a phone the title scrolls away with the thread; there is no
-              height to spare for keeping it. */}
-          <div className="mb-6 lg:hidden">{heading}</div>
           <ol role="log" aria-live="polite" className="space-y-5">
             {visible.map((question, index) => {
               const isCurrent = index === currentIndex;
@@ -436,22 +432,25 @@ function AgentBubble({
   counter?: string;
   children: React.ReactNode;
 }) {
+  // Rall asks, in the same look as Rall's messages in the channels.
   return (
     <div className="flex items-start gap-3">
       <span
         aria-hidden="true"
-        className="glass-subtle grid size-8 shrink-0 place-items-center rounded-full"
+        className="grid size-10 shrink-0 place-items-center rounded-full bg-accent text-base font-bold text-accent-ink"
       >
-        <svg viewBox="0 0 40 40" className="size-4">
-          <circle cx="14" cy="14" r="9" className="fill-accent/70" />
-          <circle cx="26" cy="14" r="9" className="fill-accent/40" />
-          <circle cx="20" cy="25" r="9" className="fill-accent" />
-        </svg>
+        R
       </span>
 
       <div className="min-w-0 max-w-[44rem]">
-        <span className="sr-only">JFK asks: </span>
-        <div className="glass rounded-2xl rounded-tl-md px-4 py-3">{children}</div>
+        <p aria-hidden="true" className="mb-1.5 flex items-center gap-2">
+          <span className="text-base font-semibold text-ink">Rall</span>
+          <span className="rounded-[4px] bg-raised px-1.5 py-px text-[0.6875rem] leading-4 font-semibold text-ink-muted">
+            AGENT
+          </span>
+        </p>
+        <span className="sr-only">Rall asks: </span>
+        <div className="rounded-3xl bg-raised px-5 py-4">{children}</div>
         {counter && (
           <p className="mt-1.5 pl-1 text-[0.6875rem] text-ink-faint">{counter}</p>
         )}
@@ -476,7 +475,8 @@ function UserBubble({
         className="group max-w-[85%] text-right"
       >
         <span className="sr-only">You answered: </span>
-        <span className="inline-block rounded-2xl rounded-tr-md bg-ink px-4 py-2.5 text-left font-medium break-words text-canvas transition-colors group-hover:bg-white">
+        {/* The same rounded rectangle as Rall's bubble: same corners, same padding. */}
+        <span className="inline-block rounded-3xl bg-ink px-5 py-4 text-left font-medium break-words text-canvas transition-colors group-hover:bg-white">
           {children}
         </span>
         <span className="mt-1 block pr-1 text-[0.6875rem] text-ink-faint transition-colors group-hover:text-ink-muted">
@@ -526,6 +526,8 @@ function Composer({
   const [value, setValue] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const active = question !== null;
+  // The send arrow lights up only once there's something to send.
+  const canSend = active && value.trim().length > 0;
 
   const submit = () => {
     if (!question) return;
@@ -549,9 +551,9 @@ function Composer({
 
       <div
         className={cn(
-          // Solid enough that the thread scrolling underneath never shows
-          // through the box you are typing in.
-          "glass-strong flex items-center gap-2 rounded-2xl bg-overlay p-2",
+          // A pill, solid enough that the thread scrolling underneath never
+          // shows through the box you are typing in.
+          "flex items-center gap-2 rounded-full border border-border bg-raised py-1.5 pr-1.5 pl-3 transition-colors focus-within:border-border-strong",
           !active && "[&>*]:opacity-50",
         )}
       >
@@ -578,7 +580,7 @@ function Composer({
           maxLength={question?.maxLength}
           enterKeyHint="send"
           autoComplete="off"
-          className="h-11 min-w-0 flex-1 rounded-xl bg-transparent px-3 text-ink outline-none placeholder:text-ink-faint disabled:cursor-not-allowed disabled:placeholder:text-ink-muted"
+          className="h-10 min-w-0 flex-1 bg-transparent px-1 text-ink outline-none placeholder:text-ink-faint disabled:cursor-not-allowed disabled:placeholder:text-ink-muted"
         />
 
         {question?.skipLabel && (
@@ -586,19 +588,25 @@ function Composer({
             type="button"
             variant="ghost"
             onClick={() => onAnswer("")}
-            className="h-11 shrink-0 px-3"
+            className="h-10 shrink-0 rounded-full px-3"
           >
             {question.skipLabel}
           </Button>
         )}
-        <Button
+        <button
           type="button"
           onClick={submit}
-          disabled={!active}
-          className="h-11 shrink-0"
+          disabled={!canSend}
+          aria-label="Send"
+          className={cn(
+            "press grid size-10 shrink-0 place-items-center rounded-full transition-colors",
+            canSend ? "bg-accent text-accent-ink hover:bg-accent-hover" : "cursor-not-allowed bg-overlay text-ink-faint",
+          )}
         >
-          Send
-        </Button>
+          <svg viewBox="0 0 20 20" aria-hidden="true" className="size-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10 16V4M5 9l5-5 5 5" />
+          </svg>
+        </button>
       </div>
     </div>
   );
@@ -622,7 +630,8 @@ function ChoiceAnswer({
       role="group"
       aria-label={question.ask}
       className={cn(
-        "pl-11",
+        // Lines up with Rall's bubble: a 40px avatar plus a 12px gap.
+        "pl-[52px]",
         descriptive ? "max-w-[46.75rem] space-y-2" : "flex flex-wrap gap-2",
       )}
     >
@@ -633,10 +642,13 @@ function ChoiceAnswer({
           onClick={() => onAnswer(choice.value)}
           aria-pressed={selected === choice.value}
           className={cn(
-            "glass-subtle rounded-xl text-left transition-colors duration-150",
-            "hover:border-white/40 hover:bg-white/[0.09]",
-            selected === choice.value && "border-white/40 bg-white/[0.09]",
-            descriptive ? "block w-full p-4" : "px-4 py-2.5",
+            // Pills, like the typing field. A choice with an explanation
+            // under it is too tall for a full pill, so it gets the same
+            // generous rounding as Rall's bubble instead.
+            "press border border-border bg-raised text-left transition-colors duration-150",
+            "hover:border-border-strong hover:bg-overlay",
+            selected === choice.value && "border-border-strong bg-overlay",
+            descriptive ? "block w-full rounded-3xl px-5 py-4" : "rounded-full px-4 py-2.5",
           )}
         >
           <span className="text-sm font-medium text-ink">{choice.label}</span>

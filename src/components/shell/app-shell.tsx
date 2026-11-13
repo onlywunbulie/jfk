@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Route } from "next";
 import { cn } from "@/lib/cn";
 import { DEFAULT_CHANNEL, MenuIcon, findChannel, sectionsFor, type GroupKind } from "./channels";
+import { ProfileModal } from "./profile-modal";
 
 export interface ShellGroup {
   id: string;
@@ -33,13 +34,32 @@ export interface ShellGroup {
  * On a phone the rail and sidebar card live in a menu that slides in from
  * the left, and the main card fills the screen.
  */
-export function AppShell({ groups, children }: { groups: ShellGroup[]; children: ReactNode }) {
+export function AppShell({
+  groups,
+  userInitial,
+  profile,
+  children,
+}: {
+  groups: ShellGroup[];
+  /** The signed-in user's initial, for the profile square. */
+  userInitial: string;
+  /** The profile's contents, rendered on the server, shown in the modal. */
+  profile: ReactNode;
+  children: ReactNode;
+}) {
   const pathname = usePathname();
   const match = pathname.match(/^\/groups\/([^/]+)(?:\/([^/]+))?/);
   const current = groups.find((group) => group.id === match?.[1]) ?? null;
   const title = titleFor(pathname, current, match?.[2]);
-  const isChannel = current !== null && findChannel(match?.[2] ?? DEFAULT_CHANNEL) !== undefined;
+  // Channels and create group are headed by a hashtag; anything else by the dot.
+  const isChannel =
+    (current !== null && findChannel(match?.[2] ?? DEFAULT_CHANNEL) !== undefined) || pathname === "/groups/new";
   const [menuOpen, setMenuOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const openProfile = () => {
+    setMenuOpen(false);
+    setProfileOpen(true);
+  };
 
   // Going somewhere closes the menu. Keyed on the path, so it only fires on a
   // real navigation.
@@ -53,21 +73,48 @@ export function AppShell({ groups, children }: { groups: ShellGroup[]; children:
     <div className="flex h-dvh bg-canvas lg:gap-[18px] lg:py-[30px] lg:pr-[34px] lg:pl-[18px]">
       {/* Desktop: the rail, level with the cards inside the panel. */}
       <div className="hidden shrink-0 py-5 lg:flex">
-        <Rail groups={groups} currentId={current?.id ?? null} pathname={pathname} />
+        <Rail
+          groups={groups}
+          currentId={current?.id ?? null}
+          pathname={pathname}
+          userInitial={userInitial}
+          profileOpen={profileOpen}
+          onOpenProfile={openProfile}
+        />
       </div>
 
-      {/* Phone: the rail and sidebar card, sliding in over the page. */}
+      <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)}>
+        {profile}
+      </ProfileModal>
+      {/* Any link ending in ?profile=1 opens the profile over the current screen. */}
+      <Suspense fallback={null}>
+        <OpenProfileFromLink onOpen={openProfile} />
+      </Suspense>
+
+      {/* Phone: the rail and, inside a group, its sidebar card, sliding in over the page. */}
       <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)}>
-        <Rail groups={groups} currentId={current?.id ?? null} pathname={pathname} />
-        <div className="flex min-w-0 flex-1 rounded-[var(--radius-control)] bg-raised p-3">
-          <SidebarCard current={current} pathname={pathname} />
-        </div>
+        <Rail
+          groups={groups}
+          currentId={current?.id ?? null}
+          pathname={pathname}
+          userInitial={userInitial}
+          profileOpen={profileOpen}
+          onOpenProfile={openProfile}
+        />
+        {current && (
+          <div className="flex min-w-0 flex-1 rounded-[var(--radius-control)] bg-raised p-3">
+            <SidebarCard current={current} pathname={pathname} />
+          </div>
+        )}
       </MobileMenu>
 
       <div className="flex min-w-0 flex-1 lg:gap-[18px] lg:rounded-[var(--radius-control)] lg:bg-raised lg:px-[18px] lg:py-5">
-        <div className="hidden w-[var(--sidebar-width)] shrink-0 lg:flex">
-          <SidebarCard current={current} pathname={pathname} />
-        </div>
+        {/* The channels card belongs to a group. Outside one (settings, profile), the main card takes the space. */}
+        {current && (
+          <div className="hidden w-[var(--sidebar-width)] shrink-0 lg:flex">
+            <SidebarCard current={current} pathname={pathname} />
+          </div>
+        )}
 
         <main
           aria-label={title}
@@ -95,13 +142,37 @@ export function AppShell({ groups, children }: { groups: ShellGroup[]; children:
   );
 }
 
+/**
+ * Opens the profile when the address ends in ?profile=1, then tidies the
+ * address so a refresh doesn't reopen it. Kept apart so reading the query
+ * sits inside its own Suspense boundary.
+ */
+function OpenProfileFromLink({ onOpen }: { onOpen: () => void }) {
+  const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const wanted = params.get("profile") === "1";
+
+  useEffect(() => {
+    if (!wanted) return;
+    onOpen();
+    const rest = new URLSearchParams(params.toString());
+    rest.delete("profile");
+    const query = rest.toString();
+    router.replace((query ? `${pathname}?${query}` : pathname) as Route, { scroll: false });
+    // onOpen is stable enough for this: it only sets state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wanted]);
+
+  return null;
+}
+
 /** What the main card's header says for the page you're on. */
 function titleFor(pathname: string, group: ShellGroup | null, segment: string | undefined): string {
   const channel = group ? findChannel(segment ?? DEFAULT_CHANNEL) : undefined;
   if (channel) return channel.label;
-  if (pathname === "/groups/new") return "new group";
+  if (pathname === "/groups/new") return "create group";
   if (pathname === "/groups") return "all groups";
-  if (pathname.startsWith("/wallet")) return "settings";
   if (group) return group.name;
   return "Rallied";
 }
@@ -132,37 +203,62 @@ function Dot({ className }: { className?: string }) {
 // The rail
 // ---------------------------------------------------------------------------
 
-function Rail({ groups, currentId, pathname }: { groups: ShellGroup[]; currentId: string | null; pathname: string }) {
+/**
+ * Top: + (the only way to start a group), then the user's groups. Bottom:
+ * the user's profile, which opens as a modal over the current screen.
+ */
+function Rail({
+  groups,
+  currentId,
+  pathname,
+  userInitial,
+  profileOpen,
+  onOpenProfile,
+}: {
+  groups: ShellGroup[];
+  currentId: string | null;
+  pathname: string;
+  userInitial: string;
+  profileOpen: boolean;
+  onOpenProfile: () => void;
+}) {
   return (
     <nav aria-label="Your groups" className="flex h-full w-[var(--rail-width)] shrink-0 flex-col justify-between gap-4">
-      <ul className="flex min-h-0 flex-col gap-4 overflow-y-auto">
-        {groups.map((group) => (
-          <li key={group.id}>
-            <RailItem
-              href={`/groups/${group.id}/${DEFAULT_CHANNEL}` as Route}
-              label={group.name}
-              selected={group.id === currentId}
-            />
-          </li>
-        ))}
-        <li>
-          <RailItem href="/groups/new" label="Create a group" selected={pathname === "/groups/new"}>
-            <svg
-              viewBox="0 0 20 20"
-              aria-hidden="true"
-              className="size-5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.75}
-              strokeLinecap="round"
-            >
-              <path d="M10 4v12M4 10h12" />
-            </svg>
-          </RailItem>
-        </li>
-      </ul>
+      <div className="flex min-h-0 flex-col gap-4">
+        <RailItem href="/groups/new" label="Start a group" selected={pathname === "/groups/new"}>
+          <svg viewBox="0 0 20 20" aria-hidden="true" className="size-5" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round">
+            <path d="M10 4v12M4 10h12" />
+          </svg>
+        </RailItem>
+        <ul className="flex min-h-0 flex-col gap-4 overflow-y-auto">
+          {groups.map((group) => (
+            <li key={group.id}>
+              <RailItem
+                href={`/groups/${group.id}/${DEFAULT_CHANNEL}` as Route}
+                label={group.name}
+                selected={group.id === currentId}
+              />
+            </li>
+          ))}
+        </ul>
+      </div>
 
-      <RailItem href="/wallet" label="Settings" selected={pathname.startsWith("/wallet")} />
+      <div className="flex flex-col gap-4">
+        <button
+          type="button"
+          onClick={onOpenProfile}
+          title="Your profile"
+          aria-label="Your profile"
+          aria-haspopup="dialog"
+          aria-expanded={profileOpen}
+          className={cn(
+            "press grid h-[41px] w-[var(--rail-width)] place-items-center rounded-[var(--radius-control)] border-2 bg-raised transition-colors",
+            profileOpen ? "border-accent" : "border-transparent hover:bg-overlay",
+          )}
+        >
+          <span className="grid size-7 place-items-center rounded-full bg-overlay text-sm font-semibold text-ink">{userInitial}</span>
+        </button>
+      </div>
     </nav>
   );
 }
@@ -199,10 +295,10 @@ function RailItem({
 // The sidebar card
 // ---------------------------------------------------------------------------
 
-function SidebarCard({ current, pathname }: { current: ShellGroup | null; pathname: string }) {
+function SidebarCard({ current, pathname }: { current: ShellGroup; pathname: string }) {
   return (
     <aside
-      aria-label={current ? `${current.name} channels` : "Home"}
+      aria-label={`${current.name} channels`}
       className="flex h-full w-full flex-col overflow-y-auto rounded-[var(--radius-control)] bg-canvas pb-[27px]"
     >
       {/* The banner stays blank until a member uploads a real image. */}
@@ -210,7 +306,7 @@ function SidebarCard({ current, pathname }: { current: ShellGroup | null; pathna
 
       <div className="mt-[15px] p-[10px]">
         <div className="flex flex-col gap-8 px-[6px]">
-          {current ? <GroupSections group={current} pathname={pathname} /> : <HomeSections pathname={pathname} />}
+          <GroupSections group={current} pathname={pathname} />
         </div>
       </div>
     </aside>
@@ -239,23 +335,6 @@ function GroupSections({ group, pathname }: { group: ShellGroup; pathname: strin
         </Section>
       ))}
     </>
-  );
-}
-
-/** Not in the wireframe: what the card shows outside a group, in the same style. */
-function HomeSections({ pathname }: { pathname: string }) {
-  return (
-    <Section label="Home">
-      <ChannelLink href="/groups" active={pathname === "/groups"}>
-        all groups
-      </ChannelLink>
-      <ChannelLink href="/groups/new" active={pathname === "/groups/new"}>
-        new group
-      </ChannelLink>
-      <ChannelLink href="/wallet" active={pathname.startsWith("/wallet")}>
-        settings
-      </ChannelLink>
-    </Section>
   );
 }
 

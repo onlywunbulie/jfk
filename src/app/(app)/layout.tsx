@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { listGroupsForUser } from "@/modules/groups/service";
 import { countVotesAwaitingUser } from "@/modules/governance/service";
 import { AppShell, type ShellGroup } from "@/components/shell/app-shell";
+import { ProfilePanel } from "@/components/shell/profile-panel";
 
 /**
  * The authenticated frame: a rail of groups, the open group's sidebar card
@@ -34,7 +35,11 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   }));
 
   return (
-    <AppShell groups={shellGroups}>
+    <AppShell
+      groups={shellGroups}
+      userInitial={user.displayName.trim().charAt(0).toUpperCase() || "?"}
+      profile={<ProfilePanel user={user} />}
+    >
       {children}
     </AppShell>
   );

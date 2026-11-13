@@ -34,7 +34,7 @@ export function ContributePanel({
           Add a card to contribute {target} to this group.
         </p>
         <Link
-          href="/wallet"
+          href="?profile=1"
           className="inline-block text-sm text-ink underline decoration-white/30 underline-offset-4 transition-colors hover:decoration-white"
         >
           Add a card →

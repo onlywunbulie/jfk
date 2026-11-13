@@ -180,6 +180,44 @@
     animation: jfk-arrive 600ms var(--ease-spring) both;
   }
 
+  /* The profile modal: slides up as a sheet on a phone, rises and settles in
+     the middle on larger screens, both on the shared spring. The dim behind it
+     eases in. */
+  @keyframes jfk-sheet-up {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: none;
+    }
+  }
+  @keyframes jfk-modal-in {
+    from {
+      opacity: 0;
+      transform: translateY(12px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes jfk-dim-in {
+    from {
+      opacity: 0;
+    }
+  }
+  .profile-modal[open] {
+    animation: jfk-sheet-up 600ms var(--ease-spring) both;
+  }
+  .profile-modal[open]::backdrop {
+    animation: jfk-dim-in 240ms ease-out both;
+  }
+  @media (min-width: 40rem) {
+    .profile-modal[open] {
+      animation: jfk-modal-in 500ms var(--ease-spring) both;
+    }
+  }
+
   /* Buttons give under the finger. */
   .press {
     transition: transform 90ms var(--ease-out-quint);

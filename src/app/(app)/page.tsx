@@ -5,19 +5,20 @@ import { listGroupsForUser } from "@/modules/groups/service";
 /**
  * The landing route is a router, not a screen.
  *
- * Opening JFK should put you inside a group with its money in front of you,
- * not on an index asking which one you meant. The overview of every group
- * still exists at `/groups` for when you genuinely want to compare them.
+ * Opening Rallied puts the user inside a group with its money in front of
+ * them. With no groups yet, `/groups` holds the empty state.
  *
- * With no groups yet, `/groups` is the right place — it holds the empty state
- * and the invitation to create one.
+ * `?profile=1` is passed along, so a link can land home with the profile
+ * modal open.
  */
-export default async function LandingPage() {
+export default async function LandingPage({ searchParams }: PageProps<"/">) {
   const user = await requireUser();
   const groups = await listGroupsForUser(user.id);
+  const { profile } = await searchParams;
+  const keep = profile === "1" ? "?profile=1" : "";
 
-  if (groups.length === 0) redirect("/groups");
+  if (groups.length === 0) redirect(`/groups${keep}`);
 
   // A group opens on its ledger overview.
-  redirect(`/groups/${groups[0].id}/general`);
+  redirect(`/groups/${groups[0].id}/general${keep}`);
 }

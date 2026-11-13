@@ -6,6 +6,8 @@ import { requireUser } from "@/lib/auth/session";
 import { getGroupDetail, listMembers } from "@/modules/groups/service";
 import { channelBelongs, findChannel } from "@/components/shell/channels";
 import { PayoutOrder } from "./payout-order";
+import { EXPLORER_URL, shortAddress } from "@/lib/chain/addresses";
+import { VerifyAi } from "./verify-ai";
 import { DEFAULT_GOVERNANCE, type GovernedAction, type GroupType } from "@/lib/db/schema/groups";
 import { contractThresholds } from "@/modules/groups/onchain-setup";
 import { ChannelIntro, DateDivider, Detail, RallMessage, VaultFootnote, longDate } from "./parts";
@@ -41,6 +43,52 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
   const rotating = group.type === "ROTATING";
 
   if (channel.slug === "payout-order") return <PayoutOrder base={`/groups/${group.id}`} />;
+
+  if (channel.slug === "verify") {
+    // UI only: the AI connection is a sample (Claude, "Pay my dues, ask for
+    // the rest"), matching the starting state in Settings.
+    return (
+      <div className="flex min-h-full flex-col justify-end">
+        <ChannelIntro title="Verify & connect">Your wallet, and the AI that acts for you in this group.</ChannelIntro>
+        <RallMessage
+          time="Today"
+          footnote={
+            <p className="border-t border-border pt-3 text-xs text-ink-faint">
+              <Link
+                href={`/groups/${group.id}/verify?profile=1` as Route}
+                className="underline decoration-ink-faint/50 underline-offset-4 transition-colors hover:text-ink hover:decoration-ink"
+              >
+                Limits and other groups: manage your AI in your profile
+              </Link>
+            </p>
+          }
+        >
+          <Detail label="Wallet">
+            {user.walletAddress ? (
+              <>
+                <span className="text-inflow">✓ Verified</span> · Base Account{" "}
+                <a
+                  href={`${EXPLORER_URL}/address/${user.walletAddress}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-mono underline decoration-ink-faint underline-offset-4 hover:decoration-ink"
+                >
+                  {shortAddress(user.walletAddress)}
+                </a>
+              </>
+            ) : (
+              <span className="text-pending">Not verified. Sign in with your Base Account to verify.</span>
+            )}
+          </Detail>
+          <Detail label="Your AI">
+            <VerifyAi ai="Claude" groupName={group.name} />
+          </Detail>
+          <Detail label="Your limits">Pay my dues, ask for the rest</Detail>
+          <Detail label="This group">Members&rsquo; AIs can vote within their own limits</Detail>
+        </RallMessage>
+      </div>
+    );
+  }
 
   if (channel.slug === "about") {
     const owner = members.find((member) => member.role === "OWNER");
