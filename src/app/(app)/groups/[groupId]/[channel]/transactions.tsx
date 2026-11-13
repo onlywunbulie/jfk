@@ -46,7 +46,13 @@ export function Transactions({ base, filter, rotating }: { base: string; filter:
   const href = (next: Filter) =>
     (next === "all" ? `${base}/transactions` : `${base}/transactions?filter=${next}`) as Route;
 
-  const shown = ENTRIES.filter(
+  // In rotating savings, money out is the round's payout, not a voted spend.
+  const entries = rotating
+    ? ENTRIES.map((entry) =>
+        entry.id === "4" ? { ...entry, what: "Payout to Amaka, round 3", amount: "USDC 800", approved: undefined } : entry,
+      )
+    : ENTRIES;
+  const shown = entries.filter(
     (entry) =>
       filter === "all" ||
       (filter === "mine" && entry.mine) ||
@@ -123,7 +129,7 @@ function YourMoney({ rotating }: { rotating: boolean }) {
         {rotating && (
           <>
             {" "}
-            · Share <span className="text-ink tabular-nums">USDC 800, 1 Mar</span>
+            · Your turn <span className="text-ink tabular-nums">round 6, 1 Feb</span>
           </>
         )}
       </p>
@@ -132,7 +138,7 @@ function YourMoney({ rotating }: { rotating: boolean }) {
         <dl className="mt-3 space-y-2 text-sm">
         <Pair label="You've paid in" value="USDC 600" />
         <Pair label="This round" value="Paid" tone="inflow" />
-          {rotating && <Pair label="Your share" value="USDC 800 on 1 March" />}
+          {rotating && <Pair label="Your turn" value="Round 6 · USDC 800 on 1 Feb" />}
         </dl>
       </div>
     </section>

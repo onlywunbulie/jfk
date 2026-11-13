@@ -5,12 +5,14 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Route } from "next";
 import { cn } from "@/lib/cn";
-import { CHANNEL_SECTIONS, DEFAULT_CHANNEL, MenuIcon, findChannel } from "./channels";
+import { DEFAULT_CHANNEL, MenuIcon, findChannel, sectionsFor, type GroupKind } from "./channels";
 
 export interface ShellGroup {
   id: string;
   name: string;
   memberCount: number;
+  /** Shared pot or rotating savings: decides which channels it has. */
+  kind: GroupKind;
   /** Already formatted as the sidebar shows it, e.g. "USDC 15000". */
   balance: string;
   /** Open votes this person hasn't cast yet. Not shown in this step. */
@@ -224,7 +226,7 @@ function GroupSections({ group, pathname }: { group: ShellGroup; pathname: strin
         <Stat>Members: {group.memberCount}</Stat>
       </Section>
 
-      {CHANNEL_SECTIONS.map((section) => (
+      {sectionsFor(group.kind).map((section) => (
         <Section key={section.label} label={section.label}>
           {section.channels.map((channel) => {
             const href = `${base}/${channel.slug}`;

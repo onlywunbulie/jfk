@@ -9,12 +9,17 @@ import type { ReactNode } from "react";
  * will show. Nothing in the sidebar is a dead link.
  */
 
+/** The kinds of group, as stored: a shared pot, or rotating savings. */
+export type GroupKind = "TREASURY" | "ROTATING";
+
 export interface ChannelDef {
   slug: string;
   label: string;
   icon: ReactNode;
   /** One line on what the channel is for, shown on its screen. */
   promise: string;
+  /** Only in this kind of group. Omitted: in every group. */
+  only?: GroupKind;
 }
 
 export interface ChannelSection {
@@ -77,6 +82,15 @@ export const CHANNEL_SECTIONS: ChannelSection[] = [
         label: "propose a spend",
         icon: <PlusCircleIcon />,
         promise: "Ask the group to spend money. Everyone gets a say before anything moves.",
+        // In rotating savings every round's money already has a destination.
+        only: "TREASURY",
+      },
+      {
+        slug: "payout-order",
+        label: "payout order",
+        icon: <ArrowsIcon />,
+        promise: "Who gets paid each round, whose turn is next, swap requests, and anyone who owes after their turn.",
+        only: "ROTATING",
       },
       {
         slug: "manage-roles",
@@ -107,6 +121,19 @@ export const DEFAULT_CHANNEL = "general";
 
 export function findChannel(slug: string | undefined): ChannelDef | undefined {
   return ALL_CHANNELS.find((channel) => channel.slug === slug);
+}
+
+/** The sidebar for one kind of group: every section, minus the other kind's channels. */
+export function sectionsFor(kind: GroupKind): ChannelSection[] {
+  return CHANNEL_SECTIONS.map((section) => ({
+    ...section,
+    channels: section.channels.filter((channel) => !channel.only || channel.only === kind),
+  }));
+}
+
+/** Whether a channel exists in this kind of group. */
+export function channelBelongs(channel: ChannelDef, kind: GroupKind): boolean {
+  return !channel.only || channel.only === kind;
 }
 
 // ---------------------------------------------------------------------------

@@ -4,7 +4,8 @@ import type { Metadata } from "next";
 import type { Route } from "next";
 import { requireUser } from "@/lib/auth/session";
 import { getGroupDetail, listMembers } from "@/modules/groups/service";
-import { findChannel } from "@/components/shell/channels";
+import { channelBelongs, findChannel } from "@/components/shell/channels";
+import { PayoutOrder } from "./payout-order";
 import { DEFAULT_GOVERNANCE, type GovernedAction, type GroupType } from "@/lib/db/schema/groups";
 import { contractThresholds } from "@/modules/groups/onchain-setup";
 import { ChannelIntro, DateDivider, Detail, RallMessage, VaultFootnote, longDate } from "./parts";
@@ -35,6 +36,11 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
   const user = await requireUser();
   const [group, members] = await Promise.all([getGroupDetail(groupId, user.id), listMembers(groupId, user.id)]);
   if (!group || !members) notFound();
+  // A channel from the other kind of group doesn't exist here.
+  if (!channelBelongs(channel, group.type)) notFound();
+  const rotating = group.type === "ROTATING";
+
+  if (channel.slug === "payout-order") return <PayoutOrder base={`/groups/${group.id}`} />;
 
   if (channel.slug === "about") {
     const owner = members.find((member) => member.role === "OWNER");
@@ -65,7 +71,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
             {amount} every {group.cadence === "MONTHLY" ? "month" : "week"}
           </Detail>
           <Detail label="Money out">
-            Only when the group votes. Full rules in{" "}
+            {rotating ? "Each round, to the member whose turn it is." : "Only when the group votes."} Full rules in{" "}
             <Link
               href={`/groups/${group.id}/rules` as Route}
               className="text-ink underline decoration-ink-faint underline-offset-4 hover:decoration-ink"
@@ -95,9 +101,13 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
     const thresholds = [
       // The last rule, moving to a new version of the contract, isn't listed:
       // it only comes up when an update is offered, never as everyday rules.
-      ...CONTRACT_RULES.slice(0, -1).map((label, i) => ({ label, permille: onChain[i] })),
+      ...CONTRACT_RULES.slice(0, -1)
+        .map((label, i) => ({ label, permille: onChain[i] }))
+        // Rotating savings has no spends: each round's money goes to whoever's turn it is.
+        .filter((rule) => !rotating || !rule.label.includes("spend")),
       // Admins live in Rallied, not in the contract, but changing them is still a vote.
       { label: "Adding or removing an admin", permille: saved.REMOVE_ADMIN ?? DEFAULT_GOVERNANCE.REMOVE_ADMIN },
+      ...(rotating ? [{ label: "Changing the order or swapping turns", permille: onChain[6] }] : []),
     ];
 
     return (
@@ -113,7 +123,17 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
           <Detail label="Pays">
             {amount} {due}
           </Detail>
-          <Detail label="Proposals">{group.membersCanPropose ? "Any member can ask the group to spend" : "Only admins can ask the group to spend"}</Detail>
+          {rotating ? (
+            <>
+              {/* UI only: the order method is a sample until it's stored. */}
+              <Detail label="Payout order">Random, drawn by Rallied. Changing it or swapping turns needs a vote.</Detail>
+              <Detail label="After your turn">Keep paying every round until the cycle ends</Detail>
+              <Detail label="Owing">Anyone who owes after their turn can&rsquo;t join the next cycle until it&rsquo;s settled. A friend can cover for them.</Detail>
+              <Detail label="Cycle ends">When every member has had their turn</Detail>
+            </>
+          ) : (
+            <Detail label="Proposals">{group.membersCanPropose ? "Any member can ask the group to spend" : "Only admins can ask the group to spend"}</Detail>
+          )}
           <Detail label="Votes count">When at least {group.quorumPct}% of members vote</Detail>
           <Detail label="To pass">
             <ul className="space-y-1">
@@ -159,26 +179,38 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
             </p>
           }
         >
-          <Detail label="In the pot">
-            <span className="font-semibold tabular-nums">{s.pot}</span> <span className="text-inflow tabular-nums">{s.change}</span>
-          </Detail>
+          {rotating ? (
+            <>
+              <Detail label="Round">
+                <span className="font-semibold">{s.rotating.round}</span>
+              </Detail>
+              <Detail label="Getting paid">
+                {s.payout.who} on {s.payout.when}, <span className="tabular-nums">{s.payout.amount}</span>
+              </Detail>
+            </>
+          ) : (
+            <Detail label="In the pot">
+              <span className="font-semibold tabular-nums">{s.pot}</span> <span className="text-inflow tabular-nums">{s.change}</span>
+            </Detail>
+          )}
           <Detail label="This round">
             {s.paid} of {s.members} paid · {s.collected} of {s.expected}
             <span className="text-ink-muted"> · Late: {s.late.join(", ")}</span>
           </Detail>
           <Detail label="Next due">{s.nextDue}</Detail>
-          <Detail label="Up for a vote">
-            {s.vote.amount} for the {s.vote.what}
-            <span className="text-ink-muted"> · closes {s.vote.closes}</span>
-          </Detail>
-          {group.type === "ROTATING" && (
-            <Detail label="Next payout">
-              {s.payout.who} on {s.payout.when}, {s.payout.amount}
+          {rotating ? (
+            <Detail label="Owing">
+              <span className="text-danger">{s.rotating.owing}</span>
+            </Detail>
+          ) : (
+            <Detail label="Up for a vote">
+              {s.vote.amount} for the {s.vote.what}
+              <span className="text-ink-muted"> · closes {s.vote.closes}</span>
             </Detail>
           )}
           <Detail label="Latest">
             <ul className="space-y-1">
-              {s.activity.map((item) => (
+              {(rotating ? s.rotating.activity : s.activity).map((item) => (
                 <li key={item.what}>
                   {item.what}{" "}
                   <span className={item.inflow ? "text-inflow tabular-nums" : "text-ink-muted tabular-nums"}>{item.amount}</span>
@@ -272,6 +304,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
     const onChain = contractThresholds(saved);
     return (
       <Votes
+        rotating={rotating}
         needs={{
           smallSpend: percent(onChain[0]),
           largeSpend: percent(onChain[1]),
@@ -346,7 +379,16 @@ const GENERAL_SAMPLE = {
   late: ["Femi", "Kemi"],
   nextDue: "1 December",
   vote: { what: "Airbnb deposit", amount: "USDC 400", closes: "Friday" },
-  payout: { who: "Amaka", when: "1 December", amount: "USDC 800" },
+  payout: { who: "Tunde", when: "1 December", amount: "USDC 800" },
+  rotating: {
+    round: "4 of 8",
+    owing: "Femi, 1 round after their turn",
+    activity: [
+      { what: "Tunde paid in", amount: "+100", inflow: true },
+      { what: "Kemi paid in", amount: "+100", inflow: true },
+      { what: "Payout to Amaka", amount: "−800", inflow: false },
+    ],
+  },
   activity: [
     { what: "Tunde paid in", amount: "+100", inflow: true },
     { what: "Amaka paid in", amount: "+100", inflow: true },

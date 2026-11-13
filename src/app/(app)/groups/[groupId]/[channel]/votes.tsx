@@ -27,7 +27,7 @@ export interface VoteNeeds {
   contribution: string;
 }
 
-type Kind = "SPEND" | "ROLE" | "RULE";
+type Kind = "SPEND" | "ROLE" | "RULE" | "ORDER";
 type Tab = "needs" | "open" | "closed";
 
 interface Voter {
@@ -113,25 +113,53 @@ const OPEN: Vote[] = [
   },
 ];
 
+/** Rotating savings: no spends; swaps and order changes instead. */
+const ROTATING_OPEN: Vote[] = [
+  {
+    id: "r1",
+    kind: "ORDER",
+    title: "Swap turns: Kemi and Chidi",
+    change: { before: "Kemi round 5, Chidi round 7", after: "Chidi round 5, Kemi round 7" },
+    need: "rules",
+    members: 8,
+    yes: [
+      { name: "Kemi", ai: "ChatGPT" },
+      { name: "Chidi", ai: "Grok" },
+      { name: "Ade", ai: "Claude" },
+    ],
+    no: [],
+    closes: "Thursday",
+    mine: { waiting: "Your limits say changes to the order need you." },
+  },
+  OPEN[2],
+];
+
+const ROTATING_CLOSED: Closed[] = [
+  { id: "rc1", kind: "ORDER", title: "Swap turns: Ade and Bisi", passed: true, result: "Passed 20 Aug · 7 of 8" },
+  { id: "rc2", kind: "ROLE", title: "Make Tunde an admin", passed: true, result: "Passed 3 Oct · 6 of 8" },
+];
+
 const CLOSED: Closed[] = [
   { id: "c1", kind: "SPEND", title: "Generator repair · USDC 400 to Musa", passed: true, result: "Passed 12 Nov · 6 of 8" },
   { id: "c2", kind: "ROLE", title: "Make Tunde an admin", passed: true, result: "Passed 3 Oct · 6 of 8" },
   { id: "c3", kind: "RULE", title: "What everyone pays · USDC 80 → 100", passed: false, result: "Didn't pass 1 Sep · 3 of 8" },
 ];
 
-export function Votes({ needs }: { needs: VoteNeeds }) {
+export function Votes({ needs, rotating }: { needs: VoteNeeds; rotating: boolean }) {
+  const open = rotating ? ROTATING_OPEN : OPEN;
+  const closed = rotating ? ROTATING_CLOSED : CLOSED;
   // The user's taps on votes waiting for them, kept on screen only.
   const [cast, setCast] = useState<Record<string, "yes" | "no">>({});
-  const needsYou = OPEN.filter((vote) => "waiting" in vote.mine && !cast[vote.id]);
+  const needsYou = open.filter((vote) => "waiting" in vote.mine && !cast[vote.id]);
   const [tab, setTab] = useState<Tab>(needsYou.length > 0 ? "needs" : "open");
 
   const tabs: { value: Tab; label: string; count?: number }[] = [
     ...(needsYou.length > 0 ? [{ value: "needs" as const, label: "Needs you", count: needsYou.length }] : []),
-    { value: "open", label: "Open", count: OPEN.length },
+    { value: "open", label: "Open", count: open.length },
     { value: "closed", label: "Closed" },
   ];
 
-  const shown = tab === "needs" ? needsYou : OPEN;
+  const shown = tab === "needs" ? needsYou : open;
 
   return (
     <div className="flex min-h-full flex-col">
@@ -153,7 +181,7 @@ export function Votes({ needs }: { needs: VoteNeeds }) {
                 onVote={(choice) => {
                   const next = { ...cast, [vote.id]: choice };
                   setCast(next);
-                  const left = OPEN.filter((v) => "waiting" in v.mine && !next[v.id]);
+                  const left = open.filter((v) => "waiting" in v.mine && !next[v.id]);
                   if (tab === "needs" && left.length === 0) setTab("open");
                 }}
               />
@@ -161,7 +189,7 @@ export function Votes({ needs }: { needs: VoteNeeds }) {
 
           {tab === "closed" && (
             <ul className="divide-y divide-border">
-              {CLOSED.map((vote) => (
+              {closed.map((vote) => (
                 <li key={vote.id} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 py-3 text-sm">
                   <KindTag kind={vote.kind} />
                   <span className="min-w-0 flex-1 text-ink">{vote.title}</span>
