@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth/session";
+import { getCurrentUser } from "@/lib/auth/session";
 import { listGroupsForUser } from "@/modules/groups/service";
 
 /**
@@ -12,7 +12,10 @@ import { listGroupsForUser } from "@/modules/groups/service";
  * modal open.
  */
 export default async function LandingPage({ searchParams }: PageProps<"/">) {
-  const user = await requireUser();
+  // Signed out: go and sign in, rather than throwing. The layout redirects
+  // too, but the page renders alongside it and mustn't fail first.
+  const user = await getCurrentUser();
+  if (!user) redirect("/sign-in");
   const groups = await listGroupsForUser(user.id);
   const { profile } = await searchParams;
   const keep = profile === "1" ? "?profile=1" : "";

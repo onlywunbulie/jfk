@@ -11,3 +11,4 @@ export * from "./payments";
 export * from "./contributions";
 export * from "./governance";
 export * from "./chat";
+export * from "./agents";

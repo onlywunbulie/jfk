@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { useAccount, useConnect, useConnectors, useDisconnect, useSignMessage } from "wagmi";
 import { numberToHex } from "viem";
 import { createSiweMessage } from "viem/siwe";
@@ -16,7 +17,7 @@ import { finishWalletSignInAction, startWalletSignInAction } from "./wallet-acti
  * the passkey prompt the member sees covers both. If a wallet doesn't offer
  * that, we connect first and ask for the signature separately.
  */
-export function WalletSignIn() {
+export function WalletSignIn({ returnTo = null }: { returnTo?: string | null }) {
   const router = useRouter();
   const connectors = useConnectors();
   const { connectAsync } = useConnect();
@@ -98,7 +99,8 @@ export function WalletSignIn() {
         return;
       }
       finished = true;
-      router.replace(outcome.next);
+      // A returning user who came to approve an AI app goes straight back there.
+      router.replace(outcome.next === "/" && returnTo ? (returnTo as Route) : outcome.next);
       router.refresh();
     } catch (cause) {
       // Kept for whoever debugs it; the dev server copies this into its log.

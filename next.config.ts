@@ -17,7 +17,7 @@ const nextConfig: NextConfig = {
    * the app can be opened on a phone. Without it Next refuses `/_next/*` to
    * any origin but localhost and the page arrives unhydrated.
    */
-  allowedDevOrigins: ["*.trycloudflare.com"],
+  allowedDevOrigins: ["*.trycloudflare.com", "*.ngrok-free.dev", "*.ngrok-free.app", "*.ts.net", "**.ts.net", "bulie-pc.tail2607d7.ts.net"],
 
   experimental: {
     /**

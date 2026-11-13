@@ -85,6 +85,13 @@
       "when": 1794419440762,
       "tag": "0011_steep_zaladane",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794577169585,
+      "tag": "0012_complete_vulcan",
+      "breakpoints": true
     }
   ]
 }
