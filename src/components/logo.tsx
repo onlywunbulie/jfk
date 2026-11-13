@@ -1,9 +1,9 @@
 import { cn } from "@/lib/cn";
 
 /**
- * The mark: three interlocking rings — the homeboys, and the pooled fund they
- * hold between them. Drawn rather than imported so it stays crisp at any size
- * and inherits the accent token.
+ * The mark: an ice-blue circle with an uppercase R, the same face Rall wears in
+ * every group. Drawn rather than imported so it stays crisp at any size and
+ * follows the accent token.
  */
 export function Logo({
   className,
@@ -14,20 +14,15 @@ export function Logo({
 }) {
   return (
     <div className={cn("flex items-center gap-3", className)}>
-      <svg
-        viewBox="0 0 40 40"
-        className="size-9 shrink-0"
+      <span
         role="img"
-        aria-label="JFK"
+        aria-label="Rallied"
+        className="grid size-9 shrink-0 place-items-center rounded-full bg-accent text-lg font-bold text-accent-ink"
       >
-        <circle cx="14" cy="14" r="9" className="fill-accent/70" />
-        <circle cx="26" cy="14" r="9" className="fill-accent/40" />
-        <circle cx="20" cy="25" r="9" className="fill-accent" />
-      </svg>
+        <span aria-hidden="true">R</span>
+      </span>
 
-      {showWordmark && (
-        <span className="text-xl font-semibold tracking-tight text-ink">JFK</span>
-      )}
+      {showWordmark && <span className="text-xl font-semibold tracking-tight text-ink">Rallied</span>}
     </div>
   );
 }

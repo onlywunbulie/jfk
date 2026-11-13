@@ -31,7 +31,7 @@ const serverEnvSchema = z.object({
     .string()
     .min(32, "SESSION_SECRET must be at least 32 characters"),
   RESEND_API_KEY: z.string().optional().default(""),
-  EMAIL_FROM: z.string().default("JFK <noreply@jfk.local>"),
+  EMAIL_FROM: z.string().default("Rallied <noreply@rallied.local>"),
   PAYSTACK_SECRET_KEY: z.string().optional().default(""),
   /** Base RPC endpoint. The public one is rate-limited but fine for development. */
   BASE_RPC_URL: z.url().optional(),

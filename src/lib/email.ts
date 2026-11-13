@@ -16,7 +16,7 @@ export async function sendLoginCodeEmail(
 ): Promise<DeliveryResult> {
   if (isEmailDisabled()) {
     console.info(
-      `\n  ┌─ JFK sign-in code ─────────────────\n` +
+      `\n  ┌─ Rallied sign-in code ─────────────\n` +
         `  │  ${to}\n` +
         `  │  ${code}\n` +
         `  └────────────────────────────────────\n`,
@@ -33,9 +33,9 @@ export async function sendLoginCodeEmail(
     body: JSON.stringify({
       from: env().EMAIL_FROM,
       to,
-      subject: `${code} is your JFK sign-in code`,
+      subject: `${code} is your Rallied sign-in code`,
       text:
-        `Your JFK sign-in code is ${code}.\n\n` +
+        `Your Rallied sign-in code is ${code}.\n\n` +
         `It expires in 10 minutes. If you didn't ask for it, ignore this email — ` +
         `nobody can sign in without it.`,
     }),

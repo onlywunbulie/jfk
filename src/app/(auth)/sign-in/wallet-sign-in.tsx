@@ -23,14 +23,16 @@ export function WalletSignIn() {
   const { signMessageAsync } = useSignMessage();
   const { isConnected } = useAccount();
   const { disconnect } = useDisconnect();
-  const [busy, setBusy] = useState(false);
+  // idle → waiting (the Coinbase window is open) → signing (checking the
+  // signature) → off into the app; or failed, with a plain reason.
+  const [stage, setStage] = useState<"idle" | "waiting" | "signing" | "failed">("idle");
   const [error, setError] = useState<string | null>(null);
   // Fetched ahead of the tap. Browsers only allow a pop-up that opens straight
   // from a tap; a server round trip in between gets the Coinbase window
   // blocked. A nonce is single-use, so a fresh one follows every attempt.
   const [nonce, setNonce] = useState<string | null>(null);
 
-  // Being on this page means you're signed out of JFK. A wallet still
+  // Being on this page means you're signed out of Rallied. A wallet still
   // connected from an earlier, unfinished attempt would make the next connect
   // fail with "already connected", so let it go first.
   useEffect(() => {
@@ -52,10 +54,12 @@ export function WalletSignIn() {
     // The nonce normally arrives within a moment of the page loading.
     if (!nonce) {
       setError("One moment, still getting ready. Tap again.");
+      setStage("failed");
       return;
     }
-    setBusy(true);
+    setStage("waiting");
     setError(null);
+    let finished = false;
     try {
       const connector = connectors[0];
 
@@ -81,41 +85,54 @@ export function WalletSignIn() {
           nonce,
           uri: window.location.origin,
           version: "1",
-          statement: "Sign in to JFK.",
+          statement: "Sign in to Rallied.",
         });
         proof = { message, signature: await signMessageAsync({ message, account: account.address }) };
       }
 
+      setStage("signing");
       const outcome = await finishWalletSignInAction(proof);
       if (!outcome.ok) {
         setError(outcome.error);
+        setStage("failed");
         return;
       }
+      finished = true;
       router.replace(outcome.next);
       router.refresh();
     } catch (cause) {
       // Kept for whoever debugs it; the dev server copies this into its log.
       console.error("Wallet sign-in failed", cause);
       setError(describeWalletError(cause));
+      setStage("failed");
     } finally {
-      setBusy(false);
       setNonce(null);
+      // On success the button keeps saying "Signing you in…" until the app opens.
+      if (!finished) setStage((current) => (current === "signing" || current === "waiting" ? "failed" : current));
     }
   }
 
+  const busy = stage === "waiting" || stage === "signing";
+
   return (
-    <div className="space-y-3">
+    <div>
       <Button type="button" size="lg" fullWidth loading={busy} onClick={signIn}>
-        Continue with Base
+        {stage === "waiting"
+          ? "Confirm in the Coinbase window…"
+          : stage === "signing"
+            ? "Signing you in…"
+            : stage === "failed"
+              ? "Try again"
+              : "Continue with Base"}
       </Button>
-      <p className="text-center text-xs leading-relaxed text-ink-faint">
-        Unlock with whatever unlocks your device: Face ID, a fingerprint, a PIN
-        or your phone. No password, and no recovery phrase to write down. A
-        Coinbase window opens to confirm.
-      </p>
-      {error && (
-        <p role="alert" className="text-center text-sm text-danger">
+
+      {stage === "failed" && error ? (
+        <p role="alert" className="mt-3 rounded-[var(--radius-control)] bg-danger-soft px-4 py-3 text-sm text-danger">
           {error}
+        </p>
+      ) : (
+        <p className="mt-3 text-sm text-ink-faint">
+          {stage === "waiting" ? "A Coinbase window is open. Use Face ID or your fingerprint there." : "Face ID or fingerprint. No password."}
         </p>
       )}
     </div>
@@ -125,7 +142,7 @@ export function WalletSignIn() {
 /** Wallet errors are written for developers; members get one plain line. */
 function describeWalletError(cause: unknown): string {
   const text = cause instanceof Error ? `${cause.name} ${cause.message}` : String(cause);
-  if (/reject|denied|cancel/i.test(text)) return "You closed the confirmation. Tap the button to try again.";
-  if (/popup|blocked/i.test(text)) return "Your browser blocked the confirmation window. Allow pop-ups for this site and try again.";
-  return "Something went wrong connecting your wallet. Try again.";
+  if (/reject|denied|cancel/i.test(text)) return "You closed the Coinbase window before confirming.";
+  if (/popup|blocked/i.test(text)) return "Your browser blocked the Coinbase window. Allow pop-ups for this site, then try again.";
+  return "Couldn't reach your wallet. Your account is safe.";
 }

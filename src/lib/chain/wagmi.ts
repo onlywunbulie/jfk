@@ -12,7 +12,7 @@ import { chain } from "./addresses";
 export const wagmiConfig = createConfig({
   chains: [chain],
   // Telemetry off: members' activity isn't reported to Coinbase's analytics.
-  connectors: [baseAccount({ appName: "JFK", preference: { telemetry: false } })],
+  connectors: [baseAccount({ appName: "Rallied", preference: { telemetry: false } })],
   transports: { [chain.id]: http() },
   ssr: true,
 });

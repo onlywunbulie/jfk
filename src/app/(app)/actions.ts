@@ -9,7 +9,7 @@ export async function signOutAction(): Promise<void> {
   redirect("/sign-in");
 }
 
-export type WelcomeState = { error?: string };
+export type WelcomeState = { error?: string; saved?: boolean };
 
 /** The first thing a new member does: say what the group should call them. */
 export async function setNameAction(_prev: WelcomeState, formData: FormData): Promise<WelcomeState> {
@@ -20,5 +20,5 @@ export async function setNameAction(_prev: WelcomeState, formData: FormData): Pr
       error: result.reason === "empty" ? "Tell us what to call you." : "Keep it under 40 characters.",
     };
   }
-  redirect("/");
+  return { saved: true };
 }

@@ -263,7 +263,7 @@ function Rail({
   );
 }
 
-/** A 43×41 square (the wireframe's 48px less 15%). Selected gets a 2px orange outline. */
+/** A 43×41 square (the wireframe's 48px less 15%). Selected gets a 2px ice-blue outline. */
 function RailItem({
   href,
   label,
@@ -369,7 +369,7 @@ function ChannelLink({ href, active, children }: { href: Route; active: boolean;
           active ? "text-ink" : "text-ink-muted hover:bg-raised",
         )}
       >
-        {/* The selected channel's tag: a small orange bar at the row's left edge. */}
+        {/* The selected channel's tag: a small ice-blue bar at the row's left edge. */}
         <span
           aria-hidden="true"
           className={cn(

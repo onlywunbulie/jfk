@@ -7,10 +7,10 @@ type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
 
 /**
- * Orange is the action colour, and the brand.
+ * Ice blue is the action colour, and the brand.
  *
- * One clear first choice per screen: the orange button. Everything else is a
- * quieter grey. A disabled button looks clearly off: grey, not faded orange.
+ * One clear first choice per screen: the blue button. Everything else is a
+ * quieter grey. A disabled button looks clearly off: grey, not faded blue.
  */
 const VARIANTS: Record<Variant, string> = {
   primary:

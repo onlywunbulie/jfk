@@ -3,16 +3,17 @@ import { DM_Sans, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { WalletProvider } from "@/components/wallet-provider";
 
-const dmSans = DM_Sans({ variable: "--font-dm-sans", subsets: ["latin"] });const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+const dmSans = DM_Sans({ variable: "--font-dm-sans", subsets: ["latin"] });
+const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: {
-    default: "JFK",
-    template: "%s · JFK",
+    default: "Rallied",
+    template: "%s · Rallied",
   },
   description: "Contribute, decide and build together.",
-  applicationName: "JFK",
-  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "JFK" },
+  applicationName: "Rallied",
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Rallied" },
 };
 
 export const viewport: Viewport = {

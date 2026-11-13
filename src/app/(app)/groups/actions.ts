@@ -324,7 +324,7 @@ export async function startOnChainAction(
     const error = {
       not_found: "That group doesn't exist.",
       not_owner: "Only the person who created the group can start it.",
-      not_usdc: "This group was made before JFK moved on-chain, so it can't start there.",
+      not_usdc: "This group was made before Rallied moved on-chain, so it can't start there.",
       already_started: "This group has already started.",
       members_without_wallets: "Everyone needs to sign in with Base before the group can start.",
       no_relayer: "The app isn't set up to pay network fees yet. Add RELAYER_PRIVATE_KEY to .env.local.",

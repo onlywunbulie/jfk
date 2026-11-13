@@ -1,21 +1,22 @@
 @import "tailwindcss";
 
 /**
- * JFK design tokens: black and orange, Discord-style (decided 11 November 2026).
+ * Rallied design tokens: black and ice blue, Discord-style (black since
+ * 11 November 2026; ice blue replaced orange on 13 November 2026).
  *
  * Dark-only by decision: one deep, quiet ground lets money and people be the
  * brightest things on screen.
  *
- * Orange is JFK. It marks what to do (primary buttons), what's yours (the
- * selected group and channel) and what's waiting on you (badges). Because it
- * means all of that, it's never decoration.
+ * Ice blue is Rallied. It marks what to do (primary buttons), what's yours
+ * (the selected group and channel) and Rall itself. Because it means all of
+ * that, it's never decoration. Where it fills a shape it has depth: lit from
+ * the top, a thin bright edge, and a faint glow (see `.bg-accent` below).
  *
- * Red is only for "something went wrong", so it never competes with orange.
- * Everything else is semantic money state.
+ * Red is only for "something went wrong". Everything else is semantic money
+ * state.
  *
- * Surfaces are solid. The earlier glass look was dropped entirely: no blur,
- * no translucency, no glow. Separation comes from three steps of grey and a
- * faint line.
+ * Surfaces are solid: no blur, no translucency. Separation comes from three
+ * steps of grey and a faint line.
  */
 @theme {
   /* Ground, darkest to lightest. The rail is the darkest thing on screen,
@@ -34,24 +35,28 @@
   --color-ink-muted: #a1a1aa;
   --color-ink-faint: #6b6b74;
 
-  /* Brand and action. Black text sits on it: 8:1 contrast. */
-  --color-accent: #ff7a1a;
-  --color-accent-hover: #ff8f3d;
+  /* Brand and action: ice blue. Black text sits on it: 12:1 contrast.
+     `accent-light` and `accent-deep` are the top and bottom of its gradient. */
+  --color-accent: #a5c8ff;
+  --color-accent-hover: #b4d4ff;
+  --color-accent-light: #c4dbff;
+  --color-accent-deep: #7fa9f5;
   --color-accent-ink: #0b0b0c;
-  --color-accent-soft: #2b1606;
+  --color-accent-soft: #17233a;
 
-  /* Semantic money states. `pending` leans yellow so it can't be mistaken
-     for the brand orange. */
+  /* Semantic money states. `held` is violet so it can't be mistaken for the
+     brand blue. */
   --color-inflow: #34d399;
   --color-inflow-soft: #0f2a20;
   --color-pending: #facc15;
   --color-pending-soft: #2a2408;
   --color-danger: #f05252;
   --color-danger-soft: #2c1414;
-  --color-held: #60a5fa;
-  --color-held-soft: #12203a;
+  --color-held: #a78bfa;
+  --color-held-soft: #221a3a;
 
-  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
   /* Corner scale: 10 buttons and inputs, 16 cards, 20 big cards, 28 sheets. */
   --radius-control: 0.625rem;
@@ -144,6 +149,32 @@
 }
 
 @layer utilities {
+  /* Ice blue with depth, wherever it fills a shape (buttons, Rall, the logo,
+     the active channel's tag, progress): lit from the top, a thin bright edge
+     along the top, a slightly deeper bottom, and a faint glow around it. The
+     glow is kept low so the colour lifts off the dark without shining. Hover
+     brightens it a touch instead of swapping colours. */
+  .bg-accent {
+    background-image: linear-gradient(
+      180deg,
+      var(--color-accent-light) 0%,
+      var(--color-accent) 55%,
+      var(--color-accent-deep) 100%
+    );
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.5),
+      inset 0 -1px 0 rgb(0 0 0 / 0.12),
+      0 4px 14px -8px rgb(165 200 255 / 0.4);
+  }
+  .bg-accent:is(:hover, :focus-visible):not(:disabled) {
+    filter: brightness(1.05);
+  }
+  /* A disabled button looks clearly off: plain grey, no depth. */
+  .bg-accent:disabled {
+    background-image: none;
+    box-shadow: none;
+  }
+
   /* Money in flight. Yellow and breathing: never mistakable for settled. */
   @keyframes jfk-pulse {
     0%,

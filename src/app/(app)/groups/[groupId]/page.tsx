@@ -318,7 +318,7 @@ export default async function GroupPage({
             </ul>
             <p className="mt-4 text-xs leading-relaxed text-ink-faint">
               Missed contributions stay on the record. How the group handles
-              them is the group&rsquo;s call — JFK doesn&rsquo;t apply
+              them is the group&rsquo;s call — Rallied doesn&rsquo;t apply
               penalties.
             </p>
           </Card>

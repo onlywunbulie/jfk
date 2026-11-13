@@ -190,7 +190,7 @@ export function buildScript(answers: Answers): Question[] {
       id: "name",
       kind: "text",
       ask: "Let's set up your group. What do you want to call it?",
-      placeholder: "JFK Empire",
+      placeholder: "Detty December",
       maxLength: 60,
       normalise: (raw) => raw.trim(),
       validate: (value) =>
