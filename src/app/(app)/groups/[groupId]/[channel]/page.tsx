@@ -11,6 +11,8 @@ import { ChannelIntro, DateDivider, Detail, RallMessage, VaultFootnote, longDate
 import { Transactions } from "./transactions";
 import { ProposeChannel } from "./propose";
 import { ManageRoles, type Assistant, type Person } from "./manage-roles";
+import { EditRules } from "./edit-rules";
+import { Votes } from "./votes";
 
 export async function generateMetadata({
   params,
@@ -91,7 +93,9 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
     ) as Partial<Record<GovernedAction, number>>;
     const onChain = contractThresholds(saved);
     const thresholds = [
-      ...CONTRACT_RULES.map((label, i) => ({ label, permille: onChain[i] })),
+      // The last rule, moving to a new version of the contract, isn't listed:
+      // it only comes up when an update is offered, never as everyday rules.
+      ...CONTRACT_RULES.slice(0, -1).map((label, i) => ({ label, permille: onChain[i] })),
       // Admins live in Rallied, not in the contract, but changing them is still a vote.
       { label: "Adding or removing an admin", permille: saved.REMOVE_ADMIN ?? DEFAULT_GOVERNANCE.REMOVE_ADMIN },
     ];
@@ -233,6 +237,8 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
           people={people}
           startedBy={owner?.displayName ?? "Unknown"}
           startedOn={longDate(group.createdAt)}
+          // UI only: matches the one sample role change in #votes.
+          voting={1}
           rules={{
             addMember: percent(onChain[2]),
             removeMember: percent(onChain[3]),
@@ -240,6 +246,40 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
             admin: percent(saved.REMOVE_ADMIN ?? DEFAULT_GOVERNANCE.REMOVE_ADMIN),
           }}
         />
+    );
+  }
+
+  if (channel.slug === "edit-rules") {
+    const saved = Object.fromEntries(
+      group.governance.map((rule) => [rule.action, rule.thresholdPermille]),
+    ) as Partial<Record<GovernedAction, number>>;
+    const onChain = contractThresholds(saved);
+    // The contract's CHANGE_CONTRIBUTION and CHANGE_RULES thresholds.
+    return (
+      <EditRules
+        base={`/groups/${group.id}`}
+        needs={{ contribution: percent(onChain[5]), rules: percent(onChain[6]) }}
+        // UI only: matches the one sample rule change in #votes.
+        voting={1}
+      />
+    );
+  }
+
+  if (channel.slug === "votes") {
+    const saved = Object.fromEntries(
+      group.governance.map((rule) => [rule.action, rule.thresholdPermille]),
+    ) as Partial<Record<GovernedAction, number>>;
+    const onChain = contractThresholds(saved);
+    return (
+      <Votes
+        needs={{
+          smallSpend: percent(onChain[0]),
+          largeSpend: percent(onChain[1]),
+          contribution: percent(onChain[5]),
+          rules: percent(onChain[6]),
+          admin: percent(saved.REMOVE_ADMIN ?? DEFAULT_GOVERNANCE.REMOVE_ADMIN),
+        }}
+      />
     );
   }
 

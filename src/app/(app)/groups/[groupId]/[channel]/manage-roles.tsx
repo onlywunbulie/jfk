@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { AiLogo } from "@/components/ai-logos";
+import { PinnedTabs } from "./pinned-tabs";
 import { ChannelIntro, Detail, RallMessage } from "./parts";
 
 /**
@@ -36,12 +37,7 @@ export interface RoleRules {
   replaceWallet: string;
 }
 
-type Tab = "people" | "waiting" | "voting" | "history";
-
-const VOTING = [
-  { what: "Remove Femi as admin", detail: "4 of 8 so far · closes Friday" },
-  { what: "Replace Chidi's lost wallet", detail: "2 of 8 so far · closes Sunday" },
-];
+type Tab = "people" | "waiting" | "history";
 
 const PAST = [
   { what: "Tunde made an admin", detail: "Passed 3 Oct · 6 of 8" },
@@ -54,12 +50,15 @@ export function ManageRoles({
   rules,
   startedBy,
   startedOn,
+  voting,
 }: {
   base: string;
   people: Person[];
   rules: RoleRules;
   startedBy: string;
   startedOn: string;
+  /** Role changes being voted on, which live in #votes. */
+  voting: number;
 }) {
   const [tab, setTab] = useState<Tab>("people");
   const [draftOpen, setDraftOpen] = useState(true);
@@ -68,39 +67,27 @@ export function ManageRoles({
   const tabs: { value: Tab; label: string; count?: number }[] = [
     { value: "people", label: "People", count: people.length },
     { value: "waiting", label: "Waiting", count: draftOpen ? 1 : 0 },
-    { value: "voting", label: "Voting", count: VOTING.length },
     { value: "history", label: "History" },
   ];
 
   return (
     <div className="flex min-h-full flex-col">
-      {/* Pinned flush with the main card's top edge, like #transactions. */}
-      <div className="sticky -top-6 z-10 -mx-4 -mt-6 border-b border-border bg-canvas px-4 py-3 lg:-mx-8 lg:px-8">
-        <div role="tablist" aria-label="Manage roles" className="flex flex-wrap gap-5">
-          {tabs.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="tab"
-              aria-selected={tab === option.value}
-              onClick={() => setTab(option.value)}
-              className={cn(
-                "press py-1 text-sm transition-colors",
-                tab === option.value ? "text-ink" : "text-ink-muted hover:text-ink",
-              )}
-            >
-              {/* Only the label is underlined; the count sits beside it. */}
-              <span className={cn(tab === option.value && "underline decoration-ink decoration-2 underline-offset-[6px]")}>
-                {option.label}
-              </span>
-              {option.count ? <span className="ml-1.5 text-ink-faint tabular-nums">{option.count}</span> : null}
-            </button>
-          ))}
-        </div>
-      </div>
+      <PinnedTabs label="Manage roles" tabs={tabs} active={tab} onChange={setTab} />
 
       <div role="tabpanel" className="pt-6">
         <ChannelIntro title="Manage roles">Who&rsquo;s in the group and who looks after it. Every change needs a vote.</ChannelIntro>
+        {voting > 0 && (
+          <p className="mt-4 text-sm text-ink-muted">
+            {voting} role {voting === 1 ? "change is" : "changes are"} being voted on in{" "}
+            <Link
+              href={`${base}/votes` as Route}
+              className="text-ink underline decoration-ink-faint underline-offset-4 hover:decoration-ink"
+            >
+              #votes
+            </Link>
+            .
+          </p>
+        )}
 
         {tab === "people" && (
           <>
@@ -206,14 +193,6 @@ export function ManageRoles({
           ) : (
             <p className="mt-6 text-sm text-ink-muted">No drafts. When Claude prepares a change, it appears here.</p>
           ))}
-
-        {tab === "voting" && (
-          <ul className="mt-6 max-w-xl space-y-1">
-            {VOTING.map((row) => (
-              <ChangeRow key={row.what} base={base} what={row.what} detail={row.detail} status="Voting" tone="pending" />
-            ))}
-          </ul>
-        )}
 
         {tab === "history" && (
           <ul className="mt-6 max-w-xl space-y-1">
