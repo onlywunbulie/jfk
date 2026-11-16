@@ -41,7 +41,7 @@ contract DemoGroup is Script {
 
         uint16[9] memory thresholds = [uint16(500), 667, 500, 667, 750, 667, 750, 800, 750];
         bytes memory setupData = abi.encodeCall(
-            JfkSetup.setupForGroup, (module, IERC20(USDC), ONE_DOLLAR, thresholds, uint8(60), uint32(1 hours))
+            JfkSetup.setupForGroup, (module, IERC20(USDC), ONE_DOLLAR, thresholds, uint8(60), uint32(1 hours), uint32(25 days))
         );
         bytes memory initializer = abi.encodeCall(
             Safe.setup, (owners, 1, address(setup), setupData, address(0), address(0), 0, payable(address(0)))

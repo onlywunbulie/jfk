@@ -28,9 +28,18 @@ import {ISafe} from "./interfaces/ISafe.sol";
  * submitted them in a batch; whoever submitted could leave out the "no"
  * votes after the deadline. Counting on-chain removes that.)
  *
- * Phase 1 scope: rules, proposals, voting, membership and contributions paid
- * by the member. Rotating payouts, cover-a-friend and the agent role come in
- * later phases, as additions to this contract before it is audited.
+ * Version 2 adds helpers and collected dues. A member may name one helper:
+ * a key that acts for them (Rallied holds it, on behalf of the member's AI),
+ * with powers the member picks (propose, vote, collect dues) and an expiry.
+ * A helper counts exactly as its member, can never move money itself, and is
+ * wiped the moment its member leaves, is removed or changes wallet. A group
+ * can vote "every vote needs a human", which turns helper votes off.
+ *
+ * Collected dues: a member's helper can pull exactly the group's
+ * contribution from the member (through the member's own capped approval)
+ * into the Safe, at most once per the group's payment gap.
+ *
+ * Still to come before an audit: rotating payouts and cover-a-friend.
  */
 contract JfkModule is ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -54,6 +63,21 @@ contract JfkModule is ReentrancyGuard {
 
     /// Safe's linked-list head for owners and modules.
     address internal constant SENTINEL = address(0x1);
+
+    string public constant VERSION = "2";
+
+    /// What a helper may do for its member. Combine with bitwise or.
+    uint8 public constant POWER_PROPOSE = 1;
+    uint8 public constant POWER_VOTE = 2;
+    uint8 public constant POWER_COLLECT = 4;
+    uint8 internal constant ALL_POWERS = 7;
+
+    /// A helper always expires, and never more than a year out.
+    uint64 public constant MAX_HELPER_LIFETIME = 366 days;
+
+    /// The least and most time that must pass between two collected payments.
+    uint32 public constant MIN_PAY_GAP = 1 days;
+    uint32 public constant MAX_PAY_GAP = 31 days;
 
     // -----------------------------------------------------------------------
     // Types
@@ -109,8 +133,19 @@ contract JfkModule is ReentrancyGuard {
         uint32 votingPeriod;
         uint8 quorumPct;
         bool closed;
+        /// "Every vote needs a human": helpers may not vote. Changed by CHANGE_RULES.
+        bool humanVotesOnly;
+        /// The least time between two collected payments from one member.
+        uint32 payGap;
         uint16[RULE_COUNT] thresholds;
         uint256 proposalCount;
+    }
+
+    /// A key that acts for one member in one group, within its powers, until it expires.
+    struct Helper {
+        address key;
+        uint8 powers;
+        uint64 expiresAt;
     }
 
     struct Proposal {
@@ -143,6 +178,12 @@ contract JfkModule is ReentrancyGuard {
 
     mapping(address safe => mapping(uint256 id => mapping(address => Choice))) public voteOf;
 
+    /// Each member's helper in each group, if they've named one.
+    mapping(address safe => mapping(address member => Helper)) internal _helpers;
+
+    /// When each member last paid in, by hand or collected. Spaces out collections.
+    mapping(address safe => mapping(address member => uint64)) public lastPaidAt;
+
     // -----------------------------------------------------------------------
     // Events
     // -----------------------------------------------------------------------
@@ -168,6 +209,11 @@ contract JfkModule is ReentrancyGuard {
     event RulesChanged(address indexed safe);
     event GroupClosed(address indexed safe, uint256 distributed);
     event ModuleMigrated(address indexed safe, address indexed newModule);
+    event HelperSet(address indexed safe, address indexed member, address indexed key, uint8 powers, uint64 expiresAt);
+    event HelperRevoked(address indexed safe, address indexed member);
+    /// A helper acted: so a group can always tell a member's own act from their helper's.
+    event HelperActed(address indexed safe, address indexed member, address indexed key, uint8 power, uint256 proposalId);
+    event Collected(address indexed safe, address indexed member, uint256 amount);
 
     // -----------------------------------------------------------------------
     // Errors
@@ -195,6 +241,12 @@ contract JfkModule is ReentrancyGuard {
     error InsufficientFunds();
     error SafeCallFailed();
     error TransferMismatch();
+    error InvalidHelper();
+    error NotHelper();
+    error HelperExpired();
+    error HelperLacksPower();
+    error HumanVotesOnly();
+    error TooSoon();
 
     // -----------------------------------------------------------------------
     // Registration
@@ -209,7 +261,8 @@ contract JfkModule is ReentrancyGuard {
         uint256 contribution,
         uint16[RULE_COUNT] calldata thresholds,
         uint8 quorumPct,
-        uint32 votingPeriod
+        uint32 votingPeriod,
+        uint32 payGap
     ) external {
         address safe = msg.sender;
         Group storage group = _groups[safe];
@@ -222,12 +275,14 @@ contract JfkModule is ReentrancyGuard {
         if (ISafe(safe).getThreshold() != members) revert ThresholdMustBeAllMembers();
         if (contribution == 0) revert InvalidAmount();
         _validateRules(thresholds, quorumPct, votingPeriod);
+        if (payGap < MIN_PAY_GAP || payGap > MAX_PAY_GAP) revert InvalidRules();
 
         group.token = token;
         group.contribution = contribution;
         group.thresholds = thresholds;
         group.quorumPct = quorumPct;
         group.votingPeriod = votingPeriod;
+        group.payGap = payGap;
 
         emit GroupRegistered(safe, address(token), contribution);
     }
@@ -237,23 +292,48 @@ contract JfkModule is ReentrancyGuard {
     // -----------------------------------------------------------------------
 
     /**
-     * A member pays this cycle's contribution into the Safe. The member must
-     * have approved this module to take it. (Scheduled collection by the
-     * group's agent arrives in a later phase.)
+     * A member pays this cycle's contribution into the Safe themselves. The
+     * member must have approved this module to take it. A member may always
+     * pay by hand, even early: it's their own money and their own choice.
      */
     function contribute(address safe) external nonReentrant {
         Group storage group = _liveGroup(safe);
         if (!ISafe(safe).isOwner(msg.sender)) revert NotAMember();
+        _takeContribution(safe, group, msg.sender);
+    }
 
-        uint256 amount = group.contribution;
+    /**
+     * A member's helper collects their dues: exactly the group's
+     * contribution, from the member, into the Safe, through the member's own
+     * approval. Only the member's helper with the collect power may do it, so
+     * nobody else can charge them, and only once the group's payment gap has
+     * passed since they last paid (by hand or collected), so never twice for
+     * the same period.
+     */
+    function collect(address safe, address member) external nonReentrant {
+        Group storage group = _liveGroup(safe);
+        if (!ISafe(safe).isOwner(member)) revert NotAMember();
+        _requireHelper(safe, member, POWER_COLLECT);
+
+        uint64 last = lastPaidAt[safe][member];
+        if (last != 0 && block.timestamp < uint256(last) + group.payGap) revert TooSoon();
+
+        uint256 amount = _takeContribution(safe, group, member);
+        emit Collected(safe, member, amount);
+        emit HelperActed(safe, member, msg.sender, POWER_COLLECT, 0);
+    }
+
+    function _takeContribution(address safe, Group storage group, address member) internal returns (uint256 amount) {
+        amount = group.contribution;
         uint256 before = group.token.balanceOf(safe);
-        group.token.safeTransferFrom(msg.sender, safe, amount);
+        group.token.safeTransferFrom(member, safe, amount);
         // Refuses tokens that skim a fee on transfer: the books must match
         // what actually arrived.
         if (group.token.balanceOf(safe) - before != amount) revert TransferMismatch();
 
-        paidIn[safe][msg.sender] += amount;
-        emit Contributed(safe, msg.sender, amount);
+        paidIn[safe][member] += amount;
+        lastPaidAt[safe][member] = uint64(block.timestamp);
+        emit Contributed(safe, member, amount);
     }
 
     // -----------------------------------------------------------------------
@@ -266,8 +346,25 @@ contract JfkModule is ReentrancyGuard {
      * rules or the membership mid-vote cannot move the goalposts.
      */
     function propose(address safe, Action action, bytes calldata payload) external returns (uint256 id) {
+        return _propose(safe, msg.sender, action, payload);
+    }
+
+    /// A member's helper opens a proposal for them. It counts as the member's.
+    function proposeFor(address safe, address member, Action action, bytes calldata payload)
+        external
+        returns (uint256 id)
+    {
+        _requireHelper(safe, member, POWER_PROPOSE);
+        id = _propose(safe, member, action, payload);
+        emit HelperActed(safe, member, msg.sender, POWER_PROPOSE, id);
+    }
+
+    function _propose(address safe, address proposer, Action action, bytes calldata payload)
+        internal
+        returns (uint256 id)
+    {
         Group storage group = _liveGroup(safe);
-        if (!ISafe(safe).isOwner(msg.sender)) revert NotAMember();
+        if (!ISafe(safe).isOwner(proposer)) revert NotAMember();
 
         Rule rule = _validateProposal(safe, group, action, payload);
 
@@ -278,7 +375,7 @@ contract JfkModule is ReentrancyGuard {
         proposal.thresholdPermille = group.thresholds[uint256(rule)];
         proposal.quorumPct = group.quorumPct;
         proposal.deadline = uint64(block.timestamp + group.votingPeriod);
-        proposal.proposer = msg.sender;
+        proposal.proposer = proposer;
         proposal.payload = payload;
 
         address[] memory owners = ISafe(safe).getOwners();
@@ -287,26 +384,91 @@ contract JfkModule is ReentrancyGuard {
         }
         proposal.eligible = uint32(owners.length);
 
-        emit ProposalOpened(safe, id, action, msg.sender, proposal.thresholdPermille, proposal.deadline);
+        emit ProposalOpened(safe, id, action, proposer, proposal.thresholdPermille, proposal.deadline);
     }
 
     /// One member, one vote, cast before the deadline. Votes can't be changed.
     function vote(address safe, uint256 id, Choice choice) external {
+        _vote(safe, id, msg.sender, choice);
+    }
+
+    /**
+     * A member's helper casts the member's vote. It is the member's one vote,
+     * not an extra one: if either has voted, the other can't. Refused when the
+     * group has voted that every vote needs a human.
+     */
+    function voteFor(address safe, address member, uint256 id, Choice choice) external {
+        if (_groups[safe].humanVotesOnly) revert HumanVotesOnly();
+        _requireHelper(safe, member, POWER_VOTE);
+        _vote(safe, id, member, choice);
+        emit HelperActed(safe, member, msg.sender, POWER_VOTE, id);
+    }
+
+    function _vote(address safe, uint256 id, address voter, Choice choice) internal {
         Proposal storage proposal = _openProposal(safe, id);
         if (block.timestamp >= proposal.deadline) revert VotingClosed();
         if (choice == Choice.NONE) revert InvalidChoice();
-        if (!eligibleVoter[safe][id][msg.sender]) revert NotEligible();
+        if (!eligibleVoter[safe][id][voter]) revert NotEligible();
         // Someone removed since the vote opened keeps their slot in the count
         // but loses their voice. That can only make passing harder.
-        if (!ISafe(safe).isOwner(msg.sender)) revert NotAMember();
-        if (voteOf[safe][id][msg.sender] != Choice.NONE) revert AlreadyVoted();
+        if (!ISafe(safe).isOwner(voter)) revert NotAMember();
+        if (voteOf[safe][id][voter] != Choice.NONE) revert AlreadyVoted();
 
-        voteOf[safe][id][msg.sender] = choice;
+        voteOf[safe][id][voter] = choice;
         if (choice == Choice.YES) proposal.yes++;
         else if (choice == Choice.NO) proposal.no++;
         else proposal.abstain++;
 
-        emit Voted(safe, id, msg.sender, choice);
+        emit Voted(safe, id, voter, choice);
+    }
+
+    // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
+
+    /**
+     * Name (or replace) your helper in a group: the key that may act for you,
+     * what it may do, and when it stops. Only a member can name their own
+     * helper; a helper can never name one. It always expires, within a year.
+     */
+    function setHelper(address safe, address key, uint8 powers, uint64 expiresAt) external {
+        _liveGroup(safe);
+        if (!ISafe(safe).isOwner(msg.sender)) revert NotAMember();
+        if (key == address(0) || key == msg.sender || key == safe || key == address(this) || key == SENTINEL) {
+            revert InvalidHelper();
+        }
+        if (powers == 0 || powers & ~ALL_POWERS != 0) revert InvalidHelper();
+        if (expiresAt <= block.timestamp || expiresAt > block.timestamp + MAX_HELPER_LIFETIME) revert InvalidHelper();
+
+        _helpers[safe][msg.sender] = Helper({key: key, powers: powers, expiresAt: expiresAt});
+        emit HelperSet(safe, msg.sender, key, powers, expiresAt);
+    }
+
+    /// Take your helper away. It stops working at once.
+    function revokeHelper(address safe) external {
+        if (_helpers[safe][msg.sender].key == address(0)) revert InvalidHelper();
+        delete _helpers[safe][msg.sender];
+        emit HelperRevoked(safe, msg.sender);
+    }
+
+    function getHelper(address safe, address member) external view returns (Helper memory) {
+        return _helpers[safe][member];
+    }
+
+    /// The caller must be this member's live helper, with this power.
+    function _requireHelper(address safe, address member, uint8 power) internal view {
+        Helper storage helper = _helpers[safe][member];
+        if (helper.key == address(0) || helper.key != msg.sender) revert NotHelper();
+        if (block.timestamp >= helper.expiresAt) revert HelperExpired();
+        if (helper.powers & power == 0) revert HelperLacksPower();
+    }
+
+    /// Wipe a member's helper when they stop being that member, so it can never come back.
+    function _forgetHelper(address safe, address member) internal {
+        if (_helpers[safe][member].key != address(0)) {
+            delete _helpers[safe][member];
+            emit HelperRevoked(safe, member);
+        }
     }
 
     /**
@@ -342,11 +504,12 @@ contract JfkModule is ReentrancyGuard {
             group.contribution = amount;
             emit ContributionChanged(safe, amount);
         } else if (action == Action.CHANGE_RULES) {
-            (uint16[RULE_COUNT] memory thresholds, uint8 quorumPct, uint32 votingPeriod) =
-                abi.decode(payload, (uint16[9], uint8, uint32)); // 9 == RULE_COUNT: abi.decode needs a literal
+            (uint16[RULE_COUNT] memory thresholds, uint8 quorumPct, uint32 votingPeriod, bool humanVotesOnly) =
+                abi.decode(payload, (uint16[9], uint8, uint32, bool)); // 9 == RULE_COUNT: abi.decode needs a literal
             group.thresholds = thresholds;
             group.quorumPct = quorumPct;
             group.votingPeriod = votingPeriod;
+            group.humanVotesOnly = humanVotesOnly;
             emit RulesChanged(safe);
         } else if (action == Action.CLOSE_GROUP) {
             _closeGroup(safe, group);
@@ -415,6 +578,7 @@ contract JfkModule is ReentrancyGuard {
 
         uint256 forfeited = paidIn[safe][msg.sender];
         paidIn[safe][msg.sender] = 0;
+        _forgetHelper(safe, msg.sender);
         _removeOwner(safe, msg.sender);
 
         emit MemberLeft(safe, msg.sender, forfeited);
@@ -439,6 +603,12 @@ contract JfkModule is ReentrancyGuard {
     {
         Group storage g = _groups[safe];
         return (address(g.token), g.contribution, g.votingPeriod, g.quorumPct, g.closed, g.thresholds, g.proposalCount);
+    }
+
+    /// The version-2 settings: whether every vote needs a human, and the gap between collections.
+    function getGroupSettings(address safe) external view returns (bool humanVotesOnly, uint32 payGap) {
+        Group storage g = _groups[safe];
+        return (g.humanVotesOnly, g.payGap);
     }
 
     function getProposal(address safe, uint256 id) external view returns (Proposal memory) {
@@ -486,6 +656,7 @@ contract JfkModule is ReentrancyGuard {
 
         uint256 refund = refundFor(safe, member);
         paidIn[safe][member] = 0;
+        _forgetHelper(safe, member);
         _removeOwner(safe, member);
         if (refund > 0) _pay(safe, group.token, member, refund);
 
@@ -499,9 +670,14 @@ contract JfkModule is ReentrancyGuard {
         address prev = _previousOwner(safe, oldWallet);
         _safeCall(safe, safe, abi.encodeCall(ISafe.swapOwner, (prev, oldWallet, newWallet)));
 
-        // The person is the same; only their wallet changed.
+        // The person is the same; only their wallet changed. Their payment
+        // history moves with them; their helper doesn't (the old wallet named
+        // it, and the old wallet may be lost or stolen).
         paidIn[safe][newWallet] = paidIn[safe][oldWallet];
         paidIn[safe][oldWallet] = 0;
+        lastPaidAt[safe][newWallet] = lastPaidAt[safe][oldWallet];
+        lastPaidAt[safe][oldWallet] = 0;
+        _forgetHelper(safe, oldWallet);
 
         emit MemberReplaced(safe, oldWallet, newWallet);
     }
@@ -593,8 +769,8 @@ contract JfkModule is ReentrancyGuard {
             return Rule.CHANGE_CONTRIBUTION;
         }
         if (action == Action.CHANGE_RULES) {
-            (uint16[RULE_COUNT] memory thresholds, uint8 quorumPct, uint32 votingPeriod) =
-                abi.decode(payload, (uint16[9], uint8, uint32)); // 9 == RULE_COUNT: abi.decode needs a literal
+            (uint16[RULE_COUNT] memory thresholds, uint8 quorumPct, uint32 votingPeriod,) =
+                abi.decode(payload, (uint16[9], uint8, uint32, bool)); // 9 == RULE_COUNT: abi.decode needs a literal
             _validateRules(thresholds, quorumPct, votingPeriod);
             return Rule.CHANGE_RULES;
         }

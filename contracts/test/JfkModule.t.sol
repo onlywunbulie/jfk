@@ -43,14 +43,14 @@ contract JfkModuleTest is JfkBase {
     function test_aGroupCannotBeRegisteredTwice() public {
         vm.prank(safe);
         vm.expectRevert(JfkModule.AlreadyRegistered.selector);
-        module.registerGroup(IERC20(address(usdc)), CONTRIBUTION, defaultThresholds(), QUORUM, VOTING_PERIOD);
+        module.registerGroup(IERC20(address(usdc)), CONTRIBUTION, defaultThresholds(), QUORUM, VOTING_PERIOD, PAY_GAP);
     }
 
     function test_registrationRefusesASafeThatDoesNotNeedEveryone() public {
         // A Safe whose direct-signing bar is 3 of 5 would let three members
         // walk around the rules. JFK refuses to run on it.
         bytes memory setupData = abi.encodeCall(
-            JfkSetup.setupForGroup, (module, IERC20(address(usdc)), CONTRIBUTION, defaultThresholds(), QUORUM, VOTING_PERIOD)
+            JfkSetup.setupForGroup, (module, IERC20(address(usdc)), CONTRIBUTION, defaultThresholds(), QUORUM, VOTING_PERIOD, PAY_GAP)
         );
         bytes memory initializer = abi.encodeCall(
             Safe.setup, (five, 3, address(setupHelper), setupData, address(0), address(0), 0, payable(address(0)))
@@ -74,7 +74,7 @@ contract JfkModuleTest is JfkBase {
 
     function test_theSetupHelperDoesNothingWhenCalledDirectly() public {
         vm.expectRevert();
-        setupHelper.setupForGroup(module, IERC20(address(usdc)), CONTRIBUTION, defaultThresholds(), QUORUM, VOTING_PERIOD);
+        setupHelper.setupForGroup(module, IERC20(address(usdc)), CONTRIBUTION, defaultThresholds(), QUORUM, VOTING_PERIOD, PAY_GAP);
     }
 
     // ---------------------------------------------------------------------
@@ -411,7 +411,7 @@ contract JfkModuleTest is JfkBase {
         uint16[9] memory strict = defaultThresholds();
         strict[uint256(JfkModule.Rule.SPEND_SMALL)] = 1000;
         uint256 change =
-            proposeAs(five[0], safe, JfkModule.Action.CHANGE_RULES, abi.encode(strict, uint8(100), uint32(7 days)));
+            proposeAs(five[0], safe, JfkModule.Action.CHANGE_RULES, abi.encode(strict, uint8(100), uint32(7 days), false));
         voteYes(five, safe, change, 5);
         module.execute(safe, change);
 

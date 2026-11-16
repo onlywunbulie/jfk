@@ -29,8 +29,15 @@ contract GroupHandler is Test {
     bool public moneyMovedWithoutAVote;
     bool public spendPaidWrongAmount;
     bool public refundExceededPaidIn;
+    bool public collectedWrongAmount;
+    bool public collectedTooSoon;
 
     uint256[] internal openIds;
+
+    /// One key that members name as their helper (the AI, acting for them).
+    address internal helperKey = makeAddr("helper");
+    uint256 internal constant PAY_GAP = 25 days;
+    mapping(address member => uint256) internal lastCollectedAt;
 
     constructor(JfkModule module_, MockUSDC usdc_, address safe_, address[] memory people_) {
         module = module_;
@@ -156,6 +163,74 @@ contract GroupHandler is Test {
         }
     }
 
+    // --- helpers (version 2) ---------------------------------------------
+
+    function nameHelper(uint256 who, uint8 powers) external {
+        address member = _member(who);
+        if (member == address(0) || _closed()) return;
+        vm.prank(member);
+        try module.setHelper(safe, helperKey, uint8(bound(powers, 1, 7)), uint64(block.timestamp + 300 days)) {} catch {}
+    }
+
+    function helperVotes(uint256 who, uint256 pick, uint8 choice) external {
+        if (openIds.length == 0) return;
+        address member = _member(who);
+        if (member == address(0)) return;
+        uint256 before = _balance();
+        vm.prank(helperKey);
+        try module.voteFor(safe, member, openIds[pick % openIds.length], JfkModule.Choice((choice % 3) + 1)) {} catch {}
+        if (_balance() != before) moneyMovedWithoutAVote = true;
+    }
+
+    function helperProposes(uint256 who, uint256 amount) external {
+        address member = _member(who);
+        if (member == address(0) || _closed()) return;
+        vm.prank(helperKey);
+        try module.proposeFor(safe, member, JfkModule.Action.SPEND, abi.encode(makeAddr("vendor"), bound(amount, 1, 1_000e6)))
+        returns (uint256 id) {
+            openIds.push(id);
+        } catch {}
+    }
+
+    function helperCollects(uint256 who) external {
+        address member = _member(who);
+        if (member == address(0) || _closed()) return;
+        usdc.mint(member, CONTRIBUTION);
+        vm.prank(member);
+        usdc.approve(address(module), type(uint256).max);
+
+        uint256 before = _balance();
+        vm.prank(helperKey);
+        try module.collect(safe, member) {
+            uint256 got = _balance() - before;
+            moneyIn += got;
+            (, uint256 contribution,,,,,) = module.getGroup(safe);
+            if (got != contribution) collectedWrongAmount = true;
+            uint256 last = module.lastPaidAt(safe, member);
+            if (lastCollectedAt[member] != 0 && block.timestamp - lastCollectedAt[member] < PAY_GAP) {
+                collectedTooSoon = true;
+            }
+            lastCollectedAt[member] = last;
+        } catch {
+            if (_balance() != before) moneyMovedWithoutAVote = true;
+        }
+    }
+
+    /// The helper key tries to act as itself: it isn't a member, so nothing may happen.
+    function helperTriesItsLuck(uint256 pick) external {
+        uint256 before = _balance();
+        vm.startPrank(helperKey);
+        try module.contribute(safe) {} catch {}
+        try module.leave(safe) {} catch {}
+        try module.propose(safe, JfkModule.Action.SPEND, abi.encode(helperKey, uint256(1))) {} catch {}
+        try module.setHelper(safe, helperKey, 7, uint64(block.timestamp + 1 days)) {} catch {}
+        if (openIds.length > 0) {
+            try module.vote(safe, openIds[pick % openIds.length], JfkModule.Choice.YES) {} catch {}
+        }
+        vm.stopPrank();
+        if (_balance() != before) moneyMovedWithoutAVote = true;
+    }
+
     /// Someone who isn't in the group pokes at everything.
     function outsiderTriesEverything(uint256 pick) external {
         address outsider = makeAddr("outsider");
@@ -221,6 +296,12 @@ contract MoneyInvariantTest is JfkBase {
 
     function invariant_aRefundNeverExceedsWhatWasPaidIn() public view {
         assertFalse(handler.refundExceededPaidIn());
+    }
+
+    /// A helper collects exactly one contribution, never two inside one payment gap.
+    function invariant_collectionsAreExactAndSpaced() public view {
+        assertFalse(handler.collectedWrongAmount());
+        assertFalse(handler.collectedTooSoon());
     }
 
     /// The emergency exit always needs every member.

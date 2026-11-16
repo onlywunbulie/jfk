@@ -36,6 +36,8 @@ abstract contract JfkBase is Test {
     uint256 internal constant USD = 1e6;
     uint256 internal constant CONTRIBUTION = 50 * USD;
     uint32 internal constant VOTING_PERIOD = 3 days;
+    /// Monthly dues: at least 25 days between two collected payments.
+    uint32 internal constant PAY_GAP = 25 days;
     uint8 internal constant QUORUM = 60;
 
     uint256 private saltNonce;
@@ -78,7 +80,7 @@ abstract contract JfkBase is Test {
         returns (address)
     {
         bytes memory setupData = abi.encodeCall(
-            JfkSetup.setupForGroup, (module, IERC20(address(usdc)), CONTRIBUTION, thresholds, quorum, period)
+            JfkSetup.setupForGroup, (module, IERC20(address(usdc)), CONTRIBUTION, thresholds, quorum, period, PAY_GAP)
         );
         bytes memory initializer = abi.encodeCall(
             Safe.setup,

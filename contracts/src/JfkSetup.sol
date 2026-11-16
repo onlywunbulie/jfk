@@ -25,9 +25,10 @@ contract JfkSetup {
         uint256 contribution,
         uint16[9] calldata thresholds,
         uint8 quorumPct,
-        uint32 votingPeriod
+        uint32 votingPeriod,
+        uint32 payGap
     ) external {
         ISafe(address(this)).enableModule(address(module));
-        module.registerGroup(token, contribution, thresholds, quorumPct, votingPeriod);
+        module.registerGroup(token, contribution, thresholds, quorumPct, votingPeriod, payGap);
     }
 }
