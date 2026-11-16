@@ -1,5 +1,6 @@
 import { index, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { createdAt, primaryId, users } from "./identity";
+import { groups } from "./groups";
 
 /**
  * How a user's AI (Claude first) gets into Rallied: OAuth 2.1, the standard
@@ -79,6 +80,30 @@ export const oauthTokens = pgTable(
     uniqueIndex("oauth_tokens_refresh_hash_unique").on(table.refreshHash),
     index("oauth_tokens_user_id_idx").on(table.userId),
   ],
+);
+
+// ---------------------------------------------------------------------------
+// ai_group_optouts: groups a user has taken their AI out of
+// ---------------------------------------------------------------------------
+
+/**
+ * A user's AI connection is for their whole account; a row here keeps it out
+ * of one group. The AI's tools then treat that group as if it didn't exist.
+ * Deleting the row lets the AI back in.
+ */
+export const aiGroupOptouts = pgTable(
+  "ai_group_optouts",
+  {
+    id: primaryId(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    groupId: text("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    createdAt: createdAt(),
+  },
+  (table) => [uniqueIndex("ai_group_optouts_user_group_unique").on(table.userId, table.groupId)],
 );
 
 export type OauthClient = typeof oauthClients.$inferSelect;

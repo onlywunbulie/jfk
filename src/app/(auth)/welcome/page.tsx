@@ -4,6 +4,8 @@ import { shortAddress } from "@/lib/chain/addresses";
 import { Logo } from "@/components/logo";
 import { AuthFrame } from "../auth-frame";
 import { Setup } from "./setup";
+import { headers } from "next/headers";
+import { agentUrls, publicOrigin } from "@/modules/agents/origin";
 
 export const metadata: Metadata = { title: "Welcome" };
 
@@ -20,7 +22,7 @@ export default async function WelcomePage() {
   return (
     <AuthFrame>
       <Logo className="mb-12" />
-      <Setup initialName={placeholder ? "" : user.displayName} />
+      <Setup initialName={placeholder ? "" : user.displayName} mcpUrl={agentUrls(publicOrigin(await headers())).mcp} />
     </AuthFrame>
   );
 }

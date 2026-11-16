@@ -13,11 +13,13 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["@electric-sql/pglite", "@node-rs/argon2"],
 
   /**
-   * Dev only. Lets a Cloudflare quick tunnel load the dev server's assets, so
-   * the app can be opened on a phone. Without it Next refuses `/_next/*` to
-   * any origin but localhost and the page arrives unhydrated.
+   * Dev only. Lets a testing tunnel load the dev server's assets: Cloudflare
+   * and ngrok for opening the app on a phone, and Tailscale Funnel for
+   * connecting Claude. Without it Next refuses `/_next/*` to any origin but
+   * localhost and the page arrives unhydrated (it shows, but taps do nothing).
+   * `**.ts.net` because Funnel hosts have two labels (machine.tailnet.ts.net).
    */
-  allowedDevOrigins: ["*.trycloudflare.com", "*.ngrok-free.dev", "*.ngrok-free.app", "*.ts.net", "**.ts.net", "bulie-pc.tail2607d7.ts.net"],
+  allowedDevOrigins: ["*.trycloudflare.com", "*.ngrok-free.dev", "*.ngrok-free.app", "**.ts.net"],
 
   experimental: {
     /**

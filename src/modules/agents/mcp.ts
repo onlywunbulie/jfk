@@ -5,6 +5,7 @@ import { DEFAULT_GOVERNANCE, type GovernedAction } from "@/lib/db/schema";
 import { getGroupDetail, listGroupsForUser, listMembers } from "@/modules/groups/service";
 import { contractThresholds } from "@/modules/groups/onchain-setup";
 import { listProposals } from "@/modules/governance/service";
+import { aiAllowedInGroup, aiOptedOutGroups } from "./connection";
 
 /**
  * Rallied's MCP server, as one signed-in user's AI sees it. Built fresh for
@@ -33,9 +34,11 @@ export function buildRalliedServer(userId: string): McpServer {
       annotations: { readOnlyHint: true },
     },
     async () => {
-      const groups = await listGroupsForUser(userId);
+      const [groups, optedOut] = await Promise.all([listGroupsForUser(userId), aiOptedOutGroups(userId)]);
       return json({
-        groups: groups.map((group) => ({
+        groups: groups
+          .filter((group) => !optedOut.has(group.id))
+          .map((group) => ({
           group_id: group.id,
           name: group.name,
           kind: group.type === "ROTATING" ? "rotating savings" : "shared pot",
@@ -59,6 +62,7 @@ export function buildRalliedServer(userId: string): McpServer {
       annotations: { readOnlyHint: true },
     },
     async ({ group_id }) => {
+      if (!(await aiAllowedInGroup(userId, group_id))) return notFound();
       const [group, members] = await Promise.all([getGroupDetail(group_id, userId), listMembers(group_id, userId)]);
       if (!group || !members) return notFound();
 
@@ -117,6 +121,7 @@ export function buildRalliedServer(userId: string): McpServer {
       annotations: { readOnlyHint: true },
     },
     async ({ group_id, only_open }) => {
+      if (!(await aiAllowedInGroup(userId, group_id))) return notFound();
       const proposals = await listProposals(group_id, userId);
       if (!proposals) return notFound();
       return json({

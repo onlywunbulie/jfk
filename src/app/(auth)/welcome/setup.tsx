@@ -14,12 +14,11 @@ import { SetupProgress } from "../auth-frame";
  * them. Step 3: connect their AI, the point of Rallied, offered up front but
  * skippable with "Later".
  *
- * UI only for step 3: Rallied's MCP address doesn't exist yet, so "I've
- * added it" just opens the app.
+ * Step 3 shows Rallied's real connector address; "I've added it" opens the
+ * app (the connection itself finishes in Claude).
  */
-const MCP_ADDRESS = "https://rallied.app/mcp";
 
-export function Setup({ initialName }: { initialName: string }) {
+export function Setup({ initialName, mcpUrl }: { initialName: string; mcpUrl: string }) {
   const router = useRouter();
   const [state, action] = useActionState(setNameAction, {});
   // Saving the name moves setup on to step 3.
@@ -86,13 +85,13 @@ export function Setup({ initialName }: { initialName: string }) {
             <Step n={1}>
               <p className="text-ink">Copy Rallied&rsquo;s address</p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <code className="rounded-[6px] bg-raised px-2.5 py-1.5 font-mono text-xs text-ink">{MCP_ADDRESS}</code>
+                <code className="rounded-[6px] bg-raised px-2.5 py-1.5 font-mono text-xs text-ink">{mcpUrl}</code>
                 <Button
                   type="button"
                   variant="secondary"
                   size="sm"
                   onClick={() => {
-                    void navigator.clipboard?.writeText(MCP_ADDRESS).then(
+                    void navigator.clipboard?.writeText(mcpUrl).then(
                       () => setCopied(true),
                       () => setCopied(false),
                     );

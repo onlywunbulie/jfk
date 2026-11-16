@@ -8,6 +8,7 @@ import { channelBelongs, findChannel } from "@/components/shell/channels";
 import { PayoutOrder } from "./payout-order";
 import { EXPLORER_URL, shortAddress } from "@/lib/chain/addresses";
 import { VerifyAi } from "./verify-ai";
+import { aiAllowedInGroup, getAiConnection } from "@/modules/agents/connection";
 import { DEFAULT_GOVERNANCE, type GovernedAction, type GroupType } from "@/lib/db/schema/groups";
 import { contractThresholds } from "@/modules/groups/onchain-setup";
 import { ChannelIntro, DateDivider, Detail, RallMessage, VaultFootnote, longDate } from "./parts";
@@ -45,8 +46,10 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
   if (channel.slug === "payout-order") return <PayoutOrder base={`/groups/${group.id}`} />;
 
   if (channel.slug === "verify") {
-    // UI only: the AI connection is a sample (Claude, "Pay my dues, ask for
-    // the rest"), matching the starting state in Settings.
+    // Real: whether the user's AI is connected and allowed in this group.
+    // Still a sample: limits, which come with the contract work.
+    const [connection, allowedHere] = await Promise.all([getAiConnection(user.id), aiAllowedInGroup(user.id, group.id)]);
+    const aiName = connection ? (/chatgpt|openai/i.test(connection.appName) ? "ChatGPT" : /grok/i.test(connection.appName) ? "Grok" : "Claude") : null;
     return (
       <div className="flex min-h-full flex-col justify-end">
         <ChannelIntro title="Verify & connect">Your wallet, and the AI that acts for you in this group.</ChannelIntro>
@@ -81,9 +84,15 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
             )}
           </Detail>
           <Detail label="Your AI">
-            <VerifyAi ai="Claude" groupName={group.name} />
+            <VerifyAi
+              ai={aiName}
+              groupId={group.id}
+              groupName={group.name}
+              connected={connection !== null}
+              allowedHere={allowedHere}
+            />
           </Detail>
-          <Detail label="Your limits">Pay my dues, ask for the rest</Detail>
+          {connection && <Detail label="It can">Read this group: money, members, rules and votes</Detail>}
           <Detail label="This group">Members&rsquo; AIs can vote within their own limits</Detail>
         </RallMessage>
       </div>

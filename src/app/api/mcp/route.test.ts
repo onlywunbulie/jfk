@@ -12,6 +12,7 @@ vi.mock("@/lib/env", () => ({ env: () => ({ APP_URL: "http://localhost:3000" }) 
 const { POST } = await import("./route");
 const { registerClient, createAuthorizationCode, exchangeCode, READ_SCOPE } = await import("@/modules/agents/oauth");
 const { createGroup } = await import("@/modules/groups/service");
+const { setAiInGroup } = await import("@/modules/agents/connection");
 const { users } = await import("@/lib/db/schema");
 const { Money } = await import("@/lib/money");
 
@@ -130,5 +131,20 @@ describe("/api/mcp", () => {
     expect(other.text).not.toContain("Tunde's secret pot");
     const proposals = await callTool(token, "list_proposals", { group_id: theirs });
     expect(proposals.isError).toBe(true);
+  });
+
+  it("hides a group the user has kept their AI out of, as if it didn't exist", async () => {
+    const amaka = await makeUser("Amaka");
+    const pot = { type: "TREASURY" as const, contributionAmount: Money.fromMajor(50, "USDC"), cadence: "MONTHLY" as const, dueDay: 1 };
+    const { groupId: visible } = await createGroup(amaka, { ...pot, name: "Detty December" });
+    const { groupId: hidden } = await createGroup(amaka, { ...pot, name: "Family pot" });
+    await setAiInGroup(amaka, hidden, false);
+
+    const token = await tokenFor(amaka);
+    const list = await callTool(token, "list_groups");
+    const names = (list.data.groups as { group_id: string; name: string }[]).map((group) => group.group_id);
+    expect(names).toEqual([visible]);
+    expect((await callTool(token, "get_group", { group_id: hidden })).isError).toBe(true);
+    expect((await callTool(token, "list_proposals", { group_id: hidden })).isError).toBe(true);
   });
 });

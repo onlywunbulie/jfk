@@ -1,17 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AiLogo, type AiName } from "@/components/ai-logos";
 import { cn } from "@/lib/cn";
+import { disconnectAiAction } from "@/app/(app)/ai-actions";
 
 /**
- * The one place a user connects their AI to Rallied, changes its limits and
- * disconnects it. The connection is for the whole account: one AI acts across
- * all the user's groups, so it's managed in Settings, not inside a group.
+ * The one place a user connects their AI to Rallied and disconnects it. The
+ * connection is for the whole account: one AI acts across all the user's
+ * groups (each group's #verify & connect can keep it out of that group).
  *
- * UI only: nothing connects yet (Rallied's MCP address is a later step), and
- * the starting state is a sample: Claude connected.
+ * Real: whether an AI is connected, since when, last used, and Disconnect,
+ * which cuts every token at once. Still a sample: limits, which arrive with
+ * the contract work; for now an AI can only read.
  */
 
 export const LIMIT_PRESETS = [
@@ -21,9 +24,14 @@ export const LIMIT_PRESETS = [
 ] as const;
 
 type Preset = (typeof LIMIT_PRESETS)[number]["value"];
-type Stage = "connected" | "choose" | "steps" | "limits";
+type Stage = "status" | "choose" | "steps" | "limits";
 
-const MCP_ADDRESS = "https://rallied.app/mcp";
+/** Shown to the user; dates are formatted on the server so they match on screen. */
+export interface ConnectionView {
+  appName: string;
+  connectedOn: string;
+  lastUsed: string | null;
+}
 
 const TILES: { name: AiName; ready: boolean }[] = [
   { name: "Claude", ready: true },
@@ -31,58 +39,87 @@ const TILES: { name: AiName; ready: boolean }[] = [
   { name: "Grok", ready: false },
 ];
 
-export function AiConnection() {
-  const [stage, setStage] = useState<Stage>("connected");
+export function AiConnection({ connection, mcpUrl }: { connection: ConnectionView | null; mcpUrl: string }) {
+  const router = useRouter();
+  const [stage, setStage] = useState<Stage>(connection ? "status" : "choose");
+  const [confirming, setConfirming] = useState(false);
+  const [pending, startTransition] = useTransition();
   const [preset, setPreset] = useState<Preset>("dues");
-  const [pending, setPending] = useState<Preset>("dues");
+  const [pendingPreset, setPendingPreset] = useState<Preset>("dues");
   const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
+  // A connection that appears or disappears (after Connect in Claude, or a
+  // Disconnect) moves the screen to match, without a reload.
+  const [lastSeen, setLastSeen] = useState(connection !== null);
+  if ((connection !== null) !== lastSeen) {
+    setLastSeen(connection !== null);
+    setStage(connection ? "status" : "choose");
+  }
+
+  const disconnect = () =>
+    startTransition(async () => {
+      await disconnectAiAction();
+      setConfirming(false);
+      setNotice(`Disconnected. ${connection?.appName ?? "Your AI"} can't reach Rallied any more.`);
+      router.refresh();
+    });
+
   const presetLabel = LIMIT_PRESETS.find((p) => p.value === preset)?.label;
+  const name = connection?.appName ?? "Claude";
+  const logo: AiName = /chatgpt|openai/i.test(name) ? "ChatGPT" : /grok/i.test(name) ? "Grok" : "Claude";
 
   return (
     <div className="space-y-4">
-      {stage === "connected" && (
+      {stage === "status" && connection && (
         <div className="rounded-[var(--radius-card)] border border-border p-5">
           <div className="flex items-center gap-3">
             <span className="grid size-10 place-items-center rounded-full bg-overlay text-ink">
-              <AiLogo name="Claude" className="size-5" />
+              <AiLogo name={logo} className="size-5" />
             </span>
             <div>
-              <p className="font-semibold text-ink">Claude</p>
-              <p className="text-sm text-inflow">Connected since 26 August</p>
+              <p className="font-semibold text-ink">{connection.appName}</p>
+              <p className="text-sm text-inflow">Connected since {connection.connectedOn}</p>
             </div>
           </div>
           <dl className="mt-4 space-y-2 text-sm">
+            <Row label="Last used" value={connection.lastUsed ?? "Not yet"} />
+            <Row label="Can" value="Read your groups, members, rules and votes" />
             <Row label="Limits" value={presetLabel ?? ""} />
-            <Row label="Renews" value="In 63 days" />
-            <Row label="Groups" value="Acts in all your groups" />
           </dl>
-          <div className="mt-5 flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setPending(preset);
-                setNotice(null);
-                setStage("limits");
-              }}
-            >
-              Change limits
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setStage("choose");
-                setNotice("Disconnected on this screen only. Disconnecting for real comes in a later step.");
-              }}
-            >
-              Disconnect
-            </Button>
-          </div>
+
+          {confirming ? (
+            <div className="animate-arrive mt-5 rounded-[var(--radius-control)] bg-overlay p-3 text-sm">
+              <p className="font-semibold text-ink">Disconnect {connection.appName}?</p>
+              <p className="mt-1 text-ink-muted">It stops working in all your groups straight away. You can connect again any time.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button type="button" variant="danger" size="sm" loading={pending} onClick={disconnect}>
+                  Disconnect
+                </Button>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setConfirming(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setPendingPreset(preset);
+                  setNotice(null);
+                  setStage("limits");
+                }}
+              >
+                Change limits
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setConfirming(true)}>
+                Disconnect
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -107,7 +144,7 @@ export function AiConnection() {
                   Connect
                 </Button>
               ) : (
-                <p className="mt-3 text-sm text-ink-faint">Coming soon</p>
+                <p className="mt-3 text-sm text-ink-faint">Coming</p>
               )}
             </div>
           ))}
@@ -119,15 +156,15 @@ export function AiConnection() {
           <p className="font-semibold text-ink">Connect Claude</p>
           <ol className="mt-4 space-y-4 text-sm">
             <Step n={1}>
-              <p className="text-ink">Copy Rallied&rsquo;s address</p>
+              <p className="text-ink">Copy Rallied&rsquo;s connector address</p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <code className="rounded-[6px] bg-raised px-2.5 py-1.5 font-mono text-xs text-ink">{MCP_ADDRESS}</code>
+                <code className="rounded-[6px] bg-raised px-2.5 py-1.5 font-mono text-xs break-all text-ink">{mcpUrl}</code>
                 <Button
                   type="button"
                   variant="secondary"
                   size="sm"
                   onClick={() => {
-                    void navigator.clipboard?.writeText(MCP_ADDRESS).then(
+                    void navigator.clipboard?.writeText(mcpUrl).then(
                       () => setCopied(true),
                       () => setCopied(false),
                     );
@@ -138,10 +175,10 @@ export function AiConnection() {
               </div>
             </Step>
             <Step n={2}>
-              <p className="text-ink">In Claude, open Settings → Connectors → Add custom connector, and paste it.</p>
+              <p className="text-ink">In Claude, open Settings → Connectors → Add custom connector, paste it, then Connect.</p>
             </Step>
             <Step n={3}>
-              <p className="text-ink">Claude brings you back here to choose its limits.</p>
+              <p className="text-ink">Sign in to Rallied when asked, and choose Allow.</p>
             </Step>
           </ol>
           <div className="mt-5 flex flex-wrap gap-2">
@@ -149,11 +186,12 @@ export function AiConnection() {
               type="button"
               size="sm"
               onClick={() => {
-                setPending(preset);
-                setStage("limits");
+                setNotice("Checking…");
+                router.refresh();
+                setTimeout(() => setNotice("If it still isn't connected, finish connecting in Claude, then check again."), 1500);
               }}
             >
-              I&rsquo;ve added it
+              I&rsquo;ve connected it
             </Button>
             <Button type="button" variant="ghost" size="sm" onClick={() => setStage("choose")}>
               Back
@@ -173,15 +211,15 @@ export function AiConnection() {
                 key={option.value}
                 className={cn(
                   "press flex cursor-pointer items-start gap-3 rounded-[var(--radius-control)] border p-3 transition-colors",
-                  pending === option.value ? "border-accent bg-accent-soft" : "border-border hover:border-border-strong",
+                  pendingPreset === option.value ? "border-accent bg-accent-soft" : "border-border hover:border-border-strong",
                 )}
               >
                 <input
                   type="radio"
                   name="limits"
                   value={option.value}
-                  checked={pending === option.value}
-                  onChange={() => setPending(option.value)}
+                  checked={pendingPreset === option.value}
+                  onChange={() => setPendingPreset(option.value)}
                   className="mt-1 accent-[var(--color-accent)]"
                 />
                 <span>
@@ -196,14 +234,14 @@ export function AiConnection() {
               type="button"
               size="sm"
               onClick={() => {
-                setPreset(pending);
-                setStage("connected");
-                setNotice("Saved on this screen only. Confirming with Face ID comes in a later step.");
+                setPreset(pendingPreset);
+                setStage("status");
+                setNotice("Saved on this screen only. Limits take effect once Claude can act, in a later step. For now it can only read.");
               }}
             >
               Confirm with Face ID
             </Button>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setStage("connected")}>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setStage("status")}>
               Cancel
             </Button>
           </div>

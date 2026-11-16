@@ -3,6 +3,17 @@ import { Button } from "@/components/ui/button";
 import { AiConnection } from "@/components/ai-connection";
 import { EXPLORER_URL, shortAddress } from "@/lib/chain/addresses";
 import { signOutAction } from "@/app/(app)/actions";
+import { headers } from "next/headers";
+import { getAiConnection } from "@/modules/agents/connection";
+import { agentUrls, publicOrigin } from "@/modules/agents/origin";
+
+// Formatted here, on the server, in Lagos time, so the modal shows the same
+// thing on every screen and never mismatches when it hydrates.
+const TIME_ZONE = "Africa/Lagos";
+const shortDate = (date: Date) =>
+  new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: TIME_ZONE }).format(date);
+const shortDateTime = (date: Date) =>
+  new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: TIME_ZONE }).format(date);
 
 /**
  * Everything about the user in one place, shown in the profile modal: who
@@ -10,7 +21,10 @@ import { signOutAction } from "@/app/(app)/actions";
  * out. Rendered on the server and handed to the shell, which shows it when
  * the profile square is tapped.
  */
-export function ProfilePanel({ user }: { user: SessionUser }) {
+export async function ProfilePanel({ user }: { user: SessionUser }) {
+  const [connection, requestHeaders] = await Promise.all([getAiConnection(user.id), headers()]);
+  const mcpUrl = agentUrls(publicOrigin(requestHeaders)).mcp;
+
   return (
     <div className="space-y-8">
       <header className="flex items-center gap-4">
@@ -42,7 +56,18 @@ export function ProfilePanel({ user }: { user: SessionUser }) {
           Your AI
         </h3>
         <p className="mt-1 mb-4 text-sm text-ink-muted">The AI that acts for you in Rallied, across all your groups.</p>
-        <AiConnection />
+        <AiConnection
+          mcpUrl={mcpUrl}
+          connection={
+            connection
+              ? {
+                  appName: connection.appName,
+                  connectedOn: shortDate(connection.connectedAt),
+                  lastUsed: connection.lastUsedAt ? shortDateTime(connection.lastUsedAt) : null,
+                }
+              : null
+          }
+        />
       </section>
 
       <section aria-labelledby="profile-details">
