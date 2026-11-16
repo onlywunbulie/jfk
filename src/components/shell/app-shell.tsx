@@ -16,8 +16,13 @@ export interface ShellGroup {
   kind: GroupKind;
   /** Already formatted as the sidebar shows it, e.g. "USDC 15000". */
   balance: string;
-  /** Open votes this person hasn't cast yet. Not shown in this step. */
+  /** Open votes this person hasn't cast yet. */
   waiting: number;
+  /**
+   * What's waiting for this person, by channel slug: their AI's drafts, and
+   * votes they haven't cast. Drives the sidebar counts and the rail's dot.
+   */
+  needsYou: Partial<Record<string, number>>;
 }
 
 /**
@@ -56,6 +61,7 @@ export function AppShell({
     (current !== null && findChannel(match?.[2] ?? DEFAULT_CHANNEL) !== undefined) || pathname === "/groups/new";
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  useRefreshOnReturn();
   const openProfile = () => {
     setMenuOpen(false);
     setProfileOpen(true);
@@ -140,6 +146,31 @@ export function AppShell({
       </div>
     </div>
   );
+}
+
+/**
+ * Coming back to Rallied (from Claude, say) quietly reloads what's on screen,
+ * so a draft the AI just made shows up, with its count, without a manual
+ * refresh. At most once every 10 seconds, so flicking between tabs is cheap.
+ */
+function useRefreshOnReturn() {
+  const router = useRouter();
+  const last = useRef(0);
+  useEffect(() => {
+    const onReturn = () => {
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - last.current < 10_000) return;
+      last.current = now;
+      router.refresh();
+    };
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", onReturn);
+    return () => {
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", onReturn);
+    };
+  }, [router]);
 }
 
 /**
@@ -237,6 +268,7 @@ function Rail({
                 href={`/groups/${group.id}/${DEFAULT_CHANNEL}` as Route}
                 label={group.name}
                 selected={group.id === currentId}
+                hasNew={Object.values(group.needsYou).some((n) => (n ?? 0) > 0)}
               />
             </li>
           ))}
@@ -268,25 +300,35 @@ function RailItem({
   href,
   label,
   selected,
+  hasNew = false,
   children,
 }: {
   href: Route;
   label: string;
   selected: boolean;
+  /** Something in this group is waiting for the user: a small blue dot on the square's corner. */
+  hasNew?: boolean;
   children?: ReactNode;
 }) {
+  const name = hasNew ? `${label}, something is waiting for you` : label;
   return (
     <Link
       href={href}
-      title={label}
-      aria-label={label}
+      title={name}
+      aria-label={name}
       aria-current={selected ? "page" : undefined}
       className={cn(
-        "press grid h-[41px] w-[var(--rail-width)] place-items-center rounded-[var(--radius-control)] border-2 bg-raised text-ink-muted transition-colors hover:text-ink",
+        "press relative grid h-[41px] w-[var(--rail-width)] place-items-center rounded-[var(--radius-control)] border-2 bg-raised text-ink-muted transition-colors hover:text-ink",
         selected ? "border-accent" : "border-transparent hover:bg-overlay",
       )}
     >
       {children}
+      {hasNew && (
+        <span
+          aria-hidden="true"
+          className="absolute -top-1 -right-1 size-3 rounded-full border-2 border-canvas bg-accent"
+        />
+      )}
     </Link>
   );
 }
@@ -327,7 +369,7 @@ function GroupSections({ group, pathname }: { group: ShellGroup; pathname: strin
           {section.channels.map((channel) => {
             const href = `${base}/${channel.slug}`;
             return (
-              <ChannelLink key={channel.slug} href={href as Route} active={pathname === href}>
+              <ChannelLink key={channel.slug} href={href as Route} active={pathname === href} count={group.needsYou[channel.slug] ?? 0}>
                 {channel.label}
               </ChannelLink>
             );
@@ -358,7 +400,11 @@ function Stat({ children }: { children: ReactNode }) {
   );
 }
 
-function ChannelLink({ href, active, children }: { href: Route; active: boolean; children: ReactNode }) {
+/**
+ * A channel in the sidebar. With something waiting for the user (`count`), its
+ * name turns white and a small blue count sits at the row's right end.
+ */
+function ChannelLink({ href, active, count = 0, children }: { href: Route; active: boolean; count?: number; children: ReactNode }) {
   return (
     <li>
       <Link
@@ -366,7 +412,8 @@ function ChannelLink({ href, active, children }: { href: Route; active: boolean;
         aria-current={active ? "page" : undefined}
         className={cn(
           "press relative flex h-7 items-center gap-[7px] rounded-[4px] px-[10px] text-base transition-colors",
-          active ? "text-ink" : "text-ink-muted hover:bg-raised",
+          active || count > 0 ? "text-ink" : "text-ink-muted",
+          !active && "hover:bg-raised",
         )}
       >
         {/* The selected channel's tag: a small ice-blue bar at the row's left edge. */}
@@ -378,7 +425,13 @@ function ChannelLink({ href, active, children }: { href: Route; active: boolean;
           )}
         />
         <Hash />
-        <span className="min-w-0 truncate">{children}</span>
+        <span className="min-w-0 flex-1 truncate">{children}</span>
+        {count > 0 && (
+          <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-accent px-1.5 text-xs font-semibold text-accent-ink tabular-nums">
+            {count > 99 ? "99+" : count}
+            <span className="sr-only"> waiting for you</span>
+          </span>
+        )}
       </Link>
     </li>
   );

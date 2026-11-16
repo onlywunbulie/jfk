@@ -5,7 +5,7 @@ import { createTestDb, type TestDb } from "@/lib/db/testing";
 const t: TestDb = await createTestDb();
 vi.mock("@/lib/db", async () => ({ db: t.db }));
 
-const { draftSpend, draftRuleChange, draftRoleChange, listWaitingDrafts, discardDraft } = await import("./drafts");
+const { draftSpend, draftRuleChange, draftRoleChange, listWaitingDrafts, discardDraft, countWaitingDrafts } = await import("./drafts");
 const { setAiInGroup } = await import("./connection");
 const { createGroup, grantAdmin } = await import("@/modules/groups/service");
 const { users, groupMembers } = await import("@/lib/db/schema");
@@ -125,6 +125,24 @@ describe("drafting a role change", () => {
     const groupId = await groupWith(amaka, "TREASURY", [tunde]);
     await grantAdmin(groupId, amaka, tunde);
     expect((await draftRoleChange({ ...base(amaka, groupId), change: "remove_admin", memberName: "Tunde" })).ok).toBe(true);
+  });
+});
+
+describe("counting what's waiting, for the sidebar", () => {
+  it("counts the user's own waiting drafts per group and kind, and drops discarded ones", async () => {
+    const amaka = await makeUser("Amaka");
+    const tunde = await makeUser("Tunde");
+    const groupId = await groupWith(amaka, "TREASURY", [tunde]);
+    const first = await draftRuleChange({ ...base(amaka, groupId), rule: "due_day", value: "5" });
+    await draftRuleChange({ ...base(amaka, groupId), rule: "due_day", value: "6" });
+    await draftRoleChange({ ...base(amaka, groupId), change: "make_admin", memberName: "Tunde" });
+    if (!first.ok) throw new Error(first.reason);
+
+    expect((await countWaitingDrafts(amaka)).get(groupId)).toEqual({ RULE_CHANGE: 2, ROLE_CHANGE: 1 });
+    expect((await countWaitingDrafts(tunde)).get(groupId)).toBeUndefined();
+
+    await discardDraft(amaka, first.draft.id);
+    expect((await countWaitingDrafts(amaka)).get(groupId)).toEqual({ RULE_CHANGE: 1, ROLE_CHANGE: 1 });
   });
 });
 

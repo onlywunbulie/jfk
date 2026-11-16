@@ -288,6 +288,22 @@ export async function listWaitingDrafts(userId: string, groupId: string, kind?: 
     .orderBy(desc(agentDrafts.createdAt));
 }
 
+/**
+ * How many drafts the user has waiting, per group and kind, for the sidebar's
+ * counts. One query for all their groups.
+ */
+export async function countWaitingDrafts(userId: string): Promise<Map<string, Partial<Record<AgentDraft["kind"], number>>>> {
+  const rows = await db
+    .select({ groupId: agentDrafts.groupId, kind: agentDrafts.kind, waiting: count() })
+    .from(agentDrafts)
+    .where(and(eq(agentDrafts.userId, userId), eq(agentDrafts.status, "WAITING")))
+    .groupBy(agentDrafts.groupId, agentDrafts.kind);
+
+  const byGroup = new Map<string, Partial<Record<AgentDraft["kind"], number>>>();
+  for (const row of rows) byGroup.set(row.groupId, { ...byGroup.get(row.groupId), [row.kind]: row.waiting });
+  return byGroup;
+}
+
 /** Throw away one of the user's own waiting drafts. Anyone else's looks like it doesn't exist. */
 export async function discardDraft(userId: string, draftId: string, now: Date = new Date()): Promise<{ ok: true } | { ok: false; reason: "not_found" }> {
   const [row] = await db
