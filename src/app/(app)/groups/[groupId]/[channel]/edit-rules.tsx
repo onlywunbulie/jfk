@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { ChannelIntro } from "./parts";
 import { PinnedTabs } from "./pinned-tabs";
+import { useDraftActions } from "./use-draft-actions";
 
 /**
  * #edit rules: only about changes. The rules themselves live in #rules, and
@@ -16,8 +17,8 @@ import { PinnedTabs } from "./pinned-tabs";
  * Money changes start from the next round; everything else applies as soon
  * as the vote passes.
  *
- * UI only: the drafts and history are samples. The percentages needed are
- * the group's real ones.
+ * Real: the drafts Claude made, Discard, and the percentages needed. Still a
+ * sample: the history, and sending (which goes on Base with the contract step).
  */
 
 export interface EditRulesNeeds {
@@ -29,7 +30,8 @@ export interface EditRulesNeeds {
 
 type Tab = "waiting" | "history";
 
-interface Change {
+/** A rule-change draft, ready to show: formatted on the server. */
+export interface RuleDraftView {
   id: string;
   rule: string;
   before: string;
@@ -37,7 +39,11 @@ interface Change {
   /** When it takes effect if it passes. */
   starts: string;
   money: boolean;
+  /** "Drafted by Claude · 16 Nov, 11:40" */
+  made: string;
 }
+
+type Change = Omit<RuleDraftView, "made">;
 
 interface Past {
   id: string;
@@ -48,20 +54,27 @@ interface Past {
   result: string;
 }
 
-const DRAFTS: Change[] = [
-  { id: "d1", rule: "Due day", before: "5th of the month", after: "1st of the month", starts: "From the next round", money: true },
-];
-
 const PAST: Past[] = [
   { id: "h1", rule: "Due day", before: "1st", after: "5th", passed: true, result: "Passed 2 Oct · 7 of 8" },
   { id: "h2", rule: "Votes stay open", before: "3 days", after: "5 days", passed: true, result: "Passed 14 Sep · 6 of 8" },
   { id: "h3", rule: "What everyone pays", before: "USDC 80", after: "USDC 100", passed: false, result: "Didn't pass 1 Sep · 3 of 8" },
 ];
 
-export function EditRules({ base, needs, voting }: { base: string; needs: EditRulesNeeds; voting: number }) {
-  const [drafts, setDrafts] = useState(DRAFTS);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>(drafts.length > 0 ? "waiting" : "history");
+export function EditRules({
+  base,
+  needs,
+  voting,
+  drafts,
+}: {
+  base: string;
+  needs: EditRulesNeeds;
+  voting: number;
+  drafts: RuleDraftView[];
+}) {
+  const actions = useDraftActions();
+  const [chosen, setTab] = useState<Tab>(drafts.length > 0 ? "waiting" : "history");
+  // Once the last draft is discarded there's no Waiting tab to stay on.
+  const tab: Tab = chosen === "waiting" && drafts.length === 0 ? "history" : chosen;
 
   const tabs: { value: Tab; label: string; count?: number }[] = [
     ...(drafts.length > 0 ? [{ value: "waiting" as const, label: "Waiting", count: drafts.length }] : []),
@@ -96,35 +109,27 @@ export function EditRules({ base, needs, voting }: { base: string; needs: EditRu
         <div className="mt-8 max-w-xl space-y-4">
           {tab === "waiting" &&
             drafts.map((draft) => (
-              <ChangeCard key={draft.id} change={draft} eyebrow="Drafted by your Claude">
+              <ChangeCard key={draft.id} change={draft} eyebrow={draft.made}>
                 <p className="mt-4 text-sm text-ink-muted">
                   {needFor(draft)} must agree · voting closes 3 days after it&rsquo;s sent
                 </p>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => setNotice("Sending to a vote comes in a later step. Nothing was sent.")}
-                  >
+                  <Button type="button" size="sm" onClick={() => actions.send(draft.id)}>
                     Send to vote
                   </Button>
                   <Button
                     type="button"
                     variant="secondary"
                     size="sm"
-                    onClick={() => {
-                      const left = drafts.filter((d) => d.id !== draft.id);
-                      setDrafts(left);
-                      setNotice(null);
-                      if (left.length === 0) setTab("history");
-                    }}
+                    loading={actions.discarding(draft.id)}
+                    onClick={() => actions.discard(draft.id)}
                   >
                     Discard
                   </Button>
                 </div>
-                {notice && (
+                {actions.noticeFor(draft.id) && (
                   <p role="status" className="mt-3 text-xs text-ink-muted">
-                    {notice}
+                    {actions.noticeFor(draft.id)}
                   </p>
                 )}
               </ChangeCard>

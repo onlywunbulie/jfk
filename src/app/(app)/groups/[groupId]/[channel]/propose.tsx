@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { Route } from "next";
-import { useState } from "react";
+import { useDraftActions } from "./use-draft-actions";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { DateDivider, Detail, RallMessage } from "./parts";
@@ -13,7 +13,8 @@ import { DateDivider, Detail, RallMessage } from "./parts";
  * each one to a vote with a tap (the Face ID step Claude can't do). Below the
  * drafts, the user's recent proposals and how they're going.
  *
- * UI only: the draft and the proposals are samples, and nothing is sent.
+ * Real: the drafts Claude made, and Discard. Still a sample: the recent
+ * proposals, and sending (which goes on Base with the contract step).
  */
 
 export interface ProposeRules {
@@ -26,32 +27,28 @@ export interface ProposeRules {
 
 const LARGE_SPEND_SHARE = 0.2; // JfkModule.LARGE_SPEND_PERMILLE = 200
 
-interface Draft {
+/** A spend draft, ready to show: formatted on the server. */
+export interface SpendDraftView {
   id: string;
   what: string;
-  amount: number;
+  /** "USDC 400" */
+  amountLabel: string;
+  /** For the small/large spend rule. */
+  amountMajor: number;
+  /** "Kemi (member)" or "0x4fcb…1234 (outside the group)" */
   paidTo: string;
   receipt: string | null;
+  /** "Drafted by Claude · 16 Nov, 11:40" */
+  made: string;
 }
-
-const SAMPLE_DRAFTS: Draft[] = [
-  {
-    id: "d1",
-    what: "Airbnb deposit for December",
-    amount: 400,
-    paidTo: "Kemi (member)",
-    receipt: "https://www.airbnb.com/rooms/sample",
-  },
-];
 
 const SAMPLE_PROPOSALS = [
   { id: "p1", what: "Generator repair", amount: "USDC 400", status: "Passed", detail: "6 of 8 voted yes", tone: "inflow" as const },
   { id: "p2", what: "Birthday cake for Bisi", amount: "USDC 60", status: "Voting", detail: "3 of 8 so far · closes Friday", tone: "pending" as const },
 ];
 
-export function ProposeChannel({ base, rules }: { base: string; rules: ProposeRules }) {
-  const [drafts, setDrafts] = useState(SAMPLE_DRAFTS);
-  const [notice, setNotice] = useState<string | null>(null);
+export function ProposeChannel({ base, rules, drafts }: { base: string; rules: ProposeRules; drafts: SpendDraftView[] }) {
+  const actions = useDraftActions();
 
   return (
     <>
@@ -70,30 +67,24 @@ export function ProposeChannel({ base, rules }: { base: string; rules: ProposeRu
         <p className="mt-4 text-sm text-ink-muted">No drafts. When Claude prepares a proposal, it appears here.</p>
       ) : (
         drafts.map((draft) => {
-          const large = draft.amount > rules.pot * LARGE_SPEND_SHARE;
+          const large = draft.amountMajor > rules.pot * LARGE_SPEND_SHARE;
+          const notice = actions.noticeFor(draft.id);
           return (
             <RallMessage
               key={draft.id}
-             
-              time="Drafted by your Claude · just now"
+              time={draft.made}
               footnote={
                 <div className="space-y-3 border-t border-border pt-4">
                   <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => setNotice("Sending to a vote comes in a later step. Nothing was sent.")}
-                    >
+                    <Button type="button" size="sm" onClick={() => actions.send(draft.id)}>
                       Send to vote
                     </Button>
                     <Button
                       type="button"
                       variant="secondary"
                       size="sm"
-                      onClick={() => {
-                        setDrafts((current) => current.filter((d) => d.id !== draft.id));
-                        setNotice(null);
-                      }}
+                      loading={actions.discarding(draft.id)}
+                      onClick={() => actions.discard(draft.id)}
                     >
                       Discard
                     </Button>
@@ -108,7 +99,7 @@ export function ProposeChannel({ base, rules }: { base: string; rules: ProposeRu
             >
               <Detail label="For">{draft.what}</Detail>
               <Detail label="Amount">
-                <span className="tabular-nums">USDC {draft.amount.toLocaleString("en-US")}</span>
+                <span className="tabular-nums">{draft.amountLabel}</span>
               </Detail>
               <Detail label="Paid to">{draft.paidTo}</Detail>
               {draft.receipt && (

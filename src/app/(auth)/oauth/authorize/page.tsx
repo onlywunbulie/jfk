@@ -48,7 +48,7 @@ export default async function AuthorizePage({ searchParams }: PageProps<"/oauth/
     <AuthFrame>
       <Logo className="mb-12" />
       <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tight text-balance text-ink">
-        {client.name} wants to see your Rallied groups
+        {client.name} wants to help with your Rallied groups
       </h1>
       <p className="mt-3 text-ink-muted">
         Signed in as <span className="text-ink">{user.displayName}</span>
@@ -59,7 +59,11 @@ export default async function AuthorizePage({ searchParams }: PageProps<"/oauth/
         <section>
           <h2 className="text-sm text-ink-muted">{client.name} will be able to</h2>
           <ul className="mt-3 space-y-2 text-sm">
-            {["See your groups and balances", "See members and rules", "See proposals and votes"].map((item) => (
+            {[
+              "See your groups and balances",
+              "See members, rules and votes",
+              "Prepare drafts for you to send: spends, rule and role changes",
+            ].map((item) => (
               <li key={item} className="flex gap-2">
                 <span aria-hidden="true" className="text-inflow">✓</span>
                 <span className="text-ink">{item}</span>
@@ -70,7 +74,7 @@ export default async function AuthorizePage({ searchParams }: PageProps<"/oauth/
         <section>
           <h2 className="text-sm text-ink-muted">It won&rsquo;t be able to</h2>
           <ul className="mt-3 space-y-2 text-sm">
-            {["Move any money", "Vote or propose", "Change anything"].map((item) => (
+            {["Move any money", "Vote", "Send a draft: only you can, with a tap"].map((item) => (
               <li key={item} className="flex gap-2">
                 <span aria-hidden="true" className="text-ink-faint">✗</span>
                 <span className="text-ink-muted">{item}</span>

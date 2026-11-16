@@ -10,7 +10,8 @@ vi.mock("@/lib/db", async () => ({ db: t.db }));
 vi.mock("@/lib/env", () => ({ env: () => ({ APP_URL: "http://localhost:3000" }) }));
 
 const { POST } = await import("./route");
-const { registerClient, createAuthorizationCode, exchangeCode, READ_SCOPE } = await import("@/modules/agents/oauth");
+const { registerClient, createAuthorizationCode, exchangeCode, READ_SCOPE, GRANTED_SCOPES } = await import("@/modules/agents/oauth");
+const { listWaitingDrafts } = await import("@/modules/agents/drafts");
 const { createGroup } = await import("@/modules/groups/service");
 const { setAiInGroup } = await import("@/modules/agents/connection");
 const { users } = await import("@/lib/db/schema");
@@ -33,7 +34,7 @@ async function makeUser(name: string) {
   return user.id;
 }
 
-async function tokenFor(userId: string) {
+async function tokenFor(userId: string, scope: string = READ_SCOPE) {
   const client = await registerClient({ name: "Claude", redirectUris: [CALLBACK] });
   if (!client.ok) throw new Error("registration failed");
   const code = await createAuthorizationCode({
@@ -41,7 +42,7 @@ async function tokenFor(userId: string) {
     userId,
     redirectUri: CALLBACK,
     codeChallenge: CHALLENGE,
-    scope: READ_SCOPE,
+    scope,
   });
   const tokens = await exchangeCode({ code, clientId: client.client.id, redirectUri: CALLBACK, codeVerifier: VERIFIER });
   if (!tokens.ok) throw new Error("exchange failed");
@@ -87,13 +88,15 @@ describe("/api/mcp", () => {
     expect(response.headers.get("www-authenticate")).toContain('error="invalid_token"');
   });
 
-  it("lists the read-only tools for a signed-in AI", async () => {
+  it("lists the reading and drafting tools, marking which only read", async () => {
     const token = await tokenFor(await makeUser("Amaka"));
     const response = await call(token, "tools/list");
     expect(response.status).toBe(200);
     const body = (await response.json()) as { result: { tools: { name: string; annotations?: { readOnlyHint?: boolean } }[] } };
-    expect(body.result.tools.map((tool) => tool.name).sort()).toEqual(["get_group", "list_groups", "list_proposals"]);
-    expect(body.result.tools.every((tool) => tool.annotations?.readOnlyHint)).toBe(true);
+    const readOnly = body.result.tools.filter((tool) => tool.annotations?.readOnlyHint).map((tool) => tool.name).sort();
+    const drafting = body.result.tools.filter((tool) => !tool.annotations?.readOnlyHint).map((tool) => tool.name).sort();
+    expect(readOnly).toEqual(["get_group", "list_groups", "list_proposals"]);
+    expect(drafting).toEqual(["draft_role_change", "draft_rule_change", "draft_spend"]);
   });
 
   it("shows the user's own groups, and nothing of anyone else's", async () => {
@@ -131,6 +134,34 @@ describe("/api/mcp", () => {
     expect(other.text).not.toContain("Tunde's secret pot");
     const proposals = await callTool(token, "list_proposals", { group_id: theirs });
     expect(proposals.isError).toBe(true);
+  });
+
+  it("drafts only with the drafting permission, and a draft lands in Waiting", async () => {
+    const amaka = await makeUser("Amaka");
+    const { groupId } = await createGroup(amaka, {
+      name: "Detty December",
+      type: "TREASURY",
+      contributionAmount: Money.fromMajor(100, "USDC"),
+      cadence: "MONTHLY",
+      dueDay: 1,
+    });
+    const args = { group_id: groupId, rule: "due_day", value: "5" };
+
+    // An older, read-only connection is told to reconnect, and nothing is made.
+    const readOnly = await tokenFor(amaka);
+    const refused = await callTool(readOnly, "draft_rule_change", args);
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain("reconnect");
+    expect(await listWaitingDrafts(amaka, groupId)).toEqual([]);
+
+    // With drafting allowed, the draft is made and Claude gets a link to it.
+    const full = await tokenFor(amaka, GRANTED_SCOPES);
+    const made = await callTool(full, "draft_rule_change", args);
+    expect(made.isError).toBe(false);
+    expect(made.data.open_in_rallied).toBe(`http://localhost:3000/groups/${groupId}/edit-rules`);
+    const waiting = await listWaitingDrafts(amaka, groupId, "RULE_CHANGE");
+    expect(waiting).toHaveLength(1);
+    expect(waiting[0]).toMatchObject({ madeBy: "Claude", status: "WAITING" });
   });
 
   it("hides a group the user has kept their AI out of, as if it didn't exist", async () => {

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { AiLogo } from "@/components/ai-logos";
 import { PinnedTabs } from "./pinned-tabs";
+import { useDraftActions } from "./use-draft-actions";
 import { ChannelIntro, Detail, RallMessage } from "./parts";
 
 /**
@@ -16,10 +17,21 @@ import { ChannelIntro, Detail, RallMessage } from "./parts";
  * A pinned row of plain-text tabs (People · Waiting · Voting · History) keeps
  * every section one tap away instead of stacked down a long page.
  *
- * UI only: the AIs, draft, votes and most of the history are samples.
+ * Real: the drafts Claude made, and Discard. Still samples: each member's AI
+ * and most of the history.
  */
 
 export type Assistant = "Claude" | "ChatGPT" | "Grok" | null;
+
+/** A role-change draft, ready to show: formatted on the server. */
+export interface RoleDraftView {
+  id: string;
+  /** "Make Tunde an admin" */
+  label: string;
+  change: "make_admin" | "remove_admin" | "remove_member";
+  /** "Drafted by Claude · 16 Nov, 11:40" */
+  made: string;
+}
 
 export interface Person {
   id: string;
@@ -51,6 +63,7 @@ export function ManageRoles({
   startedBy,
   startedOn,
   voting,
+  drafts,
 }: {
   base: string;
   people: Person[];
@@ -59,14 +72,15 @@ export function ManageRoles({
   startedOn: string;
   /** Role changes being voted on, which live in #votes. */
   voting: number;
+  /** The user's role-change drafts from their AI, waiting to be sent. */
+  drafts: RoleDraftView[];
 }) {
   const [tab, setTab] = useState<Tab>("people");
-  const [draftOpen, setDraftOpen] = useState(true);
-  const [notice, setNotice] = useState<string | null>(null);
+  const actions = useDraftActions();
 
   const tabs: { value: Tab; label: string; count?: number }[] = [
     { value: "people", label: "People", count: people.length },
-    { value: "waiting", label: "Waiting", count: draftOpen ? 1 : 0 },
+    { value: "waiting", label: "Waiting", count: drafts.length },
     { value: "history", label: "History" },
   ];
 
@@ -151,45 +165,42 @@ export function ManageRoles({
         )}
 
         {tab === "waiting" &&
-          (draftOpen ? (
-            <RallMessage
-             
-              time="Drafted by your Claude · just now"
-              footnote={
-                <div className="space-y-3 border-t border-border pt-4">
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => setNotice("Sending to a vote comes in a later step. Nothing was sent.")}
-                    >
-                      Send to vote
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => {
-                        setDraftOpen(false);
-                        setNotice(null);
-                      }}
-                    >
-                      Discard
-                    </Button>
+          (drafts.length > 0 ? (
+            drafts.map((draft) => (
+              <RallMessage
+                key={draft.id}
+                time={draft.made}
+                footnote={
+                  <div className="space-y-3 border-t border-border pt-4">
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" size="sm" onClick={() => actions.send(draft.id)}>
+                        Send to vote
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        loading={actions.discarding(draft.id)}
+                        onClick={() => actions.discard(draft.id)}
+                      >
+                        Discard
+                      </Button>
+                    </div>
+                    {actions.noticeFor(draft.id) && (
+                      <p role="status" className="text-xs text-ink-muted">
+                        {actions.noticeFor(draft.id)}
+                      </p>
+                    )}
                   </div>
-                  {notice && (
-                    <p role="status" className="text-xs text-ink-muted">
-                      {notice}
-                    </p>
-                  )}
-                </div>
-              }
-            >
-              <Detail label="Change">Make Tunde an admin</Detail>
-              <Detail label="To pass">
-                {rules.admin} must agree<span className="text-ink-muted"> · voting closes 3 days after it&rsquo;s sent</span>
-              </Detail>
-            </RallMessage>
+                }
+              >
+                <Detail label="Change">{draft.label}</Detail>
+                <Detail label="To pass">
+                  {draft.change === "remove_member" ? rules.removeMember : rules.admin} must agree
+                  <span className="text-ink-muted"> · voting closes 3 days after it&rsquo;s sent</span>
+                </Detail>
+              </RallMessage>
+            ))
           ) : (
             <p className="mt-6 text-sm text-ink-muted">No drafts. When Claude prepares a change, it appears here.</p>
           ))}

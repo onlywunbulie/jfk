@@ -6,6 +6,8 @@ import { getGroupDetail, listGroupsForUser, listMembers } from "@/modules/groups
 import { contractThresholds } from "@/modules/groups/onchain-setup";
 import { listProposals } from "@/modules/governance/service";
 import { aiAllowedInGroup, aiOptedOutGroups } from "./connection";
+import { draftRoleChange, draftRuleChange, draftSpend } from "./drafts";
+import { DRAFT_SCOPE } from "./oauth";
 
 /**
  * Rallied's MCP server, as one signed-in user's AI sees it. Built fresh for
@@ -13,16 +15,22 @@ import { aiAllowedInGroup, aiOptedOutGroups } from "./connection";
  * someone else: every tool goes through the same services as the app, which
  * return nothing for groups the user isn't in.
  *
- * Read-only for now. Drafting proposals and acting come later.
+ * Reading, plus drafting (with the drafts:write scope): a draft lands in the
+ * user's Waiting section and does nothing until they send it. No tool moves
+ * money or votes.
  */
-export function buildRalliedServer(userId: string): McpServer {
+export function buildRalliedServer(grant: { userId: string; scope: string; appName: string; origin: string }): McpServer {
+  const { userId } = grant;
+  const canDraft = grant.scope.split(" ").includes(DRAFT_SCOPE);
   const server = new McpServer(
     { name: "rallied", title: "Rallied", version: "0.1.0" },
     {
       instructions:
         "Rallied is a group savings app: friends pool money in USDC on Base, and money only moves when the group votes. " +
         "Use list_groups first to find the user's groups, then get_group or list_proposals with a group_id. " +
-        "Amounts are exact; don't round them. Everything here is read-only.",
+        "Amounts are exact; don't round them. " +
+        "The draft_ tools only prepare a draft: confirm the details with the user first, then share the link it returns; " +
+        "the user sends it to a vote themselves in Rallied. Nothing you do here moves money or votes.",
     },
   );
 
@@ -139,6 +147,97 @@ export function buildRalliedServer(userId: string): McpServer {
             your_vote: proposal.yourVote?.toLowerCase() ?? "not voted",
           })),
       });
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // Drafting: prepares a draft in the user's Waiting section. Never sends.
+  // -------------------------------------------------------------------------
+
+  const drafted = (result: Awaited<ReturnType<typeof draftSpend>>, channel: string, what: string) => {
+    if (!result.ok) return { isError: true, content: [{ type: "text" as const, text: result.reason }] };
+    const link = `${grant.origin}/groups/${result.draft.groupId}/${channel}`;
+    return json({
+      drafted: what,
+      status: "waiting for the user to send it to a vote",
+      open_in_rallied: link,
+      next: "Tell the user it's ready and share the link. Only they can send it; it does nothing until they do.",
+    });
+  };
+
+  const noDraftScope = {
+    isError: true,
+    content: [
+      {
+        type: "text" as const,
+        text: "This connection can only read. Ask the user to reconnect Rallied in Claude (Settings → Connectors → Rallied → Connect) and Allow drafts.",
+      },
+    ],
+  };
+
+  server.registerTool(
+    "draft_spend",
+    {
+      title: "Draft a spend",
+      description:
+        "Prepare a spend for a shared-pot group: what it's for, how much, and who gets paid (a member's name, or a wallet address on Base for someone outside the group). " +
+        "It lands in the user's Waiting section in #propose a spend; they send it to a vote. Confirm the details with the user before calling this.",
+      inputSchema: {
+        group_id: z.string().min(1).max(64),
+        what: z.string().min(1).max(80).describe("What the money is for, e.g. 'Airbnb deposit for December'"),
+        amount: z.string().min(1).max(20).describe("Amount in the group's currency, e.g. '400' or '400.50'"),
+        paid_to: z.string().min(1).max(64).describe("A member's name exactly as list_groups/get_group shows it, or a 0x wallet address"),
+        receipt_url: z.string().max(500).optional().describe("Optional https link to an invoice, quote or listing"),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    },
+    async ({ group_id, what, amount, paid_to, receipt_url }) => {
+      if (!canDraft) return noDraftScope;
+      const result = await draftSpend({ userId, groupId: group_id, madeBy: grant.appName, what, amount, paidTo: paid_to, receiptUrl: receipt_url });
+      return drafted(result, "propose", `a spend: ${what}`);
+    },
+  );
+
+  server.registerTool(
+    "draft_rule_change",
+    {
+      title: "Draft a rule change",
+      description:
+        "Prepare a change to a group's rules: what everyone pays (rule what_everyone_pays, value like '150'), the due day " +
+        "(rule due_day, value 1-28 for monthly groups or 1-7 Monday-Sunday for weekly ones), or how many must vote for a vote to count " +
+        "(rule votes_count_share, value a whole percentage). It lands in the user's Waiting section in #edit rules; they send it to a vote.",
+      inputSchema: {
+        group_id: z.string().min(1).max(64),
+        rule: z.enum(["what_everyone_pays", "due_day", "votes_count_share"]),
+        value: z.string().min(1).max(20).describe("The new value"),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    },
+    async ({ group_id, rule, value }) => {
+      if (!canDraft) return noDraftScope;
+      const result = await draftRuleChange({ userId, groupId: group_id, madeBy: grant.appName, rule, value });
+      return drafted(result, "edit-rules", `a rule change (${rule.replaceAll("_", " ")} → ${value})`);
+    },
+  );
+
+  server.registerTool(
+    "draft_role_change",
+    {
+      title: "Draft a role change",
+      description:
+        "Prepare a change to who looks after a group: make a member an admin, remove an admin, or remove a member. " +
+        "It lands in the user's Waiting section in #manage roles; they send it to a vote.",
+      inputSchema: {
+        group_id: z.string().min(1).max(64),
+        change: z.enum(["make_admin", "remove_admin", "remove_member"]),
+        member_name: z.string().min(1).max(64).describe("The member's name exactly as get_group shows it"),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    },
+    async ({ group_id, change, member_name }) => {
+      if (!canDraft) return noDraftScope;
+      const result = await draftRoleChange({ userId, groupId: group_id, madeBy: grant.appName, change, memberName: member_name });
+      return drafted(result, "manage-roles", `a role change (${change.replaceAll("_", " ")}: ${member_name})`);
     },
   );
 

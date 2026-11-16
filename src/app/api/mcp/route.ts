@@ -1,5 +1,5 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { verifyAccessToken } from "@/modules/agents/oauth";
+import { getClient, verifyAccessToken } from "@/modules/agents/oauth";
 import { buildRalliedServer } from "@/modules/agents/mcp";
 import { agentUrls, publicOrigin } from "@/modules/agents/origin";
 
@@ -28,7 +28,13 @@ async function handle(request: Request): Promise<Response> {
     );
   }
 
-  const server = buildRalliedServer(grant.userId);
+  const client = await getClient(grant.clientId);
+  const server = buildRalliedServer({
+    userId: grant.userId,
+    scope: grant.scope,
+    appName: client?.name ?? "Your AI",
+    origin: publicOrigin(request.headers),
+  });
   // Stateless: no session ids, one JSON response per request.
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   // Say why a request was refused (e.g. an unknown protocol version), so a 400 in the log isn't a mystery.

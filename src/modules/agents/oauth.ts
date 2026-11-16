@@ -15,8 +15,14 @@ import { randomToken } from "@/lib/ids";
  * response that hands them to the AI app.
  */
 
-/** The only scope today: read the user's groups. Acting comes later. */
+/** Read the user's groups. */
 export const READ_SCOPE = "groups:read";
+
+/** Preparing drafts (spends, rule and role changes) for the user to send. Never sends anything. */
+export const DRAFT_SCOPE = "drafts:write";
+
+/** Everything an approved AI gets today. */
+export const GRANTED_SCOPES = `${READ_SCOPE} ${DRAFT_SCOPE}`;
 
 const CODE_TTL_MS = 5 * 60 * 1000; // a sign-in code must be exchanged within 5 minutes
 const ACCESS_TTL_MS = 60 * 60 * 1000; // 1 hour

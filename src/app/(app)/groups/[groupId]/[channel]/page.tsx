@@ -8,6 +8,8 @@ import { channelBelongs, findChannel } from "@/components/shell/channels";
 import { PayoutOrder } from "./payout-order";
 import { EXPLORER_URL, shortAddress } from "@/lib/chain/addresses";
 import { VerifyAi } from "./verify-ai";
+import { listWaitingDrafts } from "@/modules/agents/drafts";
+import { roleDraftView, ruleDraftView, spendDraftView } from "./draft-views";
 import { aiAllowedInGroup, getAiConnection } from "@/modules/agents/connection";
 import { DEFAULT_GOVERNANCE, type GovernedAction, type GroupType } from "@/lib/db/schema/groups";
 import { contractThresholds } from "@/modules/groups/onchain-setup";
@@ -291,6 +293,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
           Ask your Claude to propose. Its drafts land here for you to check and send to a vote.
         </ChannelIntro>
         <ProposeChannel
+          drafts={(await listWaitingDrafts(user.id, group.id, "SPEND")).map(spendDraftView)}
           base={`/groups/${group.id}`}
           rules={{
             // UI only: the sample pot until the vault's balance is read from Base.
@@ -322,6 +325,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
     }));
     return (
       <ManageRoles
+          drafts={(await listWaitingDrafts(user.id, group.id, "ROLE_CHANGE")).map(roleDraftView)}
           base={`/groups/${group.id}`}
           people={people}
           startedBy={owner?.displayName ?? "Unknown"}
@@ -346,6 +350,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
     // The contract's CHANGE_CONTRIBUTION and CHANGE_RULES thresholds.
     return (
       <EditRules
+        drafts={(await listWaitingDrafts(user.id, group.id, "RULE_CHANGE")).map(ruleDraftView)}
         base={`/groups/${group.id}`}
         needs={{ contribution: percent(onChain[5]), rules: percent(onChain[6]) }}
         // UI only: matches the one sample rule change in #votes.

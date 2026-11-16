@@ -1,5 +1,5 @@
 import { agentUrls, publicOrigin } from "@/modules/agents/origin";
-import { READ_SCOPE } from "@/modules/agents/oauth";
+import { DRAFT_SCOPE, READ_SCOPE } from "@/modules/agents/oauth";
 
 /**
  * Protected resource metadata (RFC 9728): tells an AI app that Rallied's MCP
@@ -13,7 +13,7 @@ export function GET(request: Request) {
     {
       resource: urls.mcp,
       authorization_servers: [urls.issuer],
-      scopes_supported: [READ_SCOPE],
+      scopes_supported: [READ_SCOPE, DRAFT_SCOPE],
       bearer_methods_supported: ["header"],
       resource_name: "Rallied",
     },

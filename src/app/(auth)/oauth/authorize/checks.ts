@@ -1,4 +1,4 @@
-import { getClient } from "@/modules/agents/oauth";
+import { getClient, GRANTED_SCOPES } from "@/modules/agents/oauth";
 import type { OauthClient } from "@/lib/db/schema";
 
 /**
@@ -51,7 +51,7 @@ export async function checkAuthorizeRequest(params: Record<string, string | unde
   return {
     ok: true,
     client,
-    request: { clientId, redirectUri, codeChallenge: params.code_challenge, state, scope: "groups:read" },
+    request: { clientId, redirectUri, codeChallenge: params.code_challenge, state, scope: GRANTED_SCOPES },
   };
 }
 

@@ -1,4 +1,4 @@
-import { index, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { index, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { createdAt, primaryId, users } from "./identity";
 import { groups } from "./groups";
 
@@ -106,4 +106,39 @@ export const aiGroupOptouts = pgTable(
   (table) => [uniqueIndex("ai_group_optouts_user_group_unique").on(table.userId, table.groupId)],
 );
 
+// ---------------------------------------------------------------------------
+// agent_drafts: something a user's AI prepared, waiting for the user to send
+// ---------------------------------------------------------------------------
+
+export const agentDraftKindEnum = pgEnum("agent_draft_kind", ["SPEND", "RULE_CHANGE", "ROLE_CHANGE"]);
+export const agentDraftStatusEnum = pgEnum("agent_draft_status", ["WAITING", "SENT", "DISCARDED"]);
+
+/**
+ * A draft is private to the user who asked for it: nobody else in the group
+ * sees it, and nothing happens until they send it. `details` holds what the
+ * draft says, already checked when it was made; its shape depends on `kind`
+ * (see `modules/agents/drafts.ts`).
+ */
+export const agentDrafts = pgTable(
+  "agent_drafts",
+  {
+    id: primaryId(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    groupId: text("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    kind: agentDraftKindEnum("kind").notNull(),
+    details: jsonb("details").$type<Record<string, unknown>>().notNull(),
+    /** Which AI app made it, e.g. "Claude". */
+    madeBy: text("made_by").notNull(),
+    status: agentDraftStatusEnum("status").notNull().default("WAITING"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (table) => [index("agent_drafts_user_group_status_idx").on(table.userId, table.groupId, table.status)],
+);
+
 export type OauthClient = typeof oauthClients.$inferSelect;
+export type AgentDraft = typeof agentDrafts.$inferSelect;
