@@ -1,4 +1,5 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { SUPPORTED_PROTOCOL_VERSIONS } from "@modelcontextprotocol/sdk/types.js";
 import { getClient, verifyAccessToken } from "@/modules/agents/oauth";
 import { buildRalliedServer } from "@/modules/agents/mcp";
 import { agentUrls, publicOrigin } from "@/modules/agents/origin";
@@ -41,10 +42,31 @@ async function handle(request: Request): Promise<Response> {
   transport.onerror = (error) => console.warn(`[mcp] ${error.message}`);
   await server.connect(transport);
   try {
-    return await transport.handleRequest(request);
+    return await transport.handleRequest(await withKnownProtocolVersion(request));
   } finally {
     void server.close();
   }
+}
+
+/**
+ * Claude may label requests with an MCP protocol version newer than this
+ * library knows (seen: 2026-07-28), which the library refuses with a 400,
+ * after which Claude retries with an older one. A request labelled with an
+ * unknown version is passed on without the label instead, so the library
+ * uses the version agreed at start-up: what the retry would have reached.
+ */
+async function withKnownProtocolVersion(request: Request): Promise<Request> {
+  const version = request.headers.get("mcp-protocol-version");
+  if (version === null || SUPPORTED_PROTOCOL_VERSIONS.includes(version)) return request;
+  const headers = new Headers(request.headers);
+  headers.delete("mcp-protocol-version");
+  const hasBody = request.method !== "GET" && request.method !== "HEAD";
+  return new Request(request.url, {
+    method: request.method,
+    headers,
+    body: hasBody ? await request.text() : undefined,
+    signal: request.signal,
+  });
 }
 
 export { handle as GET, handle as POST, handle as DELETE };

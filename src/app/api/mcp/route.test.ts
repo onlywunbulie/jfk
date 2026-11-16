@@ -88,6 +88,23 @@ describe("/api/mcp", () => {
     expect(response.headers.get("www-authenticate")).toContain('error="invalid_token"');
   });
 
+  it("accepts a request labelled with a protocol version newer than it knows (as Claude sends)", async () => {
+    const token = await tokenFor(await makeUser("Amaka"));
+    const response = await POST(
+      new Request("http://localhost:3000/api/mcp", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          authorization: `Bearer ${token}`,
+          "mcp-protocol-version": "2026-07-28",
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+      }),
+    );
+    expect(response.status).toBe(200);
+  });
+
   it("lists the reading and drafting tools, marking which only read", async () => {
     const token = await tokenFor(await makeUser("Amaka"));
     const response = await call(token, "tools/list");
