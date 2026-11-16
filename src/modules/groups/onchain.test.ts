@@ -149,6 +149,7 @@ describe("starting a group on-chain", () => {
         governance: {},
         quorumPct: 60,
         votingPeriodSeconds: 3 * 86400,
+        cadence: "MONTHLY",
       }),
       "0x6080",
     );

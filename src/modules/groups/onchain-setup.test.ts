@@ -16,6 +16,7 @@ function setupFor(overrides: Partial<Parameters<typeof buildGroupSetup>[0]> = {}
     governance: {},
     quorumPct: 60,
     votingPeriodSeconds: 3 * 86400,
+    cadence: "MONTHLY",
     ...overrides,
   });
 }
@@ -42,12 +43,18 @@ describe("creating a group's Safe", () => {
     expect(to).toBe(CONTRACTS.jfkSetup);
     expect(fallback).toBe(zeroAddress);
 
-    const [module, token, contribution, , quorum, period] = inner;
+    const [module, token, contribution, , quorum, period, payGap] = inner;
     expect(module).toBe(CONTRACTS.jfkModule);
     expect(token).toBe(CONTRACTS.usdc);
     expect(contribution).toBe(50_000_000n); // $50 in USDC's six decimal places
     expect(quorum).toBe(60);
     expect(period).toBe(3 * 86400);
+    expect(payGap).toBe(25 * 86400); // monthly: at least 25 days between collected dues
+  });
+
+  it("spaces collected dues by the group's schedule: 25 days monthly, 6 weekly", () => {
+    const weekly = decode(setupFor({ cadence: "WEEKLY" }).initializer).inner;
+    expect(weekly[6]).toBe(6 * 86400);
   });
 
   it("refuses to put a naira group on-chain", () => {

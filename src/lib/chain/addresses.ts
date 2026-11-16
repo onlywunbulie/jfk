@@ -12,8 +12,9 @@ import type { Address } from "viem";
 export const chain = baseSepolia;
 
 export const CONTRACTS = {
-  jfkModule: "0x3Ed964C55fA5f8744536cb9a850E3628e43c37f4",
-  jfkSetup: "0xd3a66047dd75D959D492e667Cd4EBCfc1E25C532",
+  /** Version 2 (2026-11-16): helpers and collected dues. v1 is kept in the deployment record. */
+  jfkModule: "0x2E036f9aFdC44D1399FD720A0626544b1e57F401",
+  jfkSetup: "0xDaf87e6Af54E85762476AC21baD7d53BdfAC88D0",
   /** Safe v1.4.1, the L2 flavour that emits events for indexing. */
   safeL2Singleton: "0x29fcB43b46531BcA003ddC8FCB67FFE91900C762",
   safeProxyFactory: "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67",

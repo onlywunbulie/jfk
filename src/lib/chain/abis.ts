@@ -70,12 +70,30 @@ export const jfkSetupAbi = [
       { name: "thresholds", type: "uint16[9]" },
       { name: "quorumPct", type: "uint8" },
       { name: "votingPeriod", type: "uint32" },
+      { name: "payGap", type: "uint32" },
     ],
     outputs: [],
   },
 ] as const;
 
 export const jfkModuleAbi = [
+  {
+    type: "function",
+    name: "getGroupSettings",
+    stateMutability: "view",
+    inputs: [{ name: "safe", type: "address" }],
+    outputs: [
+      { name: "humanVotesOnly", type: "bool" },
+      { name: "payGap", type: "uint32" },
+    ],
+  },
+  {
+    type: "function",
+    name: "VERSION",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "string" }],
+  },
   {
     type: "function",
     name: "getGroup",

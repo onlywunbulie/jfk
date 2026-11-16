@@ -50,6 +50,18 @@ export interface GroupSetupInput {
   governance: Partial<Record<GovernedAction, number>>;
   quorumPct: number;
   votingPeriodSeconds: number;
+  /** How often everyone pays; sets the least time between two collected payments. */
+  cadence: "WEEKLY" | "MONTHLY";
+}
+
+/**
+ * The least time between two collected payments from one member. A little
+ * short of the real cycle, so a due date that drifts (a 28-day February, a
+ * collection that ran late) never blocks the next one; still long enough
+ * that nobody can be charged twice for one period.
+ */
+export function payGapSeconds(cadence: "WEEKLY" | "MONTHLY"): number {
+  return (cadence === "MONTHLY" ? 25 : 6) * 24 * 60 * 60;
 }
 
 export interface GroupSetup {
@@ -78,6 +90,7 @@ export function buildGroupSetup(input: GroupSetupInput): GroupSetup {
       contractThresholds(input.governance),
       input.quorumPct,
       input.votingPeriodSeconds,
+      payGapSeconds(input.cadence),
     ],
   });
 
