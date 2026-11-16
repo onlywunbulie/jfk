@@ -12,7 +12,8 @@
  * that, it's never decoration. Where it fills a shape it has depth: lit from
  * the top, a thin bright edge, and a faint glow (see `.bg-accent` below).
  *
- * Red is only for "something went wrong". Everything else is semantic money
+ * Red means "something went wrong" or "this needs you" (the counts and dot
+ * on channels and groups with something waiting). Everything else is semantic money
  * state.
  *
  * Surfaces are solid: no blur, no translucency. Separation comes from three

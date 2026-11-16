@@ -306,7 +306,7 @@ function RailItem({
   href: Route;
   label: string;
   selected: boolean;
-  /** Something in this group is waiting for the user: a small blue dot on the square's corner. */
+  /** Something in this group is waiting for the user: a small red dot on the square's corner. */
   hasNew?: boolean;
   children?: ReactNode;
 }) {
@@ -326,7 +326,7 @@ function RailItem({
       {hasNew && (
         <span
           aria-hidden="true"
-          className="absolute -top-1 -right-1 size-3 rounded-full border-2 border-canvas bg-accent"
+          className="absolute -top-1 -right-1 size-3 rounded-full border-2 border-canvas bg-danger"
         />
       )}
     </Link>
@@ -402,7 +402,7 @@ function Stat({ children }: { children: ReactNode }) {
 
 /**
  * A channel in the sidebar. With something waiting for the user (`count`), its
- * name turns white and a small blue count sits at the row's right end.
+ * name turns white and a small red count sits at the row's right end.
  */
 function ChannelLink({ href, active, count = 0, children }: { href: Route; active: boolean; count?: number; children: ReactNode }) {
   return (
@@ -427,7 +427,7 @@ function ChannelLink({ href, active, count = 0, children }: { href: Route; activ
         <Hash />
         <span className="min-w-0 flex-1 truncate">{children}</span>
         {count > 0 && (
-          <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-accent px-1.5 text-xs font-semibold text-accent-ink tabular-nums">
+          <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-danger px-1.5 text-xs font-semibold text-white tabular-nums">
             {count > 99 ? "99+" : count}
             <span className="sr-only"> waiting for you</span>
           </span>
