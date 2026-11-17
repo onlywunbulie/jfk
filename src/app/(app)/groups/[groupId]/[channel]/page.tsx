@@ -22,6 +22,8 @@ import { ManageRoles, type Assistant, type Person } from "./manage-roles";
 import { EditRules } from "./edit-rules";
 import { Votes } from "./votes";
 import { readChainVotes } from "@/modules/groups/onchain-votes";
+import { readDues } from "@/modules/groups/onchain-dues";
+import { Dues } from "./dues";
 
 export async function generateMetadata({
   params,
@@ -152,6 +154,11 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
               members={onChain.members}
               inviteHref={`/groups/${group.id}/members`}
             />
+          </div>
+        )}
+        {group.safeAddress && (
+          <div className="mt-6 max-w-xl">
+            <Dues dues={await readDues(group.id, user.id)} groupId={group.id} />
           </div>
         )}
       </div>

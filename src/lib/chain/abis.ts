@@ -230,3 +230,65 @@ export const jfkModuleAbi = [
     ],
   },
 ] as const;
+
+/** The ERC-20 slice dues need: balances, the allowance for the module, and approving it. */
+export const erc20Abi = [
+  {
+    type: "function",
+    name: "balanceOf",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "allowance",
+    stateMutability: "view",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
+    ],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "approve",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+  },
+] as const;
+
+/** JfkModule's dues: paying in by hand, and what each member has paid and when. */
+export const jfkDuesAbi = [
+  {
+    type: "function",
+    name: "contribute",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "safe", type: "address" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "paidIn",
+    stateMutability: "view",
+    inputs: [
+      { name: "safe", type: "address" },
+      { name: "member", type: "address" },
+    ],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "lastPaidAt",
+    stateMutability: "view",
+    inputs: [
+      { name: "safe", type: "address" },
+      { name: "member", type: "address" },
+    ],
+    outputs: [{ name: "", type: "uint64" }],
+  },
+] as const;

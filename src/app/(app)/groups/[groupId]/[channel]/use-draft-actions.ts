@@ -49,7 +49,7 @@ export function useDraftActions() {
         return;
       }
       const sent = await sendToBase({
-        call: prepared.call,
+        calls: [prepared.call],
         wallet: prepared.wallet,
         onStage: (next, wallet) => setStage({ id, stage: next, wallet }),
       });

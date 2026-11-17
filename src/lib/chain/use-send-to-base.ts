@@ -61,7 +61,12 @@ export function useSendToBase() {
   }
 
   return async function sendToBase(input: {
-    call: { to: Address; data: Hex };
+    /**
+     * The calls, in order. Coinbase's wallet sends them together, all or
+     * nothing; a browser wallet sends them one after another, each confirmed
+     * before the next.
+     */
+    calls: { to: Address; data: Hex }[];
     /** The wallet this account signed in with; any other is refused. */
     wallet: string;
     onStage?: (stage: SendStage, wallet: Wallet) => void;
@@ -81,19 +86,27 @@ export function useSendToBase() {
       let hash: Hex | undefined;
       if (wallet === "base") {
         const result = await sendCalls({
-          calls: [input.call],
+          calls: input.calls,
           chainId: chain.id,
           // Rallied pays the network fee. The wallet calls this address itself.
           capabilities: { paymasterService: { url: `${window.location.origin}/api/paymaster` } },
         });
         input.onStage?.("sending", wallet);
-        hash = result.status === "success" ? result.receipts?.[0]?.transactionHash : undefined;
+        // The last receipt is the one that did the work (the proposal, the vote, the payment).
+        hash = result.status === "success" ? result.receipts?.at(-1)?.transactionHash : undefined;
       } else {
         if (connected.onChain !== chain.id) await switchChainAsync({ chainId: chain.id });
-        const sent = await sendTransaction({ to: input.call.to, data: input.call.data, chainId: chain.id });
-        input.onStage?.("sending", wallet);
-        const receipt = await waitForTransactionReceipt(config, { hash: sent, chainId: chain.id });
-        hash = receipt.status === "success" ? sent : undefined;
+        for (const [i, call] of input.calls.entries()) {
+          if (i > 0) input.onStage?.("confirm", wallet);
+          const sent = await sendTransaction({ to: call.to, data: call.data, chainId: chain.id });
+          input.onStage?.("sending", wallet);
+          const receipt = await waitForTransactionReceipt(config, { hash: sent, chainId: chain.id });
+          if (receipt.status !== "success") {
+            hash = undefined;
+            break;
+          }
+          hash = sent;
+        }
       }
 
       if (!hash) return { ok: false, error: "It didn't go through on Base. Nothing changed; try again." };
