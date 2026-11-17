@@ -63,6 +63,10 @@ function createClient(): Database {
     max: env().NODE_ENV === "production" ? 10 : 3,
     idle_timeout: 20,
     connect_timeout: 10,
+    // A pooled connection (Neon's "-pooler" host, or PgBouncer) hands each
+    // query to whichever server connection is free, so a statement prepared
+    // on one isn't there on the next. Plain queries work everywhere.
+    prepare: !/-pooler.|pgbouncer=true/.test(url),
   });
 
   return drizzlePostgres(client, { schema, casing: "snake_case" });
