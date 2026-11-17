@@ -43,6 +43,13 @@ const serverEnvSchema = z.object({
     .string()
     .regex(/^0x[0-9a-fA-F]{64}$/, "must be a 0x-prefixed 32-byte hex key")
     .optional(),
+  /**
+   * Coinbase Developer Platform's paymaster for Base Sepolia, so Rallied pays
+   * the network fee when a member sends a proposal or votes from their own
+   * wallet. The URL contains a secret key: server-side only, never sent to
+   * the browser (the browser goes through Rallied's own proxy).
+   */
+  PAYMASTER_URL: z.url().optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
