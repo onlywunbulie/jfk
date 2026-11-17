@@ -8,6 +8,12 @@ import { createTestDb, type TestDb } from "@/lib/db/testing";
 const t: TestDb = await createTestDb();
 vi.mock("@/lib/db", async () => ({ db: t.db }));
 vi.mock("@/lib/env", () => ({ env: () => ({ APP_URL: "http://localhost:3000" }) }));
+// Starting on Base talks to the chain; here it's a stand-in that records who asked.
+const startGroupOnChain = vi.fn(async (groupId: string, userId: string) =>
+  startResult(groupId, userId),
+);
+let startResult: (groupId: string, userId: string) => unknown = () => ({ ok: true, safeAddress: "0x2a7a348bccee61c5ef6c213efc0baa05841a5a70", txHash: "0xab" });
+vi.mock("@/modules/groups/onchain", () => ({ startGroupOnChain: (groupId: string, userId: string) => startGroupOnChain(groupId, userId) }));
 
 const { POST } = await import("./route");
 const { registerClient, createAuthorizationCode, exchangeCode, READ_SCOPE, GRANTED_SCOPES } = await import("@/modules/agents/oauth");
@@ -113,7 +119,7 @@ describe("/api/mcp", () => {
     const readOnly = body.result.tools.filter((tool) => tool.annotations?.readOnlyHint).map((tool) => tool.name).sort();
     const drafting = body.result.tools.filter((tool) => !tool.annotations?.readOnlyHint).map((tool) => tool.name).sort();
     expect(readOnly).toEqual(["get_group", "list_groups", "list_proposals"]);
-    expect(drafting).toEqual(["create_group", "draft_role_change", "draft_rule_change", "draft_spend", "invite_link"]);
+    expect(drafting).toEqual(["create_group", "draft_role_change", "draft_rule_change", "draft_spend", "invite_link", "start_on_base"]);
   });
 
   it("shows the user's own groups, and nothing of anyone else's", async () => {
@@ -197,6 +203,39 @@ describe("/api/mcp", () => {
     });
     const full = await tokenFor(amaka, GRANTED_SCOPES);
     expect((await callTool(full, "invite_link", { group_id: theirs })).isError).toBe(true);
+  });
+
+  it("starts the user's group on Base, and says plainly when it can't", async () => {
+    const amaka = await makeUser("Amaka");
+    const { groupId } = await createGroup(amaka, {
+      name: "Test Run",
+      type: "TREASURY",
+      contributionAmount: Money.fromMajor(5, "USDC"),
+      cadence: "MONTHLY",
+      dueDay: 1,
+    });
+
+    // Not on a read-only connection.
+    const readOnly = await tokenFor(amaka);
+    expect((await callTool(readOnly, "start_on_base", { group_id: groupId })).isError).toBe(true);
+    expect(startGroupOnChain).not.toHaveBeenCalled();
+
+    const full = await tokenFor(amaka, GRANTED_SCOPES);
+    const started = await callTool(full, "start_on_base", { group_id: groupId });
+    expect(started.isError).toBe(false);
+    expect(started.data).toMatchObject({ started: true, vault: "0x2a7a348bccee61c5ef6c213efc0baa05841a5a70" });
+    expect(startGroupOnChain).toHaveBeenCalledWith(groupId, amaka);
+
+    startResult = () => ({ ok: false, reason: "not_owner" });
+    const refused = await callTool(full, "start_on_base", { group_id: groupId });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain("Only the person who started");
+
+    // A group the user kept their AI out of can't be started from the AI.
+    startGroupOnChain.mockClear();
+    await setAiInGroup(amaka, groupId, false);
+    expect((await callTool(full, "start_on_base", { group_id: groupId })).isError).toBe(true);
+    expect(startGroupOnChain).not.toHaveBeenCalled();
   });
 
   it("drafts only with the drafting permission, and a draft lands in Waiting", async () => {

@@ -5,6 +5,8 @@ import { DEFAULT_GOVERNANCE, type GovernedAction } from "@/lib/db/schema";
 import { createGroup, createInvite, getGroupDetail, listGroupsForUser, listMembers } from "@/modules/groups/service";
 import { Money } from "@/lib/money";
 import { contractThresholds } from "@/modules/groups/onchain-setup";
+import { startGroupOnChain } from "@/modules/groups/onchain";
+import { EXPLORER_URL } from "@/lib/chain/addresses";
 import { listProposals } from "@/modules/governance/service";
 import { aiAllowedInGroup, aiOptedOutGroups } from "./connection";
 import { draftRoleChange, draftRuleChange, draftSpend } from "./drafts";
@@ -316,6 +318,44 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         uses,
         expires: result.expiresAt.toISOString().slice(0, 10),
         next: "Share the link with the friends who should join.",
+      });
+    },
+  );
+
+  server.registerTool(
+    "start_on_base",
+    {
+      title: "Start a group on Base",
+      description:
+        "Give one of the user's groups its own vault on Base, with every current member as an owner. Only the group's starter can do this, once everyone who should be in it has joined: anyone joining later needs a vote. Rallied pays the network fee. Moves no money.",
+      inputSchema: { group_id: z.string().min(1).max(64) },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async ({ group_id }) => {
+      if (!canDraft) return noDraftScope;
+      if (!(await aiAllowedInGroup(userId, group_id))) return notFound();
+      const result = await startGroupOnChain(group_id, userId);
+      if (!result.ok) {
+        if (result.reason === "not_found") return notFound();
+        if (result.reason === "already_started") return refusal("This group is already on Base. Its vault is shown in get_group.");
+        return refusal(
+          {
+            not_owner: "Only the person who started this group can put it on Base. Ask them to.",
+            not_usdc: "This group was made before Rallied moved on-chain, so it can't go on Base. Create a new group instead.",
+            members_without_wallets: "Every member needs to have signed in to Rallied with a wallet first. Ask the ones who haven't to sign in.",
+            no_relayer: "Rallied can't pay network fees right now. The user can try again later from #about.",
+            relayer_out_of_funds: "Rallied's fee wallet is empty right now. The user can try again later from #about.",
+            reverted: "Base refused to create the vault. Nothing was recorded; try again.",
+            not_confirmed: "The vault was created but didn't check out, so Rallied didn't record it. Tell the user to contact Rallied.",
+          }[result.reason],
+        );
+      }
+      return json({
+        started: true,
+        vault: result.safeAddress,
+        check_it: `${EXPLORER_URL}/address/${result.safeAddress}`,
+        open_in_rallied: `${grant.origin}/groups/${group_id}/about`,
+        next: "The group can now pay dues into its vault (from #about) and vote on changes. Anyone who joins from now on needs the group's vote.",
       });
     },
   );
