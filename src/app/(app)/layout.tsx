@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
+import { signInHref } from "@/lib/auth/return-to";
 import { getCurrentUser } from "@/lib/auth/session";
 import { listGroupsForUser } from "@/modules/groups/service";
 import { countVotesAwaitingUser } from "@/modules/governance/service";
@@ -16,7 +18,8 @@ import { ProfilePanel } from "@/components/shell/profile-panel";
  */
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const user = await getCurrentUser();
-  if (!user) redirect("/sign-in");
+  // Back to the page they asked for once signed in (see proxy.ts).
+  if (!user) redirect(signInHref((await headers()).get("x-rallied-path")));
 
   const [groups, waiting, drafts] = await Promise.all([
     listGroupsForUser(user.id),

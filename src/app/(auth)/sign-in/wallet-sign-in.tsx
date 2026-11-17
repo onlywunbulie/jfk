@@ -118,8 +118,10 @@ export function WalletSignIn({ returnTo = null }: { returnTo?: string | null }) 
         return;
       }
       finished = true;
-      // A returning user who came to approve an AI app goes straight back there.
-      router.replace(outcome.next === "/" && returnTo ? (returnTo as Route) : outcome.next);
+      // Back to where they were going: straight there, or after the welcome steps for someone new.
+      const next =
+        returnTo && outcome.next === "/" ? returnTo : returnTo ? `/welcome?next=${encodeURIComponent(returnTo)}` : outcome.next;
+      router.replace(next as Route);
       router.refresh();
     } catch (cause) {
       // Kept for whoever debugs it; the dev server copies this into its log.

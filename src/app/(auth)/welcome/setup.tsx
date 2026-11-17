@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { AiLogo } from "@/components/ai-logos";
@@ -18,7 +19,7 @@ import { SetupProgress } from "../auth-frame";
  * app (the connection itself finishes in Claude).
  */
 
-export function Setup({ initialName, mcpUrl }: { initialName: string; mcpUrl: string }) {
+export function Setup({ initialName, mcpUrl, next = "/" }: { initialName: string; mcpUrl: string; next?: string }) {
   const router = useRouter();
   const [state, action] = useActionState(setNameAction, {});
   // Saving the name moves setup on to step 3.
@@ -27,7 +28,7 @@ export function Setup({ initialName, mcpUrl }: { initialName: string; mcpUrl: st
   const [copied, setCopied] = useState(false);
 
   const enterApp = () => {
-    router.replace("/");
+    router.replace(next as Route);
     router.refresh();
   };
 

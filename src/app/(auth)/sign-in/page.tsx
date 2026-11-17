@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth/session";
 import { Logo } from "@/components/logo";
 import { AuthFrame } from "../auth-frame";
+import { safeReturnTo } from "@/lib/auth/return-to";
 import { WalletSignIn } from "./wallet-sign-in";
 
 export const metadata: Metadata = {
@@ -12,13 +13,13 @@ export const metadata: Metadata = {
 /**
  * Signing in: one heading, one line, one button. Base Account only.
  *
- * `?next=` brings the user back after signing in, but only to the screen
- * where they approve an AI app; any other address is ignored, so a link
- * can't bounce someone off to an arbitrary page.
+ * `?next=` brings the user back after signing in: to a group's page (a link
+ * from Claude), an invite, or the screen where they approve an AI app. Any
+ * other address is ignored (see lib/auth/return-to.ts).
  */
 export default async function SignInPage({ searchParams }: PageProps<"/sign-in">) {
   const { next } = await searchParams;
-  const returnTo = typeof next === "string" && next.startsWith("/oauth/authorize?") ? next : null;
+  const returnTo = safeReturnTo(next);
 
   if (await getCurrentUser()) redirect(returnTo ?? "/");
 
