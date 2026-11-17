@@ -255,7 +255,7 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
       description:
         "Start a new Rallied group with the user as its starter, saving in digital dollars (USDC). " +
         "kind: shared_pot (everyone pays into one pot; money leaves only by vote) or rotating_savings (each round's pot goes to one member in turn). " +
-        "It moves no money and isn't on Base yet: the user starts it on Base from the group's #about once friends have joined. " +
+        "It moves no money and isn't on Base yet. Put it on Base with start_on_base when the user asks, usually once friends have joined (anyone joining after needs a vote). " +
         "Confirm the name, kind, amount, how often and due day with the user first. Then offer an invite link.",
       inputSchema: {
         name: z.string().min(1).max(60).describe("The group's name, e.g. 'Detty December'"),
@@ -285,7 +285,7 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         created: name.trim(),
         group_id: groupId,
         open_in_rallied: `${grant.origin}/groups/${groupId}/about`,
-        next: "Offer an invite link (invite_link) so friends can join. Once they have, the user starts the group on Base from #about.",
+        next: "Offer an invite link (invite_link) so friends can join. When the user wants it on Base, use start_on_base; it's best once friends have joined, since anyone joining after needs a vote.",
       });
     },
   );
