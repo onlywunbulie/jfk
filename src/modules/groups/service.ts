@@ -103,6 +103,8 @@ export interface CreateGroupInput {
   type: GroupType;
   contributionAmount: Money;
   cadence: Cadence;
+  /** Weekly groups: every 1, 2 or 3 weeks (default 1). Ignored for monthly. */
+  intervalWeeks?: number;
   dueDay: number;
   membersCanPropose?: boolean;
 
@@ -154,6 +156,7 @@ export async function createGroup(
       groupId: group.id,
       contributionAmount: input.contributionAmount.minor,
       cadence: input.cadence,
+      intervalWeeks: input.cadence === "WEEKLY" ? Math.min(Math.max(Math.trunc(input.intervalWeeks ?? 1), 1), 3) : 1,
       dueDay: input.dueDay,
       membersCanPropose: input.membersCanPropose ?? true,
       quorumPct: clampQuorum(input.quorumPct),
@@ -194,6 +197,7 @@ export async function createGroup(
         type: input.type,
         contributionAmount: input.contributionAmount.minor,
         cadence: input.cadence,
+        intervalWeeks: input.intervalWeeks ?? 1,
       },
     });
 
@@ -258,6 +262,8 @@ export type InvitePreview = {
   memberCount: number;
   contributionAmount: Money;
   cadence: Cadence;
+  /** Weekly groups: every 1, 2 or 3 weeks. */
+  intervalWeeks: number;
 };
 
 /** What a prospective member sees before deciding to join. */
@@ -270,6 +276,7 @@ export async function previewInvite(code: string): Promise<InvitePreview | null>
       currency: groups.currency,
       contributionAmount: groupSettings.contributionAmount,
       cadence: groupSettings.cadence,
+      intervalWeeks: groupSettings.intervalWeeks,
       expiresAt: groupInvites.expiresAt,
       revokedAt: groupInvites.revokedAt,
       uses: groupInvites.uses,
@@ -305,6 +312,7 @@ export async function previewInvite(code: string): Promise<InvitePreview | null>
     memberCount,
     contributionAmount: Money.fromMinor(row.contributionAmount, toCurrency(row.currency)),
     cadence: row.cadence,
+    intervalWeeks: row.intervalWeeks,
   };
 }
 
@@ -695,6 +703,8 @@ export interface GroupSummary {
   memberCount: number;
   contributionAmount: Money;
   cadence: Cadence;
+  /** Weekly groups: every 1, 2 or 3 weeks. */
+  intervalWeeks: number;
   status: "ACTIVE" | "DISSOLVING" | "DISSOLVED";
   /**
    * NGN for groups from the Paystack era, USDC for groups that live on-chain.
@@ -720,6 +730,7 @@ export async function listGroupsForUser(userId: string): Promise<GroupSummary[]>
       safeAddress: groups.safeAddress,
       contributionAmount: groupSettings.contributionAmount,
       cadence: groupSettings.cadence,
+      intervalWeeks: groupSettings.intervalWeeks,
       memberCount: sql<number>`(
         select count(*) from ${groupMembers} m
         where m.group_id = ${groups.id} and m.status = 'ACTIVE'
@@ -824,6 +835,7 @@ export async function getGroupDetail(
       createdAt: groups.createdAt,
       contributionAmount: groupSettings.contributionAmount,
       cadence: groupSettings.cadence,
+      intervalWeeks: groupSettings.intervalWeeks,
       dueDay: groupSettings.dueDay,
       membersCanPropose: groupSettings.membersCanPropose,
       quorumPct: groupSettings.quorumPct,

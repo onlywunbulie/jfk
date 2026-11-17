@@ -5,6 +5,7 @@ import { previewInvite } from "@/modules/groups/service";
 import { Card } from "@/components/ui/card";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { acceptInviteAction } from "../../groups/actions";
+import { everyText } from "@/lib/schedule-text";
 
 export const metadata: Metadata = { title: "Join a group" };
 
@@ -71,9 +72,7 @@ export default async function JoinPage({
           />
           <Row
             label="Contribution"
-            value={`${preview.contributionAmount.format({ compact: true })} ${
-              preview.cadence === "MONTHLY" ? "monthly" : "weekly"
-            }`}
+            value={`${preview.contributionAmount.format({ compact: true })} every ${everyText(preview.cadence, preview.intervalWeeks)}`}
           />
           <Row
             label="Members"
@@ -85,7 +84,7 @@ export default async function JoinPage({
       <p className="text-center text-sm text-ink-muted">
         Joining commits you to contributing{" "}
         {preview.contributionAmount.format({ compact: true })}{" "}
-        {preview.cadence === "MONTHLY" ? "every month" : "every week"}. You can
+        every {everyText(preview.cadence, preview.intervalWeeks)}. You can
         leave at any time.
       </p>
 

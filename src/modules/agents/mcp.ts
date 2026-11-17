@@ -7,6 +7,7 @@ import { Money } from "@/lib/money";
 import { contractThresholds } from "@/modules/groups/onchain-setup";
 import { startGroupOnChain } from "@/modules/groups/onchain";
 import { EXPLORER_URL } from "@/lib/chain/addresses";
+import { HOW_OFTEN, everyText } from "@/lib/schedule-text";
 import { listProposals } from "@/modules/governance/service";
 import { aiAllowedInGroup, aiOptedOutGroups } from "./connection";
 import { draftRoleChange, draftRuleChange, draftSpend } from "./drafts";
@@ -55,7 +56,7 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
           kind: group.type === "ROTATING" ? "rotating savings" : "shared pot",
           your_role: group.role.toLowerCase(),
           members: group.memberCount,
-          each_pays: `${money(group.contributionAmount)} every ${group.cadence === "MONTHLY" ? "month" : "week"}`,
+          each_pays: `${money(group.contributionAmount)} every ${everyText(group.cadence, group.intervalWeeks)}`,
           balance: money(group.balance.total),
           on_base: group.safeAddress !== null,
         })),
@@ -93,7 +94,10 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         your_role: group.role.toLowerCase(),
         balance: money(group.balance.total),
         each_pays: money(group.contributionAmount),
-        how_often: group.cadence === "MONTHLY" ? `monthly, due on day ${group.dueDay}` : `weekly, due on day ${group.dueDay} (1 = Monday)`,
+        how_often:
+          group.cadence === "MONTHLY"
+            ? `every month, due on day ${group.dueDay}`
+            : `every ${everyText(group.cadence, group.intervalWeeks)}, due on weekday ${group.dueDay} (1 = Monday)`,
         vault_on_base: group.safeAddress,
         members: members.map((member) => ({
           name: member.displayName,
@@ -256,20 +260,30 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         "Start a new Rallied group with the user as its starter, saving in digital dollars (USDC). " +
         "kind: shared_pot (everyone pays into one pot; money leaves only by vote) or rotating_savings (each round's pot goes to one member in turn). " +
         "It moves no money and isn't on Base yet. Put it on Base with start_on_base when the user asks, usually once friends have joined (anyone joining after needs a vote). " +
+        "Before creating, ask the user how often everyone pays: every week, every 2 weeks, every 3 weeks or every month " +
+        "(every 2 or 3 months isn't available yet; it comes with Rallied's next contract). " +
         "Confirm the name, kind, amount, how often and due day with the user first. Then offer an invite link.",
       inputSchema: {
         name: z.string().min(1).max(60).describe("The group's name, e.g. 'Detty December'"),
         kind: z.enum(["shared_pot", "rotating_savings"]),
         amount: z.string().regex(/^\d+(\.\d{1,2})?$/).describe("What each member pays each time, in USDC, e.g. '100'"),
-        how_often: z.enum(["monthly", "weekly"]),
-        due_day: z.number().int().min(1).max(28).describe("Monthly: day of the month, 1 to 28. Weekly: 1 (Monday) to 7 (Sunday)."),
+        how_often: z
+          .enum(["weekly", "every_2_weeks", "every_3_weeks", "monthly"])
+          .describe("How often everyone pays. Ask the user; don't assume."),
+        due_day: z
+          .number()
+          .int()
+          .min(1)
+          .max(28)
+          .describe("Monthly: day of the month, 1 to 28. Every 1, 2 or 3 weeks: the weekday, 1 (Monday) to 7 (Sunday)."),
         description: z.string().max(200).optional().describe("Optional: what the group is saving for"),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     },
     async ({ name, kind, amount, how_often, due_day, description }) => {
       if (!canDraft) return noDraftScope;
-      if (how_often === "weekly" && due_day > 7) return refusal("For a weekly group, the due day is 1 (Monday) to 7 (Sunday).");
+      const schedule = HOW_OFTEN.find((option) => option.key === how_often) ?? HOW_OFTEN[3];
+      if (schedule.cadence === "WEEKLY" && due_day > 7) return refusal("For a group that pays by the week, the due day is a weekday: 1 (Monday) to 7 (Sunday).");
       const contribution = Money.fromMajor(amount, "USDC");
       if (contribution.minor <= 0n) return refusal("The amount must be more than zero.");
 
@@ -278,7 +292,8 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         description: description?.trim() || null,
         type: kind === "rotating_savings" ? "ROTATING" : "TREASURY",
         contributionAmount: contribution,
-        cadence: how_often === "monthly" ? "MONTHLY" : "WEEKLY",
+        cadence: schedule.cadence,
+        intervalWeeks: schedule.intervalWeeks,
         dueDay: due_day,
       });
       return json({

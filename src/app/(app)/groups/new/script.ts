@@ -1,5 +1,16 @@
 import { DEFAULT_GOVERNANCE, type GovernedAction } from "@/lib/db/schema";
 import { ALL_GOVERNED_ACTIONS, QUORUM_CHOICES, THRESHOLD_CHOICES } from "./governance-options";
+import { HOW_OFTEN } from "@/lib/schedule-text";
+
+/**
+ * The schedule an answer stands for. Answers hold a HOW_OFTEN key
+ * ("every_2_weeks"); the older "WEEKLY" and "MONTHLY" still read correctly.
+ */
+export function scheduleOf(answers: Answers): (typeof HOW_OFTEN)[number] {
+  const found = HOW_OFTEN.find((option) => option.key === answers.cadence);
+  if (found) return found;
+  return answers.cadence === "WEEKLY" ? HOW_OFTEN[0] : HOW_OFTEN[3];
+}
 
 /**
  * The conversation that creates a group.
@@ -183,7 +194,7 @@ function thresholdQuestions(answers: Answers): ChoiceQuestion[] {
  */
 export function buildScript(answers: Answers): Question[] {
   const name = answers.name?.trim() || "the group";
-  const monthly = answers.cadence !== "WEEKLY";
+  const monthly = scheduleOf(answers).cadence === "MONTHLY";
 
   const questions: Question[] = [
     {
@@ -248,11 +259,9 @@ export function buildScript(answers: Answers): Question[] {
       id: "cadence",
       kind: "choice",
       ask: "How often will everyone pay?",
-      choices: [
-        { value: "MONTHLY", label: "Once a month" },
-        { value: "WEEKLY", label: "Once a week" },
-      ],
-      display: (value) => (value === "WEEKLY" ? "Once a week" : "Once a month"),
+      // Every 2 or 3 months waits for Rallied's next contract.
+      choices: [HOW_OFTEN[3], HOW_OFTEN[0], HOW_OFTEN[1], HOW_OFTEN[2]].map((option) => ({ value: option.key, label: option.label })),
+      display: (value) => scheduleOf({ cadence: value }).label,
     },
     monthly
       ? {
@@ -340,7 +349,9 @@ export function summariseTurnout(answers: Answers): string {
 export function answer(answers: Answers, id: string, value: string): Answers {
   const next: Record<string, string> = { ...answers, [id]: value };
 
-  if (id === "cadence" && answers.cadence !== undefined && answers.cadence !== value) {
+  // Only when it flips between a date of the month and a weekday; every 1, 2
+  // or 3 weeks all use a weekday, so that answer still stands.
+  if (id === "cadence" && answers.cadence !== undefined && scheduleOf(answers).cadence !== scheduleOf({ cadence: value }).cadence) {
     delete next.dueDay;
   }
   if (id === "rules" && value === "recommended") {
@@ -372,7 +383,8 @@ export function toFormFields(answers: Answers): [name: string, value: string][] 
     ["description", answers.description ?? ""],
     ["type", answers.type ?? "TREASURY"],
     ["amount", answers.amount ?? ""],
-    ["cadence", answers.cadence ?? "MONTHLY"],
+    ["cadence", scheduleOf(answers).cadence],
+    ["intervalWeeks", String(scheduleOf(answers).intervalWeeks)],
     ["dueDay", answers.dueDay ?? "1"],
     ["quorumPct", answers.quorumPct ?? "60"],
   ];

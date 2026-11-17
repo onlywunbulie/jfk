@@ -41,6 +41,7 @@ const createGroupSchema = z.object({
     .regex(/^\d+(\.\d{1,2})?$/, "Enter an amount like 50 or 12.50")
     .refine((v) => Number(v) > 0, "The amount must be more than zero"),
   cadence: z.enum(["WEEKLY", "MONTHLY"]),
+  intervalWeeks: z.coerce.number().int().min(1).max(3).default(1),
   dueDay: z.coerce.number().int().min(1).max(28),
   membersCanPropose: z.union([z.literal("on"), z.null()]).optional(),
 });
@@ -57,6 +58,7 @@ export async function createGroupAction(
     type: formData.get("type"),
     amount: formData.get("amount"),
     cadence: formData.get("cadence"),
+    intervalWeeks: formData.get("intervalWeeks") ?? undefined,
     dueDay: formData.get("dueDay"),
     membersCanPropose: formData.get("membersCanPropose"),
   });
@@ -79,6 +81,7 @@ export async function createGroupAction(
       // Every group made from here on lives on-chain and saves in USDC.
       contributionAmount: Money.fromMajor(input.amount, "USDC"),
       cadence: input.cadence,
+      intervalWeeks: input.intervalWeeks,
       dueDay: input.dueDay,
       membersCanPropose: input.membersCanPropose === "on",
       governance: readThresholds(formData),

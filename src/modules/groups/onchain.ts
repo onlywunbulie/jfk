@@ -100,6 +100,7 @@ export async function startGroupOnChain(
       contribution: groupSettings.contributionAmount,
       quorumPct: groupSettings.quorumPct,
       cadence: groupSettings.cadence,
+      intervalWeeks: groupSettings.intervalWeeks,
     })
     .from(groups)
     .innerJoin(groupSettings, eq(groupSettings.groupId, groups.id))
@@ -131,6 +132,7 @@ export async function startGroupOnChain(
     quorumPct: group.quorumPct,
     votingPeriodSeconds: DEFAULT_VOTE_DAYS * 24 * 60 * 60,
     cadence: group.cadence,
+    intervalWeeks: group.intervalWeeks,
   });
   const safeAddress = predictSafeAddress(setup, await proxyCreationCode());
 

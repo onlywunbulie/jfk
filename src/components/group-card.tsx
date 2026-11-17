@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { GroupSummary } from "@/modules/groups/service";
+import { everyText } from "@/lib/schedule-text";
 
-const CADENCE_LABEL = { WEEKLY: "weekly", MONTHLY: "monthly" } as const;
 
 /** A group at a glance. The balance is the hero; everything else is context. */
 export function GroupCard({ group }: { group: GroupSummary }) {
@@ -36,7 +36,7 @@ export function GroupCard({ group }: { group: GroupSummary }) {
         </div>
         <p className="text-right text-sm text-ink-muted">
           {group.contributionAmount.format({ compact: true })}
-          <span className="text-ink-faint"> {CADENCE_LABEL[group.cadence]}</span>
+          <span className="text-ink-faint"> every {everyText(group.cadence, group.intervalWeeks)}</span>
         </p>
       </div>
     </Link>

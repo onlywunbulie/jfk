@@ -24,7 +24,13 @@ export interface ScheduleConfig {
   /** 1–28 for monthly, 1–7 (Mon–Sun) for weekly. */
   dueDay: number;
   graceDays: number;
+  /** Weekly only: every 1, 2 or 3 weeks. Defaults to 1. */
+  intervalWeeks?: number;
 }
+
+/** Every-N-week periods count from this Monday, so every group's dates line up the same way. */
+const WEEKS_ANCHOR = Date.UTC(2024, 0, 1);
+const DAY_MS = 86_400_000;
 
 /**
  * The period containing or following `from`.
@@ -74,12 +80,23 @@ function weeklyPeriod(from: Date, config: ScheduleConfig): CyclePeriod {
   // JS getUTCDay is 0=Sunday; the app uses 1=Monday…7=Sunday.
   const targetDow = clamp(config.dueDay, 1, 7) % 7;
 
+  const weeks = clamp(config.intervalWeeks ?? 1, 1, 3);
+
   const start = startOfUtcDay(from);
   const delta = (start.getUTCDay() - targetDow + 7) % 7;
   start.setUTCDate(start.getUTCDate() - delta);
 
+  // Every 2 or 3 weeks: step back to the week the cycle actually starts in,
+  // counting whole weeks from the anchor's first due weekday.
+  if (weeks > 1) {
+    const firstDue = WEEKS_ANCHOR + (((targetDow - 1 + 7) % 7) * DAY_MS);
+    const weeksIn = Math.floor((start.getTime() - firstDue) / (7 * DAY_MS));
+    const offset = ((weeksIn % weeks) + weeks) % weeks;
+    start.setUTCDate(start.getUTCDate() - offset * 7);
+  }
+
   const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 7);
+  end.setUTCDate(end.getUTCDate() + 7 * weeks);
 
   return withGrace(start, end, config.graceDays);
 }

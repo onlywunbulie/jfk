@@ -187,6 +187,26 @@ describe("/api/mcp", () => {
     expect(preview).toMatchObject({ groupId, groupName: "Detty December" });
   });
 
+  it("creates a group that pays every 2 weeks, and says so when read back", async () => {
+    const amaka = await makeUser("Amaka");
+    const token = await tokenFor(amaka, GRANTED_SCOPES);
+    const created = await callTool(token, "create_group", {
+      name: "Fortnight",
+      kind: "shared_pot",
+      amount: "10",
+      how_often: "every_2_weeks",
+      due_day: 5,
+    });
+    expect(created.isError).toBe(false);
+    const groupId = created.data.group_id as string;
+    expect((await callTool(token, "list_groups")).data.groups).toEqual([expect.objectContaining({ each_pays: "USDC 10 every 2 weeks" })]);
+    expect((await callTool(token, "get_group", { group_id: groupId })).data).toMatchObject({ how_often: expect.stringContaining("every 2 weeks") });
+
+    // A weekday is 1 to 7 for anything paid by the week.
+    const bad = await callTool(token, "create_group", { name: "X", kind: "shared_pot", amount: "1", how_often: "every_3_weeks", due_day: 15 });
+    expect(bad.isError).toBe(true);
+  });
+
   it("won't create or invite on a read-only connection, or invite into a group the user isn't in", async () => {
     const amaka = await makeUser("Amaka");
     const tunde = await makeUser("Tunde");

@@ -215,3 +215,25 @@ describe("formatDollars", () => {
     expect(formatDollars("0.05")).toBe("$0.05");
   });
 });
+
+describe("every 2 or 3 weeks", () => {
+  it("is offered alongside every week and every month", () => {
+    const question = buildScript({}).find((q) => q.id === "cadence");
+    expect(question && "choices" in question ? question.choices.map((c) => c.label) : []).toEqual([
+      "Every month",
+      "Every week",
+      "Every 2 weeks",
+      "Every 3 weeks",
+    ]);
+  });
+
+  it("asks for a weekday, keeps it when switching between weekly schedules, and posts the interval", () => {
+    const fortnight = { cadence: "every_2_weeks", dueDay: "5", name: "JFK" };
+    expect(buildScript(fortnight).find((q) => q.id === "dueDay")?.ask).toMatch(/day of the week|weekday/i);
+    expect(answer(fortnight, "cadence", "every_3_weeks").dueDay).toBe("5");
+    expect(answer(fortnight, "cadence", "monthly").dueDay).toBeUndefined();
+
+    const fields = Object.fromEntries(toFormFields(fortnight));
+    expect(fields).toMatchObject({ cadence: "WEEKLY", intervalWeeks: "2", dueDay: "5" });
+  });
+});

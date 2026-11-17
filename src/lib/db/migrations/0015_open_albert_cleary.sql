@@ -1,0 +1,1 @@
+ALTER TABLE "group_settings" ADD COLUMN "interval_weeks" smallint DEFAULT 1 NOT NULL;

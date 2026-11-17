@@ -52,16 +52,21 @@ export interface GroupSetupInput {
   votingPeriodSeconds: number;
   /** How often everyone pays; sets the least time between two collected payments. */
   cadence: "WEEKLY" | "MONTHLY";
+  /** Weekly groups: every 1, 2 or 3 weeks. */
+  intervalWeeks?: number;
 }
 
 /**
  * The least time between two collected payments from one member. A little
  * short of the real cycle, so a due date that drifts (a 28-day February, a
  * collection that ran late) never blocks the next one; still long enough
- * that nobody can be charged twice for one period.
+ * that nobody can be charged twice for one period: 25 days for monthly, and
+ * a day short of the cycle for every 1, 2 or 3 weeks (6, 13, 20 days). All
+ * within contract v2's 31-day limit.
  */
-export function payGapSeconds(cadence: "WEEKLY" | "MONTHLY"): number {
-  return (cadence === "MONTHLY" ? 25 : 6) * 24 * 60 * 60;
+export function payGapSeconds(cadence: "WEEKLY" | "MONTHLY", intervalWeeks = 1): number {
+  const weeks = Math.min(Math.max(Math.trunc(intervalWeeks), 1), 3);
+  return (cadence === "MONTHLY" ? 25 : 7 * weeks - 1) * 24 * 60 * 60;
 }
 
 export interface GroupSetup {
@@ -90,7 +95,7 @@ export function buildGroupSetup(input: GroupSetupInput): GroupSetup {
       contractThresholds(input.governance),
       input.quorumPct,
       input.votingPeriodSeconds,
-      payGapSeconds(input.cadence),
+      payGapSeconds(input.cadence, input.intervalWeeks),
     ],
   });
 

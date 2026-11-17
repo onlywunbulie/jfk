@@ -155,3 +155,36 @@ describe("describePeriod", () => {
     expect(describePeriod(period, "WEEKLY")).toMatch(/week of 6 Mar/);
   });
 });
+
+describe("every 2 or 3 weeks", () => {
+  const fortnightly = { ...weekly, intervalWeeks: 2 };
+
+  it("runs two weeks from the due weekday, and the next one follows on", () => {
+    const period = cyclePeriodFor(new Date("2026-03-11T12:00:00Z"), fortnightly);
+    expect(period.periodStart.getUTCDay()).toBe(5);
+    expect(period.periodEnd.getTime() - period.periodStart.getTime()).toBe(14 * 86_400_000);
+    const next = nextPeriod(period, fortnightly);
+    expect(iso(next.periodStart)).toBe(iso(period.periodEnd));
+  });
+
+  it("every day of a cycle belongs to that same cycle (the weeks don't drift)", () => {
+    const period = cyclePeriodFor(new Date("2026-03-11T12:00:00Z"), fortnightly);
+    for (let day = 0; day < 14; day++) {
+      const inside = new Date(period.periodStart.getTime() + day * 86_400_000 + 3_600_000);
+      expect(iso(cyclePeriodFor(inside, fortnightly).periodStart)).toBe(iso(period.periodStart));
+    }
+  });
+
+  it("every 3 weeks is 21 days, and two groups due on the same weekday agree on dates", () => {
+    const three = { ...weekly, intervalWeeks: 3 };
+    const a = cyclePeriodFor(new Date("2026-11-17T09:00:00Z"), three);
+    const b = cyclePeriodFor(new Date("2026-11-17T21:00:00Z"), three);
+    expect(iso(a.periodStart)).toBe(iso(b.periodStart));
+    expect(a.periodEnd.getTime() - a.periodStart.getTime()).toBe(21 * 86_400_000);
+  });
+
+  it("an interval of 1 is exactly the old weekly cycle", () => {
+    const at = new Date("2026-03-11T12:00:00Z");
+    expect(cyclePeriodFor(at, { ...weekly, intervalWeeks: 1 })).toEqual(cyclePeriodFor(at, weekly));
+  });
+});

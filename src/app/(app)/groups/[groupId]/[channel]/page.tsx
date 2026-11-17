@@ -25,6 +25,7 @@ import { readChainVotes } from "@/modules/groups/onchain-votes";
 import { readDues } from "@/modules/groups/onchain-dues";
 import { readHistory } from "@/modules/groups/onchain-history";
 import { Dues } from "./dues";
+import { everyText } from "@/lib/schedule-text";
 
 export async function generateMetadata({
   params,
@@ -135,7 +136,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
             {admins.length > 0 && <span className="text-ink-muted"> · Admins: {admins.join(", ")}</span>}
           </Detail>
           <Detail label="Pays">
-            {amount} every {group.cadence === "MONTHLY" ? "month" : "week"}
+            {amount} every {everyText(group.cadence, group.intervalWeeks)}
           </Detail>
           <Detail label="Money out">
             {rotating ? "Each round, to the member whose turn it is." : "Only when the group votes."} Full rules in{" "}
@@ -173,7 +174,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
     const due =
       group.cadence === "MONTHLY"
         ? `every month, due on the ${ordinal(group.dueDay)}`
-        : `every week, due on ${WEEKDAYS[group.dueDay - 1] ?? "Monday"}`;
+        : `every ${everyText(group.cadence, group.intervalWeeks)}, due on ${WEEKDAYS[group.dueDay - 1] ?? "Monday"}`;
     // The same numbers the contract is set up with, in the contract's order,
     // so this list can't disagree with what's enforced on Base.
     const saved = Object.fromEntries(

@@ -154,6 +154,13 @@ export const groupSettings = pgTable("group_settings", {
 
   cadence: cadenceEnum("cadence").notNull().default("MONTHLY"),
 
+  /**
+   * Weekly groups only: pay every 1, 2 or 3 weeks. Periods line up to a fixed
+   * Monday (see contributions/schedule.ts) so everyone's dates agree. Every 2
+   * or 3 months waits for contract v3, whose collection gap can exceed 31 days.
+   */
+  intervalWeeks: smallint("interval_weeks").notNull().default(1),
+
   /** Day the contribution is due: 1–28 for monthly, 1–7 (Mon–Sun) for weekly. */
   dueDay: smallint("due_day").notNull().default(1),
 

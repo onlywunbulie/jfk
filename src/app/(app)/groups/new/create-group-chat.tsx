@@ -16,10 +16,12 @@ import {
   summariseTurnout,
   toFormFields,
   type Answers,
+  scheduleOf,
   type ChoiceQuestion,
   type Question,
   type TextQuestion,
 } from "./script";
+import { howOftenTitle } from "@/lib/schedule-text";
 
 /**
  * Creating a group as a conversation: one question, one answer, then the next.
@@ -669,7 +671,7 @@ function ChoiceAnswer({
 
 function Summary({ answers }: { answers: Answers }) {
   const thresholds = resolveThresholds(answers);
-  const weekly = answers.cadence === "WEEKLY";
+  const schedule = scheduleOf(answers);
 
   return (
     <div className="mt-3 border-t border-white/[0.07] pt-3">
@@ -681,7 +683,7 @@ function Summary({ answers }: { answers: Answers }) {
 
       <div className="mt-4 grid grid-cols-2 gap-2">
         <Tile value={formatDollars(answers.amount ?? "0")} label="Each person pays" />
-        <Tile value={weekly ? "Once a week" : "Once a month"} label="How often" />
+        <Tile value={howOftenTitle(schedule.cadence, schedule.intervalWeeks)} label="How often" />
       </div>
 
       <p className="mt-4 text-sm font-medium text-ink">

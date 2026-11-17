@@ -57,6 +57,12 @@ describe("creating a group's Safe", () => {
     expect(weekly[6]).toBe(6 * 86400);
   });
 
+  it("every 2 or 3 weeks spaces collections a day short of the cycle, inside v2's 31-day limit", () => {
+    expect(decode(setupFor({ cadence: "WEEKLY", intervalWeeks: 2 }).initializer).inner[6]).toBe(13 * 86400);
+    expect(decode(setupFor({ cadence: "WEEKLY", intervalWeeks: 3 }).initializer).inner[6]).toBe(20 * 86400);
+    expect(decode(setupFor({ cadence: "MONTHLY", intervalWeeks: 3 }).initializer).inner[6]).toBe(25 * 86400);
+  });
+
   it("refuses to put a naira group on-chain", () => {
     expect(() => setupFor({ contribution: Money.fromMajor(50_000, "NGN") })).toThrow(/USDC/);
   });
