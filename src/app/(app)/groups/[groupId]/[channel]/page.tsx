@@ -26,6 +26,9 @@ import { readDues } from "@/modules/groups/onchain-dues";
 import { readHistory } from "@/modules/groups/onchain-history";
 import { Dues } from "./dues";
 import { everyText } from "@/lib/schedule-text";
+import { cyclePeriodFor } from "@/modules/contributions/schedule";
+
+const LONG_DAY = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", timeZone: "Africa/Lagos" });
 
 export async function generateMetadata({
   params,
@@ -242,64 +245,110 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
   }
 
   if (channel.slug === "general") {
-    // UI only: sample numbers until the vault's balance is read from Base.
-    const s = GENERAL_SAMPLE;
+    // Everything here is read from Base (or, for the next due date, from the
+    // group's schedule); nothing is a sample.
     const now = new Date();
+    const transactionsLink = (
+      <p className="border-t border-border pt-3 text-xs text-ink-faint">
+        <Link
+          href={`/groups/${group.id}/transactions` as Route}
+          className="underline decoration-ink-faint/50 underline-offset-4 transition-colors hover:text-ink hover:decoration-ink"
+        >
+          Everything in #transactions
+        </Link>
+      </p>
+    );
+    const period = cyclePeriodFor(now, {
+      cadence: group.cadence,
+      dueDay: group.dueDay,
+      graceDays: 0,
+      intervalWeeks: group.intervalWeeks,
+    });
+    const nextDue = LONG_DAY.format(period.periodEnd);
+
+    if (!group.safeAddress) {
+      return (
+        <div className="flex min-h-full flex-col justify-end">
+          <ChannelIntro title="The group's money">Where the money stands, read from the group&rsquo;s vault on Base.</ChannelIntro>
+          <DateDivider date={now} label="Today" />
+          <RallMessage sentAt={now} footnote={null}>
+            <Detail label="In the pot">Nothing yet: this group isn&rsquo;t on Base.</Detail>
+            <Detail label="Next step">
+              Start it on Base in{" "}
+              <Link
+                href={`/groups/${group.id}/about` as Route}
+                className="text-ink underline decoration-ink-faint underline-offset-4 hover:decoration-ink"
+              >
+                #about
+              </Link>
+              , then everyone can pay in.
+            </Detail>
+          </RallMessage>
+        </div>
+      );
+    }
+
+    const [dues, votes, history] = await Promise.all([
+      readDues(group.id, user.id),
+      readChainVotes(group.id, user.id),
+      readHistory(group.id, user.id),
+    ]);
+    const paid = dues.ok ? dues.members.filter((member) => member.paidThisPeriod) : [];
+    const notPaid = dues.ok ? dues.members.filter((member) => !member.paidThisPeriod).map((member) => member.name) : [];
+    const open = votes.ok ? votes.votes.filter((vote) => vote.state === "OPEN") : [];
+    const latest = history.ok ? history.entries.slice(-3).reverse() : [];
+
     return (
       <div className="flex min-h-full flex-col justify-end">
-        <ChannelIntro title="The group's money">Where the money stands, updated by Rall every day.</ChannelIntro>
+        <ChannelIntro title="The group's money">Where the money stands, read from the group&rsquo;s vault on Base.</ChannelIntro>
         <DateDivider date={now} label="Today" />
-        <RallMessage
-          sentAt={now}
-          footnote={
-            <p className="border-t border-border pt-3 text-xs text-ink-faint">
-              <Link
-                href={`/groups/${group.id}/transactions` as Route}
-                className="underline decoration-ink-faint/50 underline-offset-4 transition-colors hover:text-ink hover:decoration-ink"
-              >
-                Everything in #transactions
-              </Link>
-            </p>
-          }
-        >
-          {rotating ? (
-            <>
-              <Detail label="Round">
-                <span className="font-semibold">{s.rotating.round}</span>
-              </Detail>
-              <Detail label="Getting paid">
-                {s.payout.who} on {s.payout.when}, <span className="tabular-nums">{s.payout.amount}</span>
-              </Detail>
-            </>
-          ) : (
-            <Detail label="In the pot">
-              <span className="font-semibold tabular-nums">{s.pot}</span> <span className="text-inflow tabular-nums">{s.change}</span>
-            </Detail>
-          )}
-          <Detail label="This round">
-            {s.paid} of {s.members} paid · {s.collected} of {s.expected}
-            <span className="text-ink-muted"> · Late: {s.late.join(", ")}</span>
+        <RallMessage sentAt={now} footnote={transactionsLink}>
+          <Detail label="In the pot">
+            {dues.ok ? <span className="font-semibold tabular-nums">{dues.vault}</span> : <span className="text-ink-muted">Couldn&rsquo;t reach Base just now</span>}
           </Detail>
-          <Detail label="Next due">{s.nextDue}</Detail>
-          {rotating ? (
-            <Detail label="Owing">
-              <span className="text-danger">{s.rotating.owing}</span>
-            </Detail>
-          ) : (
-            <Detail label="Up for a vote">
-              {s.vote.amount} for the {s.vote.what}
-              <span className="text-ink-muted"> · closes {s.vote.closes}</span>
+          {dues.ok && (
+            <Detail label="This period">
+              {paid.length} of {dues.members.length} paid · {dues.contribution} each
+              {notPaid.length > 0 && <span className="text-ink-muted"> · Not yet: {notPaid.join(", ")}</span>}
             </Detail>
           )}
+          <Detail label="Next due">{nextDue}</Detail>
+          <Detail label="Up for a vote">
+            {open.length === 0 ? (
+              <span className="text-ink-muted">Nothing right now</span>
+            ) : (
+              <>
+                {open[0].title}
+                {open[0].change && (
+                  <span className="tabular-nums">
+                    {" "}
+                    ({open[0].change.before} → {open[0].change.after})
+                  </span>
+                )}
+                <span className="text-ink-muted">
+                  {" "}
+                  · closes {open[0].closes}
+                  {open.length > 1 && ` · and ${open.length - 1} more in #votes`}
+                </span>
+              </>
+            )}
+          </Detail>
           <Detail label="Latest">
-            <ul className="space-y-1">
-              {(rotating ? s.rotating.activity : s.activity).map((item) => (
-                <li key={item.what}>
-                  {item.what}{" "}
-                  <span className={item.inflow ? "text-inflow tabular-nums" : "text-ink-muted tabular-nums"}>{item.amount}</span>
-                </li>
-              ))}
-            </ul>
+            {latest.length === 0 ? (
+              <span className="text-ink-muted">No payments yet</span>
+            ) : (
+              <ul className="space-y-1">
+                {latest.map((item) => (
+                  <li key={item.id}>
+                    {item.what}{" "}
+                    <span className={item.inflow ? "text-inflow tabular-nums" : "text-ink-muted tabular-nums"}>
+                      {item.inflow ? "+" : "−"}
+                      {item.amount}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Detail>
         </RallMessage>
       </div>
@@ -441,32 +490,6 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
 }
 
 /** #general's sample overview, for this UI-only step. */
-const GENERAL_SAMPLE = {
-  pot: "USDC 4,200",
-  change: "+USDC 800 since 1 Nov",
-  paid: 6,
-  members: 8,
-  collected: "USDC 600",
-  expected: "USDC 800",
-  late: ["Femi", "Kemi"],
-  nextDue: "1 December",
-  vote: { what: "Airbnb deposit", amount: "USDC 400", closes: "Friday" },
-  payout: { who: "Tunde", when: "1 December", amount: "USDC 800" },
-  rotating: {
-    round: "4 of 8",
-    owing: "Femi, 1 round after their turn",
-    activity: [
-      { what: "Tunde paid in", amount: "+100", inflow: true },
-      { what: "Kemi paid in", amount: "+100", inflow: true },
-      { what: "Payout to Amaka", amount: "−800", inflow: false },
-    ],
-  },
-  activity: [
-    { what: "Tunde paid in", amount: "+100", inflow: true },
-    { what: "Amaka paid in", amount: "+100", inflow: true },
-    { what: "Generator repair", amount: "−400", inflow: false },
-  ],
-};
 
 /**
  * The contract's votable actions in plain words, in the contract's own order
