@@ -10,7 +10,8 @@ vi.mock("@/lib/env", () => ({
   env: () => ({ APP_URL: "http://localhost:3000", PAYMASTER_URL: "https://paymaster.example/secret-key" }),
 }));
 
-const upstream = vi.fn(async () => Response.json({ jsonrpc: "2.0", id: 1, result: { paymasterAndData: "0x00" } }));
+// Takes the URL and request like fetch; the tests read them back from mock.calls.
+const upstream = vi.fn(async (..._fetchArgs: unknown[]) => Response.json({ jsonrpc: "2.0", id: 1, result: { paymasterAndData: "0x00" } }));
 vi.stubGlobal("fetch", upstream);
 
 const { POST, OPTIONS } = await import("./route");

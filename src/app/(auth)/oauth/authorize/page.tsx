@@ -63,6 +63,7 @@ export default async function AuthorizePage({ searchParams }: PageProps<"/oauth/
               "See your groups and balances",
               "See members, rules and votes",
               "Prepare drafts for you to send: spends, rule and role changes",
+              "Create groups and invite links for you",
             ].map((item) => (
               <li key={item} className="flex gap-2">
                 <span aria-hidden="true" className="text-inflow">✓</span>

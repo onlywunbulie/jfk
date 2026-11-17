@@ -6,6 +6,8 @@ import { requireUser } from "@/lib/auth/session";
 import { getGroupDetail, listMembers } from "@/modules/groups/service";
 import { channelBelongs, findChannel } from "@/components/shell/channels";
 import { PayoutOrder } from "./payout-order";
+import { getOnChainStatus } from "@/modules/groups/onchain";
+import { StartOnChain } from "../start-on-chain";
 import { EXPLORER_URL, shortAddress } from "@/lib/chain/addresses";
 import { VerifyAi } from "./verify-ai";
 import { listWaitingDrafts } from "@/modules/agents/drafts";
@@ -107,6 +109,8 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
     const amount = `${group.currency} ${group.contributionAmount
       .format({ compact: true, showSymbol: false })
       .replaceAll(",", "")}`;
+    // Until the group is on Base, #about is where it gets started (by whoever started the group).
+    const onChain = await getOnChainStatus(group.id, user.id);
 
     return (
       // Like the start of a chat, the content sits at the bottom of the card.
@@ -139,6 +143,16 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
             </Link>
           </Detail>
         </RallMessage>
+        {onChain?.eligible && !onChain.started && (
+          <div className="mt-6 max-w-xl">
+            <StartOnChain
+              groupId={group.id}
+              isOwner={onChain.isOwner}
+              members={onChain.members}
+              inviteHref={`/groups/${group.id}/members`}
+            />
+          </div>
+        )}
       </div>
     );
   }

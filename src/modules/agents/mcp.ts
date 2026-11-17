@@ -1,8 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { Money } from "@/lib/money";
+
 import { DEFAULT_GOVERNANCE, type GovernedAction } from "@/lib/db/schema";
-import { getGroupDetail, listGroupsForUser, listMembers } from "@/modules/groups/service";
+import { createGroup, createInvite, getGroupDetail, listGroupsForUser, listMembers } from "@/modules/groups/service";
+import { Money } from "@/lib/money";
 import { contractThresholds } from "@/modules/groups/onchain-setup";
 import { listProposals } from "@/modules/governance/service";
 import { aiAllowedInGroup, aiOptedOutGroups } from "./connection";
@@ -241,7 +242,89 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
     },
   );
 
+  // -------------------------------------------------------------------------
+  // Setting up: a new group, and invite links. Moves no money.
+  // -------------------------------------------------------------------------
+
+  server.registerTool(
+    "create_group",
+    {
+      title: "Create a group",
+      description:
+        "Start a new Rallied group with the user as its starter, saving in digital dollars (USDC). " +
+        "kind: shared_pot (everyone pays into one pot; money leaves only by vote) or rotating_savings (each round's pot goes to one member in turn). " +
+        "It moves no money and isn't on Base yet: the user starts it on Base from the group's #about once friends have joined. " +
+        "Confirm the name, kind, amount, how often and due day with the user first. Then offer an invite link.",
+      inputSchema: {
+        name: z.string().min(1).max(60).describe("The group's name, e.g. 'Detty December'"),
+        kind: z.enum(["shared_pot", "rotating_savings"]),
+        amount: z.string().regex(/^\d+(\.\d{1,2})?$/).describe("What each member pays each time, in USDC, e.g. '100'"),
+        how_often: z.enum(["monthly", "weekly"]),
+        due_day: z.number().int().min(1).max(28).describe("Monthly: day of the month, 1 to 28. Weekly: 1 (Monday) to 7 (Sunday)."),
+        description: z.string().max(200).optional().describe("Optional: what the group is saving for"),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    },
+    async ({ name, kind, amount, how_often, due_day, description }) => {
+      if (!canDraft) return noDraftScope;
+      if (how_often === "weekly" && due_day > 7) return refusal("For a weekly group, the due day is 1 (Monday) to 7 (Sunday).");
+      const contribution = Money.fromMajor(amount, "USDC");
+      if (contribution.minor <= 0n) return refusal("The amount must be more than zero.");
+
+      const { groupId } = await createGroup(userId, {
+        name: name.trim(),
+        description: description?.trim() || null,
+        type: kind === "rotating_savings" ? "ROTATING" : "TREASURY",
+        contributionAmount: contribution,
+        cadence: how_often === "monthly" ? "MONTHLY" : "WEEKLY",
+        dueDay: due_day,
+      });
+      return json({
+        created: name.trim(),
+        group_id: groupId,
+        open_in_rallied: `${grant.origin}/groups/${groupId}/about`,
+        next: "Offer an invite link (invite_link) so friends can join. Once they have, the user starts the group on Base from #about.",
+      });
+    },
+  );
+
+  server.registerTool(
+    "invite_link",
+    {
+      title: "Make an invite link",
+      description:
+        "A link the user can share so friends can join one of their groups. Choose how many people may use it (1 to 20). It expires on its own.",
+      inputSchema: {
+        group_id: z.string().min(1).max(64),
+        uses: z.number().int().min(1).max(20).default(10).describe("How many people may join with this link"),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    },
+    async ({ group_id, uses }) => {
+      if (!canDraft) return noDraftScope;
+      if (!(await aiAllowedInGroup(userId, group_id))) return notFound();
+      let result: Awaited<ReturnType<typeof createInvite>>;
+      try {
+        result = await createInvite(group_id, userId, { maxUses: uses });
+      } catch {
+        // The user's role in this group doesn't let them invite.
+        return refusal("Only the group's starter and admins can invite people to this group.");
+      }
+      if (!result.ok) return notFound();
+      return json({
+        invite_link: `${grant.origin}/join/${result.code}`,
+        uses,
+        expires: result.expiresAt.toISOString().slice(0, 10),
+        next: "Share the link with the friends who should join.",
+      });
+    },
+  );
+
   return server;
+}
+
+function refusal(text: string) {
+  return { isError: true, content: [{ type: "text" as const, text }] };
 }
 
 function json(value: unknown) {

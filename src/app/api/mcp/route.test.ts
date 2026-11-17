@@ -12,7 +12,7 @@ vi.mock("@/lib/env", () => ({ env: () => ({ APP_URL: "http://localhost:3000" }) 
 const { POST } = await import("./route");
 const { registerClient, createAuthorizationCode, exchangeCode, READ_SCOPE, GRANTED_SCOPES } = await import("@/modules/agents/oauth");
 const { listWaitingDrafts } = await import("@/modules/agents/drafts");
-const { createGroup } = await import("@/modules/groups/service");
+const { createGroup, previewInvite } = await import("@/modules/groups/service");
 const { setAiInGroup } = await import("@/modules/agents/connection");
 const { users } = await import("@/lib/db/schema");
 const { Money } = await import("@/lib/money");
@@ -113,7 +113,7 @@ describe("/api/mcp", () => {
     const readOnly = body.result.tools.filter((tool) => tool.annotations?.readOnlyHint).map((tool) => tool.name).sort();
     const drafting = body.result.tools.filter((tool) => !tool.annotations?.readOnlyHint).map((tool) => tool.name).sort();
     expect(readOnly).toEqual(["get_group", "list_groups", "list_proposals"]);
-    expect(drafting).toEqual(["draft_role_change", "draft_rule_change", "draft_spend"]);
+    expect(drafting).toEqual(["create_group", "draft_role_change", "draft_rule_change", "draft_spend", "invite_link"]);
   });
 
   it("shows the user's own groups, and nothing of anyone else's", async () => {
@@ -151,6 +151,52 @@ describe("/api/mcp", () => {
     expect(other.text).not.toContain("Tunde's secret pot");
     const proposals = await callTool(token, "list_proposals", { group_id: theirs });
     expect(proposals.isError).toBe(true);
+  });
+
+  it("creates a group for the user and makes a working invite link for it", async () => {
+    const amaka = await makeUser("Amaka");
+    const token = await tokenFor(amaka, GRANTED_SCOPES);
+
+    const created = await callTool(token, "create_group", {
+      name: "Detty December",
+      kind: "rotating_savings",
+      amount: "100",
+      how_often: "monthly",
+      due_day: 1,
+    });
+    expect(created.isError).toBe(false);
+    const groupId = created.data.group_id as string;
+    expect(created.data.open_in_rallied).toBe(`http://localhost:3000/groups/${groupId}/about`);
+
+    // It's a real group, in dollars, with the user as its starter.
+    const listed = await callTool(token, "list_groups");
+    expect(listed.data.groups).toEqual([
+      expect.objectContaining({ group_id: groupId, kind: "rotating savings", your_role: "owner", each_pays: "USDC 100 every month" }),
+    ]);
+
+    const invite = await callTool(token, "invite_link", { group_id: groupId, uses: 5 });
+    expect(invite.isError).toBe(false);
+    const code = String(invite.data.invite_link).split("/join/")[1];
+    const preview = await previewInvite(code);
+    expect(preview).toMatchObject({ groupId, groupName: "Detty December" });
+  });
+
+  it("won't create or invite on a read-only connection, or invite into a group the user isn't in", async () => {
+    const amaka = await makeUser("Amaka");
+    const tunde = await makeUser("Tunde");
+    const readOnly = await tokenFor(amaka);
+    const refused = await callTool(readOnly, "create_group", { name: "X", kind: "shared_pot", amount: "10", how_often: "monthly", due_day: 1 });
+    expect(refused.isError).toBe(true);
+
+    const { groupId: theirs } = await createGroup(tunde, {
+      name: "Tunde's pot",
+      type: "TREASURY",
+      contributionAmount: Money.fromMajor(50, "USDC"),
+      cadence: "MONTHLY",
+      dueDay: 1,
+    });
+    const full = await tokenFor(amaka, GRANTED_SCOPES);
+    expect((await callTool(full, "invite_link", { group_id: theirs })).isError).toBe(true);
   });
 
   it("drafts only with the drafting permission, and a draft lands in Waiting", async () => {
