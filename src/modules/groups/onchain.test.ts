@@ -15,7 +15,9 @@ const chain = vi.hoisted(() => ({
     | { ok: false; reason: "no_relayer" | "relayer_out_of_funds" | "reverted" },
   confirms: true,
 }));
-vi.mock("./onchain-chain", () => ({
+// The full path, not "./onchain-chain": on Windows a relative mock path can
+// resolve with a different drive-letter case and silently not apply.
+vi.mock("@/modules/groups/onchain-chain", () => ({
   proxyCreationCode: async () => "0x6080",
   hasCode: async (address: string) => chain.deployed.has(address.toLowerCase()),
   deploySafe: async () => {

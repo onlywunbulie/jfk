@@ -9,7 +9,8 @@ vi.mock("@/lib/db", async () => ({ db: t.db }));
 
 // The real check asks the chain. Here it recovers the signer locally, which is
 // exactly what the chain does for an ordinary (non-contract) wallet.
-vi.mock("./wallet-signature", () => ({
+// Full path: a relative mock path can miss on Windows (drive-letter case).
+vi.mock("@/modules/identity/wallet-signature", () => ({
   verifyWalletSignature: async ({
     address,
     message,
