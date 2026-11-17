@@ -36,6 +36,12 @@ export type RuleDetails = {
   /** Money changes start from the next round; anything else as soon as it passes. */
   starts: string;
   money: boolean;
+  /**
+   * The exact new value, for sending: minor units for what everyone pays, a
+   * day for the due day, a whole percentage for the share that must vote.
+   * Missing on drafts made before it was recorded.
+   */
+  value?: string;
 };
 
 export type RoleChange = "make_admin" | "remove_admin" | "remove_member";
@@ -195,6 +201,7 @@ export async function draftRuleChange(input: {
       after: `${money(next)} ${every}`,
       starts: "From the next round",
       money: true,
+      value: next.minor.toString(),
     };
   } else if (input.rule === "due_day") {
     const day = Number(value);
@@ -213,6 +220,7 @@ export async function draftRuleChange(input: {
       after: dueDayLabel(group.cadence, day),
       starts: "From the next round",
       money: true,
+      value: String(day),
     };
   } else {
     const share = Number(value);
@@ -225,6 +233,7 @@ export async function draftRuleChange(input: {
       after: `${share}%`,
       starts: "As soon as it passes",
       money: false,
+      value: String(share),
     };
   }
 

@@ -173,7 +173,7 @@ export function ManageRoles({
                 footnote={
                   <div className="space-y-3 border-t border-border pt-4">
                     <div className="flex flex-wrap gap-2">
-                      <Button type="button" size="sm" onClick={() => actions.send(draft.id)}>
+                      <Button type="button" size="sm" loading={Boolean(actions.sending(draft.id))} onClick={() => void actions.send(draft.id)}>
                         Send to vote
                       </Button>
                       <Button

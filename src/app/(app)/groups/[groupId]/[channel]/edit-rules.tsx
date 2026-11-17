@@ -114,7 +114,7 @@ export function EditRules({
                   {needFor(draft)} must agree · voting closes 3 days after it&rsquo;s sent
                 </p>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <Button type="button" size="sm" onClick={() => actions.send(draft.id)}>
+                  <Button type="button" size="sm" loading={Boolean(actions.sending(draft.id))} onClick={() => void actions.send(draft.id)}>
                     Send to vote
                   </Button>
                   <Button

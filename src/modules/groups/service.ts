@@ -757,6 +757,8 @@ export interface MemberView {
   memberId: string;
   displayName: string;
   avatarUrl: string | null;
+  /** Their wallet on Base, lowercased; null for accounts from before the move on-chain. */
+  walletAddress: string | null;
   role: MemberRole;
   rotationPosition: number | null;
   joinedAt: Date;
@@ -778,6 +780,7 @@ export async function listMembers(
       memberId: groupMembers.id,
       displayName: users.displayName,
       avatarUrl: users.avatarUrl,
+      walletAddress: users.walletAddress,
       role: groupMembers.role,
       rotationPosition: groupMembers.rotationPosition,
       joinedAt: groupMembers.joinedAt,

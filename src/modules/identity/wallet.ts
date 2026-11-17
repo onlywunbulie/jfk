@@ -178,3 +178,14 @@ export async function setDisplayName(
   await db.update(users).set({ displayName: trimmed }).where(eq(users.id, userId));
   return { ok: true };
 }
+
+/** Whether this wallet belongs to someone with a Rallied account. */
+export async function isMemberWallet(address: string): Promise<boolean> {
+  if (!isAddress(address)) return false;
+  const [row] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.walletAddress, address.toLowerCase()))
+    .limit(1);
+  return Boolean(row);
+}

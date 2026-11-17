@@ -35,6 +35,13 @@ export const safeAbi = [
     inputs: [{ name: "module", type: "address" }],
     outputs: [{ type: "bool" }],
   },
+  {
+    type: "function",
+    name: "isOwner",
+    stateMutability: "view",
+    inputs: [{ name: "owner", type: "address" }],
+    outputs: [{ type: "bool" }],
+  },
 ] as const;
 
 export const safeProxyFactoryAbi = [
@@ -77,6 +84,29 @@ export const jfkSetupAbi = [
 ] as const;
 
 export const jfkModuleAbi = [
+  {
+    type: "function",
+    name: "propose",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "safe", type: "address" },
+      { name: "action", type: "uint8" },
+      { name: "payload", type: "bytes" },
+    ],
+    outputs: [{ name: "id", type: "uint256" }],
+  },
+  {
+    type: "event",
+    name: "ProposalOpened",
+    inputs: [
+      { name: "safe", type: "address", indexed: true },
+      { name: "id", type: "uint256", indexed: true },
+      { name: "action", type: "uint8", indexed: false },
+      { name: "proposer", type: "address", indexed: true },
+      { name: "thresholdPermille", type: "uint16", indexed: false },
+      { name: "deadline", type: "uint64", indexed: false },
+    ],
+  },
   {
     type: "function",
     name: "getGroupSettings",
