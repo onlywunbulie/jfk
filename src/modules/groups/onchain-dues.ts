@@ -30,6 +30,8 @@ export type Dues =
       ok: true;
       contribution: string;
       vault: string;
+      /** The vault in dollars, for comparisons on screen (a "large" spend). */
+      vaultDollars: number;
       members: DuesMember[];
       /** The viewer: whether they can pay now, and if not, why. */
       you: { paidThisPeriod: string | null; canPay: boolean; short: string | null };
@@ -83,6 +85,7 @@ export async function readDues(groupId: string, userId: string): Promise<Dues> {
       ok: true,
       contribution: usdc(contribution),
       vault: usdc(vault),
+      vaultDollars: Number(vault) / 1_000_000,
       members: rows,
       you: { paidThisPeriod: mine?.paidThisPeriod ?? null, canPay: Boolean(me) && !short, short },
     };

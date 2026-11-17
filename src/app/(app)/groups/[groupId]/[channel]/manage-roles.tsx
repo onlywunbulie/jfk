@@ -17,8 +17,8 @@ import { ChannelIntro, Detail, RallMessage } from "./parts";
  * A pinned row of plain-text tabs (People · Waiting · Voting · History) keeps
  * every section one tap away instead of stacked down a long page.
  *
- * Real: the drafts Claude made, and Discard. Still samples: each member's AI
- * and most of the history.
+ * All real: the drafts Claude made, Discard, each member's connected AI, and
+ * the history (decided membership votes, read from Base).
  */
 
 export type Assistant = "Claude" | "ChatGPT" | "Grok" | null;
@@ -51,10 +51,13 @@ export interface RoleRules {
 
 type Tab = "people" | "waiting" | "history";
 
-const PAST = [
-  { what: "Tunde made an admin", detail: "Passed 3 Oct · 6 of 8" },
-  { what: "Amaka joined", detail: "Passed 12 Sep · 7 of 8" },
-];
+/** A decided membership vote, from Base. */
+export interface PastRoleChange {
+  what: string;
+  /** "Passed · 2 of 3 yes" */
+  detail: string;
+  passed: boolean;
+}
 
 export function ManageRoles({
   base,
@@ -64,6 +67,7 @@ export function ManageRoles({
   startedOn,
   voting,
   drafts,
+  history,
 }: {
   base: string;
   people: Person[];
@@ -74,6 +78,8 @@ export function ManageRoles({
   voting: number;
   /** The user's role-change drafts from their AI, waiting to be sent. */
   drafts: RoleDraftView[];
+  /** Decided membership votes on Base, newest first. */
+  history: PastRoleChange[];
 }) {
   const [tab, setTab] = useState<Tab>("people");
   const actions = useDraftActions();
@@ -207,8 +213,15 @@ export function ManageRoles({
 
         {tab === "history" && (
           <ul className="mt-6 max-w-xl space-y-1">
-            {PAST.map((row) => (
-              <ChangeRow key={row.what} base={base} what={row.what} detail={row.detail} status="Done" tone="inflow" />
+            {history.map((row, i) => (
+              <ChangeRow
+                key={`${row.what}-${i}`}
+                base={base}
+                what={row.what}
+                detail={row.detail}
+                status={row.passed ? "Done" : "Didn't pass"}
+                tone={row.passed ? "inflow" : "muted"}
+              />
             ))}
             <li className="py-2 text-sm">
               <span className="block truncate text-ink">Group started by {startedBy}</span>
@@ -252,7 +265,7 @@ function ChangeRow({
   what: string;
   detail: string;
   status: string;
-  tone: "pending" | "inflow";
+  tone: "pending" | "inflow" | "muted";
 }) {
   return (
     <li>
@@ -267,7 +280,7 @@ function ChangeRow({
         <span
           className={cn(
             "shrink-0 rounded-full px-2 py-0.5 text-xs",
-            tone === "inflow" ? "bg-inflow-soft text-inflow" : "bg-pending-soft text-pending",
+            tone === "inflow" ? "bg-inflow-soft text-inflow" : tone === "muted" ? "bg-overlay text-ink-faint" : "bg-pending-soft text-pending",
           )}
         >
           {status}

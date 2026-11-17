@@ -17,8 +17,8 @@ import { useDraftActions } from "./use-draft-actions";
  * Money changes start from the next round; everything else applies as soon
  * as the vote passes.
  *
- * Real: the drafts Claude made, Discard, and the percentages needed. Still a
- * sample: the history, and sending (which goes on Base with the contract step).
+ * All real: the drafts Claude made, Discard, Send to vote, the percentages
+ * needed, and the history (the group's decided rule votes, read from Base).
  */
 
 export interface EditRulesNeeds {
@@ -45,31 +45,29 @@ export interface RuleDraftView {
 
 type Change = Omit<RuleDraftView, "made">;
 
-interface Past {
+/** A decided rule vote, from Base. */
+export interface PastChange {
   id: string;
   rule: string;
-  before: string;
-  after: string;
+  /** "Now USDC 2", when it passed and says what it became. */
+  outcome: string | null;
   passed: boolean;
+  /** "Passed · 1 of 1 yes" */
   result: string;
 }
-
-const PAST: Past[] = [
-  { id: "h1", rule: "Due day", before: "1st", after: "5th", passed: true, result: "Passed 2 Oct · 7 of 8" },
-  { id: "h2", rule: "Votes stay open", before: "3 days", after: "5 days", passed: true, result: "Passed 14 Sep · 6 of 8" },
-  { id: "h3", rule: "What everyone pays", before: "USDC 80", after: "USDC 100", passed: false, result: "Didn't pass 1 Sep · 3 of 8" },
-];
 
 export function EditRules({
   base,
   needs,
   voting,
   drafts,
+  history,
 }: {
   base: string;
   needs: EditRulesNeeds;
   voting: number;
   drafts: RuleDraftView[];
+  history: PastChange[];
 }) {
   const actions = useDraftActions();
   const [chosen, setTab] = useState<Tab>(drafts.length > 0 ? "waiting" : "history");
@@ -136,17 +134,19 @@ export function EditRules({
             ))}
 
           {tab === "history" && (
-            <ul className="divide-y divide-border">
-              {PAST.map((past) => (
-                <li key={past.id} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 py-3 text-sm">
-                  <span className="w-36 shrink-0 text-ink">{past.rule}</span>
-                  <span className="min-w-0 flex-1 tabular-nums">
-                    <BeforeAfter before={past.before} after={past.after} strong={false} dim={!past.passed} />
-                  </span>
-                  <span className={cn("shrink-0 text-xs", past.passed ? "text-inflow" : "text-ink-faint")}>{past.result}</span>
-                </li>
-              ))}
-            </ul>
+            history.length === 0 ? (
+              <p className="text-sm text-ink-muted">No rule changes decided yet. They show here once a vote on Base closes.</p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {history.map((past) => (
+                  <li key={past.id} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 py-3 text-sm">
+                    <span className="w-44 shrink-0 text-ink">{past.rule}</span>
+                    <span className={cn("min-w-0 flex-1 tabular-nums", past.passed ? "text-ink" : "text-ink-faint")}>{past.outcome ?? ""}</span>
+                    <span className={cn("shrink-0 text-xs", past.passed ? "text-inflow" : "text-ink-faint")}>{past.result}</span>
+                  </li>
+                ))}
+              </ul>
+            )
           )}
         </div>
       </div>

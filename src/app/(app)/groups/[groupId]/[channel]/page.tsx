@@ -369,8 +369,8 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
           drafts={(await listWaitingDrafts(user.id, group.id, "SPEND")).map(spendDraftView)}
           base={`/groups/${group.id}`}
           rules={{
-            // UI only: the sample pot until the vault's balance is read from Base.
-            pot: 4200,
+            // What the vault holds on Base; 0 before the group is on Base.
+            pot: group.safeAddress ? await vaultDollars(group.id, user.id) : 0,
             smallPercent: percent(small),
             largePercent: percent(large),
             votingDays: 3,
@@ -386,19 +386,21 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
     ) as Partial<Record<GovernedAction, number>>;
     const onChain = contractThresholds(saved);
     const owner = members.find((member) => member.role === "OWNER");
-    // UI only: which AI each person uses is a sample until connections exist.
-    const sampleAssistants: Assistant[] = ["Claude", "ChatGPT", "Grok", null];
+    // Which AI each member has connected, if any: real connections, never guessed.
+    const assistants = await Promise.all(members.map(async (member) => aiNameOf(await getAiConnection(member.userId))));
+    const live = await readChainVotes(group.id, user.id);
     const people: Person[] = members.map((member, i) => ({
       id: member.memberId,
       name: member.displayName,
       admin: member.role === "ADMIN",
       startedGroup: member.role === "OWNER",
       isYou: member.userId === user.id,
-      assistant: member.userId === user.id ? "Claude" : sampleAssistants[i % sampleAssistants.length],
+      assistant: assistants[i],
     }));
     return (
       <ManageRoles
           drafts={(await listWaitingDrafts(user.id, group.id, "ROLE_CHANGE")).map(roleDraftView)}
+          history={decided(live, "MEMBER").map((vote) => ({ what: vote.title, detail: resultOf(vote), passed: vote.state === "DONE" }))}
           base={`/groups/${group.id}`}
           people={people}
           startedBy={owner?.displayName ?? "Unknown"}
@@ -423,6 +425,13 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
     return (
       <EditRules
         drafts={(await listWaitingDrafts(user.id, group.id, "RULE_CHANGE")).map(ruleDraftView)}
+        history={decided(await readChainVotes(group.id, user.id), "RULE").map((vote) => ({
+          id: vote.id,
+          rule: vote.title,
+          outcome: vote.state === "DONE" ? vote.detail : null,
+          passed: vote.state === "DONE",
+          result: resultOf(vote),
+        }))}
         base={`/groups/${group.id}`}
         needs={{ contribution: percent(onChain[5]), rules: percent(onChain[6]) }}
         voting={await openVoteCount(group.id, user.id, "RULE")}
@@ -489,8 +498,6 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
   return null;
 }
 
-/** #general's sample overview, for this UI-only step. */
-
 /**
  * The contract's votable actions in plain words, in the contract's own order
  * (JfkModule's Rule enum: SPEND_SMALL … MIGRATE_MODULE).
@@ -550,4 +557,26 @@ const USE_CASES: Record<UseCaseKind, { label: string; description: string }> = {
 async function openVoteCount(groupId: string, userId: string, kind: "RULE" | "MEMBER"): Promise<number> {
   const live = await readChainVotes(groupId, userId);
   return live.ok ? live.votes.filter((vote) => vote.kind === kind && vote.state === "OPEN").length : 0;
+}
+
+/** Decided votes of one kind on Base (carried out or failed), newest first. */
+function decided(live: Awaited<ReturnType<typeof readChainVotes>>, kind: "RULE" | "MEMBER") {
+  return live.ok ? live.votes.filter((vote) => vote.kind === kind && (vote.state === "DONE" || vote.state === "FAILED")) : [];
+}
+
+/** "Passed · 1 of 1 yes" */
+function resultOf(vote: { state: string; yes: string[]; eligible: number }): string {
+  return `${vote.state === "DONE" ? "Passed" : "Didn't pass"} · ${vote.yes.length} of ${vote.eligible} yes`;
+}
+
+/** Which AI app a connection is, by the name it registered with. */
+function aiNameOf(connection: { appName: string } | null): Assistant {
+  if (!connection) return null;
+  return /chatgpt|openai/i.test(connection.appName) ? "ChatGPT" : /grok/i.test(connection.appName) ? "Grok" : "Claude";
+}
+
+/** What the vault holds on Base, in dollars; 0 if Base can't be reached. */
+async function vaultDollars(groupId: string, userId: string): Promise<number> {
+  const dues = await readDues(groupId, userId);
+  return dues.ok ? dues.vaultDollars : 0;
 }
