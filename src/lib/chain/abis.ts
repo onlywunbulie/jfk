@@ -292,3 +292,51 @@ export const jfkDuesAbi = [
     outputs: [{ name: "", type: "uint64" }],
   },
 ] as const;
+
+/** JfkModule's money events, for a group's history. Each names the vault first, so one filter finds them all. */
+export const jfkMoneyEventsAbi = [
+  {
+    type: "event",
+    name: "Contributed",
+    inputs: [
+      { name: "safe", type: "address", indexed: true },
+      { name: "member", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "Paid",
+    inputs: [
+      { name: "safe", type: "address", indexed: true },
+      { name: "recipient", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "MemberRemoved",
+    inputs: [
+      { name: "safe", type: "address", indexed: true },
+      { name: "member", type: "address", indexed: true },
+      { name: "refund", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "GroupClosed",
+    inputs: [
+      { name: "safe", type: "address", indexed: true },
+      { name: "distributed", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "ProposalExecuted",
+    inputs: [
+      { name: "safe", type: "address", indexed: true },
+      { name: "id", type: "uint256", indexed: true },
+      { name: "action", type: "uint8", indexed: false },
+    ],
+  },
+] as const;

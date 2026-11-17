@@ -2,38 +2,20 @@ import Link from "next/link";
 import type { Route } from "next";
 import { cn } from "@/lib/cn";
 import { EXPLORER_URL } from "@/lib/chain/addresses";
+import type { History, HistoryEntry } from "@/modules/groups/onchain-history";
 import { ChannelIntro, DateDivider } from "./parts";
 import { ScrollToBottom } from "./scroll-to-bottom";
 
 /**
  * #transactions: the user's own money at the top, filters, then every
  * movement as short rows under Rall's name, one header per day, newest at
- * the bottom. UI only: the entries are samples until Rallied reads them from
- * Base.
+ * the bottom. Everything is read from the group's vault on Base, and each
+ * row links to its transaction on BaseScan.
  */
 
 export type Filter = "all" | "mine" | "in" | "out";
 
-interface Entry {
-  id: string;
-  day: string;
-  time: string;
-  what: string;
-  amount: string;
-  inflow: boolean;
-  mine: boolean;
-  /** Money out only: the vote that approved it. */
-  approved?: string;
-}
-
-const ENTRIES: Entry[] = [
-  { id: "1", day: "9 November 2026", time: "09:12", what: "Bisi paid in", amount: "USDC 100", inflow: true, mine: false },
-  { id: "2", day: "10 November 2026", time: "18:40", what: "Chidi paid in", amount: "USDC 100", inflow: true, mine: false },
-  { id: "3", day: "10 November 2026", time: "20:05", what: "You paid in", amount: "USDC 100", inflow: true, mine: true },
-  { id: "4", day: "12 November 2026", time: "08:02", what: "Generator repair, paid to Kemi", amount: "USDC 400", inflow: false, mine: false, approved: "6 of 8 voted yes" },
-  { id: "5", day: "Today", time: "09:14", what: "Amaka paid in", amount: "USDC 100", inflow: true, mine: false },
-  { id: "6", day: "Today", time: "10:40", what: "Tunde paid in", amount: "USDC 100", inflow: true, mine: false },
-];
+type Entry = HistoryEntry;
 
 const FILTERS: { value: Filter; label: string }[] = [
   { value: "all", label: "All" },
@@ -42,16 +24,48 @@ const FILTERS: { value: Filter; label: string }[] = [
   { value: "out", label: "Out" },
 ];
 
-export function Transactions({ base, filter, rotating }: { base: string; filter: Filter; rotating: boolean }) {
+/** The user's own money, from Base: everything they've paid in, and whether this period is paid. */
+export interface YourMoneyData {
+  paidIn: string;
+  thisPeriod: string | null;
+}
+
+export function Transactions({
+  base,
+  filter,
+  history,
+  you,
+}: {
+  base: string;
+  filter: Filter;
+  history: History;
+  you: YourMoneyData | null;
+}) {
   const href = (next: Filter) =>
     (next === "all" ? `${base}/transactions` : `${base}/transactions?filter=${next}`) as Route;
 
-  // In rotating savings, money out is the round's payout, not a voted spend.
-  const entries = rotating
-    ? ENTRIES.map((entry) =>
-        entry.id === "4" ? { ...entry, what: "Payout to Amaka, round 3", amount: "USDC 800", approved: undefined } : entry,
-      )
-    : ENTRIES;
+  if (!history.ok) {
+    const text = {
+      not_on_base: "Money moves on Base, where everyone can check it. Start this group on Base first; every payment in and out will show here.",
+      unreachable: "Couldn't reach Base's records just now. Refresh in a moment.",
+      not_found: "This group isn't available.",
+    }[history.reason];
+    return (
+      <div className="pt-6">
+        <ChannelIntro title="Every transaction">{text}</ChannelIntro>
+        {history.reason === "not_on_base" && (
+          <Link
+            href={`${base}/about` as Route}
+            className="mt-6 inline-block text-sm text-ink underline decoration-ink-faint underline-offset-4 hover:decoration-ink"
+          >
+            Go to #about to start it on Base
+          </Link>
+        )}
+      </div>
+    );
+  }
+
+  const entries = history.entries;
   const shown = entries.filter(
     (entry) =>
       filter === "all" ||
@@ -71,7 +85,7 @@ export function Transactions({ base, filter, rotating }: { base: string; filter:
         edge, leaving no gap above it for the feed to show through.
       */}
       <div className="sticky -top-6 z-10 -mx-4 -mt-6 flex flex-wrap items-end justify-between gap-4 border-b border-border bg-canvas px-4 py-4 lg:-mx-8 lg:px-8">
-        <YourMoney rotating={rotating} />
+        {you ? <YourMoney you={you} /> : <span />}
 
         <nav aria-label="Filter transactions" className="flex flex-wrap gap-5">
           {FILTERS.map((option) => (
@@ -98,7 +112,9 @@ export function Transactions({ base, filter, rotating }: { base: string; filter:
         <ChannelIntro title="Every transaction">Every dollar in and out of the group.</ChannelIntro>
 
         {shown.length === 0 ? (
-          <p className="mt-10 text-center text-sm text-ink-muted">Nothing here yet.</p>
+          <p className="mt-10 text-center text-sm text-ink-muted">
+            {filter === "all" ? "Nothing yet. Dues paid in #about show up here." : "Nothing here yet."}
+          </p>
         ) : (
           days.map((day) => {
             const entries = shown.filter((entry) => entry.day === day);
@@ -116,40 +132,34 @@ export function Transactions({ base, filter, rotating }: { base: string; filter:
 }
 
 /**
- * The user's own money in this group. "Your share" only means something in a
- * rotating group. On a phone it shrinks to one line so the pinned band stays
- * short.
+ * The user's own money in this group, from Base. On a phone it shrinks to one
+ * line so the pinned band stays short.
  */
-function YourMoney({ rotating }: { rotating: boolean }) {
+function YourMoney({ you }: { you: YourMoneyData }) {
+  const period = you.thisPeriod ?? "Not paid yet";
+  const tone = you.thisPeriod ? "inflow" : "pending";
   return (
     <section aria-label="Your money">
       <p className="text-sm text-ink-muted sm:hidden">
-        Paid in <span className="text-ink tabular-nums">USDC 600</span> · This round:{" "}
-        <span className="text-inflow">Paid</span>
-        {rotating && (
-          <>
-            {" "}
-            · Your turn <span className="text-ink tabular-nums">round 6, 1 Feb</span>
-          </>
-        )}
+        Paid in <span className="text-ink tabular-nums">{you.paidIn}</span> · This period:{" "}
+        <span className={tone === "inflow" ? "text-inflow" : "text-pending"}>{period}</span>
       </p>
       <div className="hidden w-fit min-w-72 sm:block">
         <h3 className="text-sm text-ink-muted">Your money</h3>
         <dl className="mt-3 space-y-2 text-sm">
-        <Pair label="You've paid in" value="USDC 600" />
-        <Pair label="This round" value="Paid" tone="inflow" />
-          {rotating && <Pair label="Your turn" value="Round 6 · USDC 800 on 1 Feb" />}
+          <Pair label="You've paid in" value={you.paidIn} />
+          <Pair label="This period" value={period} tone={tone} />
         </dl>
       </div>
     </section>
   );
 }
 
-function Pair({ label, value, tone }: { label: string; value: string; tone?: "inflow" }) {
+function Pair({ label, value, tone }: { label: string; value: string; tone?: "inflow" | "pending" }) {
   return (
     <div className="flex items-baseline justify-between gap-6">
       <dt className="text-ink-muted">{label}</dt>
-      <dd className={cn("tabular-nums", tone === "inflow" ? "text-inflow" : "text-ink")}>{value}</dd>
+      <dd className={cn("tabular-nums", tone === "inflow" ? "text-inflow" : tone === "pending" ? "text-pending" : "text-ink")}>{value}</dd>
     </div>
   );
 }
@@ -163,10 +173,10 @@ function Amount({ entry }: { entry: Entry }) {
   );
 }
 
-function BaseScanLink() {
+function BaseScanLink({ txHash }: { txHash: string }) {
   return (
     <a
-      href={EXPLORER_URL}
+      href={`${EXPLORER_URL}/tx/${txHash}`}
       target="_blank"
       rel="noreferrer"
       className="text-xs text-ink-faint underline decoration-ink-faint/50 underline-offset-4 transition-colors hover:text-ink hover:decoration-ink"
@@ -206,7 +216,7 @@ function DayAsRows({ entries }: { entries: Entry[] }) {
                 {entry.approved && <span className="block text-xs text-ink-faint">Approved: {entry.approved}</span>}
               </span>
               <Amount entry={entry} />
-              <BaseScanLink />
+              <BaseScanLink txHash={entry.txHash} />
             </li>
           ))}
         </ul>

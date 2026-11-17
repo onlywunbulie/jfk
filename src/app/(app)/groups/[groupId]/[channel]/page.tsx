@@ -23,6 +23,7 @@ import { EditRules } from "./edit-rules";
 import { Votes } from "./votes";
 import { readChainVotes } from "@/modules/groups/onchain-votes";
 import { readDues } from "@/modules/groups/onchain-dues";
+import { readHistory } from "@/modules/groups/onchain-history";
 import { Dues } from "./dues";
 
 export async function generateMetadata({
@@ -385,11 +386,14 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
 
   if (channel.slug === "transactions") {
     const filter = typeof query.filter === "string" ? query.filter : "all";
+    const [history, dues] = await Promise.all([readHistory(group.id, user.id), readDues(group.id, user.id)]);
+    const mine = dues.ok ? dues.members.find((member) => member.isYou) : undefined;
     return (
       <Transactions
         base={`/groups/${group.id}`}
         filter={filter === "mine" || filter === "in" || filter === "out" ? filter : "all"}
-        rotating={group.type === "ROTATING"}
+        history={history}
+        you={dues.ok && mine ? { paidIn: mine.paidIn, thisPeriod: dues.you.paidThisPeriod } : null}
       />
     );
   }

@@ -25,6 +25,12 @@ export const CONTRACTS = {
 /** Shown on every link to the chain, so people can check for themselves. */
 export const EXPLORER_URL = "https://sepolia.basescan.org";
 
+/**
+ * Blockscout's free API for a vault's whole history. Base's public node only
+ * searches about 200 blocks of logs per request, which can't cover a group's life.
+ */
+export const HISTORY_API_URL = "https://base-sepolia.blockscout.com/api";
+
 /** "0x4596A149…182b" — enough to recognise, short enough to fit a pill. */
 export function shortAddress(address: string): string {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
