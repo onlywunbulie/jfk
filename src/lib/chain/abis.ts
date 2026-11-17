@@ -139,4 +139,94 @@ export const jfkModuleAbi = [
       { name: "proposalCount", type: "uint256" },
     ],
   },
+  {
+    type: "function",
+    name: "getProposal",
+    stateMutability: "view",
+    inputs: [
+      { name: "safe", type: "address" },
+      { name: "id", type: "uint256" },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        components: [
+          { name: "action", type: "uint8" },
+          { name: "status", type: "uint8" },
+          { name: "thresholdPermille", type: "uint16" },
+          { name: "quorumPct", type: "uint8" },
+          { name: "deadline", type: "uint64" },
+          { name: "eligible", type: "uint32" },
+          { name: "yes", type: "uint32" },
+          { name: "no", type: "uint32" },
+          { name: "abstain", type: "uint32" },
+          { name: "proposer", type: "address" },
+          { name: "payload", type: "bytes" },
+        ],
+      },
+    ],
+  },
+  {
+    type: "function",
+    name: "decision",
+    stateMutability: "view",
+    inputs: [
+      { name: "safe", type: "address" },
+      { name: "id", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "uint8" }],
+  },
+  {
+    type: "function",
+    name: "voteOf",
+    stateMutability: "view",
+    inputs: [
+      { name: "safe", type: "address" },
+      { name: "id", type: "uint256" },
+      { name: "voter", type: "address" },
+    ],
+    outputs: [{ name: "", type: "uint8" }],
+  },
+  {
+    type: "function",
+    name: "eligibleVoter",
+    stateMutability: "view",
+    inputs: [
+      { name: "safe", type: "address" },
+      { name: "id", type: "uint256" },
+      { name: "voter", type: "address" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "vote",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "safe", type: "address" },
+      { name: "id", type: "uint256" },
+      { name: "choice", type: "uint8" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "execute",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "safe", type: "address" },
+      { name: "id", type: "uint256" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "event",
+    name: "ProposalExecuted",
+    inputs: [
+      { name: "safe", type: "address", indexed: true },
+      { name: "id", type: "uint256", indexed: true },
+      { name: "action", type: "uint8", indexed: false },
+    ],
+  },
 ] as const;

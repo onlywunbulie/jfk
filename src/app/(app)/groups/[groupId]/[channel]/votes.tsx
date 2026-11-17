@@ -1,156 +1,40 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import type { Route } from "next";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { AiLogo, type AiName } from "@/components/ai-logos";
 import { cn } from "@/lib/cn";
+import { EXPLORER_URL } from "@/lib/chain/addresses";
+import { SEND_STAGE_TEXT, useSendToBase } from "@/lib/chain/use-send-to-base";
+import type { ChainVote, ChainVotes } from "@/modules/groups/onchain-votes";
+import { carryOutAction, prepareVoteAction } from "@/app/(app)/vote-actions";
 import { ChannelIntro } from "./parts";
 import { PinnedTabs } from "./pinned-tabs";
 import { BeforeAfter } from "./edit-rules";
 import { VoteBar } from "./vote-bar";
 
 /**
- * #votes: the one place every decision is voted on: spends, roles and rule
- * changes. Each card shows what's being decided, the vote bar, who voted
- * which way (with the AI that cast it), and the user's own vote. The user's
- * AI votes within their limits; anything outside them waits here for a tap.
- *
- * UI only: the votes are samples and nothing is recorded. The percentages
- * needed are the group's real ones.
+ * #votes: every decision the group is making, read from Base. Each card
+ * shows what's being decided, the vote bar, who voted which way, and the
+ * user's own vote. Voting signs with the user's wallet; a vote that has
+ * passed is carried out on Base by Rallied, straight after the deciding vote
+ * or with a tap.
  */
 
-export interface VoteNeeds {
-  smallSpend: string;
-  largeSpend: string;
-  admin: string;
-  rules: string;
-  contribution: string;
-}
-
-type Kind = "SPEND" | "ROLE" | "RULE" | "ORDER";
 type Tab = "needs" | "open" | "closed";
 
-interface Voter {
-  name: string;
-  ai: AiName | null;
+export function Votes({ live, base }: { live: ChainVotes; base: string }) {
+  if (!live.ok) return <NoVotes reason={live.reason} base={base} />;
+
+  return <VoteList votes={live.votes} safe={live.safe} base={base} />;
 }
 
-interface Vote {
-  id: string;
-  kind: Kind;
-  title: string;
-  /** Spends: amount and recipient. Roles: the change. */
-  detail?: string;
-  receipt?: string;
-  change?: { before: string; after: string };
-  need: keyof VoteNeeds;
-  members: number;
-  yes: Voter[];
-  no: Voter[];
-  closes: string;
-  /** The user's vote: cast by their AI, or waiting for them, and why. */
-  mine: { vote: "yes" | "no"; by: string } | { waiting: string };
-}
-
-interface Closed {
-  id: string;
-  kind: Kind;
-  title: string;
-  passed: boolean;
-  result: string;
-}
-
-const OPEN: Vote[] = [
-  {
-    id: "v1",
-    kind: "SPEND",
-    title: "Airbnb deposit for December",
-    detail: "USDC 400 to Kemi",
-    receipt: "https://www.airbnb.com/rooms/sample",
-    need: "smallSpend",
-    members: 8,
-    yes: [
-      { name: "Ade", ai: "Claude" },
-      { name: "Tunde", ai: "Claude" },
-      { name: "Kemi", ai: "ChatGPT" },
-      { name: "Amaka", ai: "Claude" },
-    ],
-    no: [{ name: "Femi", ai: null }],
-    closes: "Friday",
-    mine: { waiting: "It's above your limit, so it needs you." },
-  },
-  {
-    id: "v2",
-    kind: "RULE",
-    title: "Large spends",
-    change: { before: "67% must agree", after: "75% must agree" },
-    need: "rules",
-    members: 8,
-    yes: [
-      { name: "Amaka", ai: "Claude" },
-      { name: "Bisi", ai: null },
-      { name: "You", ai: "Claude" },
-    ],
-    no: [],
-    closes: "Monday",
-    mine: { vote: "yes", by: "your Claude, 2h ago" },
-  },
-  {
-    id: "v3",
-    kind: "ROLE",
-    title: "Remove Femi as admin",
-    need: "admin",
-    members: 8,
-    yes: [
-      { name: "Tunde", ai: "Claude" },
-      { name: "Chidi", ai: "Grok" },
-      { name: "Kemi", ai: "ChatGPT" },
-      { name: "You", ai: "Claude" },
-    ],
-    no: [{ name: "Femi", ai: null }],
-    closes: "Friday",
-    mine: { vote: "yes", by: "your Claude, yesterday" },
-  },
-];
-
-/** Rotating savings: no spends; swaps and order changes instead. */
-const ROTATING_OPEN: Vote[] = [
-  {
-    id: "r1",
-    kind: "ORDER",
-    title: "Swap turns: Kemi and Chidi",
-    change: { before: "Kemi round 5, Chidi round 7", after: "Chidi round 5, Kemi round 7" },
-    need: "rules",
-    members: 8,
-    yes: [
-      { name: "Kemi", ai: "ChatGPT" },
-      { name: "Chidi", ai: "Grok" },
-      { name: "Ade", ai: "Claude" },
-    ],
-    no: [],
-    closes: "Thursday",
-    mine: { waiting: "Your limits say changes to the order need you." },
-  },
-  OPEN[2],
-];
-
-const ROTATING_CLOSED: Closed[] = [
-  { id: "rc1", kind: "ORDER", title: "Swap turns: Ade and Bisi", passed: true, result: "Passed 20 Aug · 7 of 8" },
-  { id: "rc2", kind: "ROLE", title: "Make Tunde an admin", passed: true, result: "Passed 3 Oct · 6 of 8" },
-];
-
-const CLOSED: Closed[] = [
-  { id: "c1", kind: "SPEND", title: "Generator repair · USDC 400 to Musa", passed: true, result: "Passed 12 Nov · 6 of 8" },
-  { id: "c2", kind: "ROLE", title: "Make Tunde an admin", passed: true, result: "Passed 3 Oct · 6 of 8" },
-  { id: "c3", kind: "RULE", title: "What everyone pays · USDC 80 → 100", passed: false, result: "Didn't pass 1 Sep · 3 of 8" },
-];
-
-export function Votes({ needs, rotating }: { needs: VoteNeeds; rotating: boolean }) {
-  const open = rotating ? ROTATING_OPEN : OPEN;
-  const closed = rotating ? ROTATING_CLOSED : CLOSED;
-  // The user's taps on votes waiting for them, kept on screen only.
-  const [cast, setCast] = useState<Record<string, "yes" | "no">>({});
-  const needsYou = open.filter((vote) => "waiting" in vote.mine && !cast[vote.id]);
+function VoteList({ votes, safe, base }: { votes: ChainVote[]; safe: string; base: string }) {
+  const needsYou = votes.filter((vote) => vote.canVote);
+  const open = votes.filter((vote) => vote.state === "OPEN" || vote.state === "PASSED");
+  const closed = votes.filter((vote) => vote.state === "DONE" || vote.state === "FAILED");
   const [tab, setTab] = useState<Tab>(needsYou.length > 0 ? "needs" : "open");
 
   const tabs: { value: Tab; label: string; count?: number }[] = [
@@ -158,8 +42,7 @@ export function Votes({ needs, rotating }: { needs: VoteNeeds; rotating: boolean
     { value: "open", label: "Open", count: open.length },
     { value: "closed", label: "Closed" },
   ];
-
-  const shown = tab === "needs" ? needsYou : open;
+  const shown = tab === "needs" ? needsYou : tab === "open" ? open : closed;
 
   return (
     <div className="flex min-h-full flex-col">
@@ -167,44 +50,74 @@ export function Votes({ needs, rotating }: { needs: VoteNeeds; rotating: boolean
 
       <div role="tabpanel" className="pt-6">
         <ChannelIntro title="Votes">
-          Every decision the group is making. Your Claude votes within your limits; anything outside them waits here for you.
+          Every decision the group is making, straight from the group&rsquo;s vault on Base. Once a vote passes, Rallied carries it out.
         </ChannelIntro>
 
         <div className="mt-8 max-w-xl space-y-4">
-          {tab !== "closed" &&
-            shown.map((vote) => (
-              <VoteCard
-                key={vote.id}
-                vote={vote}
-                need={needs[vote.need]}
-                tapped={cast[vote.id]}
-                onVote={(choice) => {
-                  const next = { ...cast, [vote.id]: choice };
-                  setCast(next);
-                  const left = open.filter((v) => "waiting" in v.mine && !next[v.id]);
-                  if (tab === "needs" && left.length === 0) setTab("open");
-                }}
-              />
-            ))}
-
-          {tab === "closed" && (
-            <ul className="divide-y divide-border">
-              {closed.map((vote) => (
-                <li key={vote.id} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 py-3 text-sm">
-                  <KindTag kind={vote.kind} />
-                  <span className="min-w-0 flex-1 text-ink">{vote.title}</span>
-                  <span className={cn("shrink-0 text-xs", vote.passed ? "text-inflow" : "text-ink-faint")}>{vote.result}</span>
-                </li>
-              ))}
-            </ul>
+          {shown.length === 0 && (
+            <p className="text-sm text-ink-muted">
+              {tab === "closed" ? (
+                "Nothing decided yet."
+              ) : (
+                <>
+                  Nothing being voted on. Ask your AI to draft a change, then send it from{" "}
+                  <Link href={`${base}/edit-rules` as Route} className="text-ink underline decoration-ink-faint underline-offset-4 hover:decoration-ink">
+                    #edit rules
+                  </Link>{" "}
+                  or{" "}
+                  <Link href={`${base}/propose` as Route} className="text-ink underline decoration-ink-faint underline-offset-4 hover:decoration-ink">
+                    #propose
+                  </Link>
+                  .
+                </>
+              )}
+            </p>
           )}
+          {shown.map((vote) => (
+            <VoteCard key={vote.id} vote={vote} groupId={base.split("/").pop() ?? ""} />
+          ))}
         </div>
+
+        <p className="mt-8 text-sm text-ink-faint">
+          Every vote is public on{" "}
+          <a
+            href={`${EXPLORER_URL}/address/${safe}`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-ink-muted underline decoration-ink-faint underline-offset-4 hover:text-ink"
+          >
+            BaseScan
+          </a>
+          .
+        </p>
       </div>
     </div>
   );
 }
 
-function KindTag({ kind }: { kind: Kind }) {
+function NoVotes({ reason, base }: { reason: Exclude<ChainVotes, { ok: true }>["reason"]; base: string }) {
+  const text = {
+    not_on_base: "Votes happen on Base, where nobody can change them afterwards. Start this group on Base first.",
+    old_contract: "This group runs on Rallied's first contract, which this screen doesn't read. Start a new group to vote here.",
+    unreachable: "Couldn't reach Base just now. Refresh in a moment.",
+    not_found: "This group isn't available.",
+  }[reason];
+  return (
+    <div className="pt-6">
+      <ChannelIntro title="Votes">{text}</ChannelIntro>
+      {reason === "not_on_base" && (
+        <Link
+          href={`${base}/about` as Route}
+          className="mt-6 inline-block text-sm text-ink underline decoration-ink-faint underline-offset-4 hover:decoration-ink"
+        >
+          Go to #about to start it on Base
+        </Link>
+      )}
+    </div>
+  );
+}
+
+function KindTag({ kind }: { kind: ChainVote["kind"] }) {
   return (
     <span className="shrink-0 rounded-[4px] bg-overlay px-1.5 py-px text-[0.6875rem] leading-4 font-semibold tracking-wide text-ink-muted">
       {kind}
@@ -212,26 +125,72 @@ function KindTag({ kind }: { kind: Kind }) {
   );
 }
 
-function VoteCard({
-  vote,
-  need,
-  tapped,
-  onVote,
-}: {
-  vote: Vote;
-  need: string;
-  tapped: "yes" | "no" | undefined;
-  onVote: (choice: "yes" | "no") => void;
-}) {
-  // A tap adds the user to the tally on screen.
-  const yes = tapped === "yes" ? [...vote.yes, { name: "You", ai: null }] : vote.yes;
-  const no = tapped === "no" ? [...vote.no, { name: "You", ai: null }] : vote.no;
+const STATE_TEXT: Record<ChainVote["state"], (vote: ChainVote) => string> = {
+  OPEN: (vote) => `closes ${vote.closes}`,
+  PASSED: () => "passed",
+  DONE: () => "passed · carried out",
+  FAILED: () => "didn't pass",
+};
+
+function VoteCard({ vote, groupId }: { vote: ChainVote; groupId: string }) {
+  const router = useRouter();
+  const sendToBase = useSendToBase();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // Shown until the refreshed page (read from Base) catches up.
+  const [justVoted, setJustVoted] = useState<"YES" | "NO" | null>(null);
+
+  async function castVote(choice: "YES" | "NO") {
+    setError(null);
+    setBusy("Getting it ready…");
+    try {
+      const prepared = await prepareVoteAction(groupId, vote.id, choice);
+      if (!prepared.ok) {
+        setError(prepared.error);
+        return;
+      }
+      const sent = await sendToBase({
+        call: prepared.call,
+        wallet: prepared.wallet,
+        onStage: (stage, wallet) => setBusy(SEND_STAGE_TEXT[wallet][stage]),
+      });
+      if (!sent.ok) {
+        setError(sent.error);
+        return;
+      }
+      setJustVoted(choice);
+      // If that was the deciding vote, Rallied carries it out straight away.
+      setBusy("Checking the result…");
+      await carryOutAction(groupId, vote.id);
+      router.refresh();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function carryOut() {
+    setError(null);
+    setBusy("Carrying it out on Base…");
+    try {
+      const result = await carryOutAction(groupId, vote.id);
+      if (!result.ok) setError(result.error);
+      else router.refresh();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const yes = justVoted === "YES" && !vote.yes.includes("You") ? [...vote.yes, "You"] : vote.yes;
+  const no = justVoted === "NO" && !vote.no.includes("You") ? [...vote.no, "You"] : vote.no;
+  const mine = vote.mine ?? justVoted;
 
   return (
     <article className="rounded-[var(--radius-card)] border border-border bg-surface p-5">
       <div className="flex items-center justify-between gap-3">
         <KindTag kind={vote.kind} />
-        <span className="text-xs text-ink-faint">closes {vote.closes}</span>
+        <span className={cn("text-xs", vote.state === "PASSED" || vote.state === "DONE" ? "text-inflow" : "text-ink-faint")}>
+          {STATE_TEXT[vote.state](vote)}
+        </span>
       </div>
 
       <h3 className="mt-3 text-lg font-semibold text-ink">{vote.title}</h3>
@@ -241,81 +200,71 @@ function VoteCard({
         </p>
       )}
       {vote.detail && <p className="mt-1 text-sm text-ink-muted tabular-nums">{vote.detail}</p>}
-      {vote.receipt && (
-        <p className="mt-1 text-sm">
-          <a
-            href={vote.receipt}
-            target="_blank"
-            rel="noreferrer"
-            className="text-ink-muted underline decoration-ink-faint underline-offset-4 hover:text-ink hover:decoration-ink"
-          >
-            Receipt: {vote.receipt.replace(/^https?:\/\/(www\.)?/, "")}
-          </a>
-        </p>
-      )}
 
       <div className="mt-5">
-        <VoteBar yes={yes.length} members={vote.members} need={need} />
+        <VoteBar yes={yes.length} members={vote.eligible} need={vote.need} />
       </div>
 
       <dl className="mt-4 space-y-1.5 text-sm">
         <Voters label="Yes" voters={yes} />
         <Voters label="No" voters={no} />
       </dl>
+      <p className="mt-3 text-xs text-ink-faint">Proposed by {vote.proposedBy}</p>
 
       <div className="mt-5 border-t border-border pt-4 text-sm">
         <p className="text-ink-muted">
           Your vote{" "}
-          {tapped ? (
-            <span className="text-ink">{tapped === "yes" ? "Yes" : "No"} · just now</span>
-          ) : "vote" in vote.mine ? (
-            <span className="text-ink">
-              {vote.mine.vote === "yes" ? "Yes" : "No"} · by {vote.mine.by}
-            </span>
-          ) : (
+          {mine ? (
+            <span className="text-ink">{mine === "YES" ? "Yes" : mine === "NO" ? "No" : "Abstained"}</span>
+          ) : vote.canVote ? (
             <span className="text-pending">Waiting for you</span>
+          ) : (
+            <span className="text-ink-faint">None</span>
           )}
         </p>
-        {!tapped && "waiting" in vote.mine && (
-          <>
-            <p className="mt-1 text-xs text-ink-faint">{vote.mine.waiting}</p>
-            <div className="mt-3 flex gap-2">
-              <Button type="button" size="sm" onClick={() => onVote("yes")}>
-                Yes
-              </Button>
-              <Button type="button" variant="secondary" size="sm" onClick={() => onVote("no")}>
-                No
-              </Button>
-            </div>
-          </>
+
+        {vote.canVote && !justVoted && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button type="button" size="sm" disabled={busy !== null} onClick={() => castVote("YES")}>
+              Yes
+            </Button>
+            <Button type="button" variant="secondary" size="sm" disabled={busy !== null} onClick={() => castVote("NO")}>
+              No
+            </Button>
+          </div>
         )}
-        {tapped && <p className="mt-1 text-xs text-ink-faint">Shown here only for now. Voting for real comes in a later step.</p>}
+
+        {vote.state === "PASSED" && (
+          <div className="mt-3">
+            <Button type="button" size="sm" loading={busy !== null} onClick={carryOut}>
+              Carry it out
+            </Button>
+            <p className="mt-1 text-xs text-ink-faint">It passed. Rallied runs it on Base and pays the fee.</p>
+          </div>
+        )}
+
+        {busy && (
+          <p role="status" className="mt-2 text-xs text-ink-muted">
+            {busy}
+          </p>
+        )}
+        {error && (
+          <p role="alert" className="mt-2 text-xs text-danger">
+            {error}
+          </p>
+        )}
       </div>
     </article>
   );
 }
 
-/** Who voted one way, each with the logo of the AI that cast it, if any. */
-function Voters({ label, voters }: { label: string; voters: Voter[] }) {
+/** Who voted one way. */
+function Voters({ label, voters }: { label: string; voters: string[] }) {
   return (
     <div className="flex gap-3">
       <dt className="w-8 shrink-0 text-ink-muted">{label}</dt>
       <dd className="flex min-w-0 flex-wrap gap-x-3 gap-y-1">
-        {voters.length === 0 ? (
-          <span className="text-ink-faint">Nobody yet</span>
-        ) : (
-          voters.map((voter) => (
-            <span key={voter.name} className="inline-flex items-center gap-1 text-ink">
-              {voter.name}
-              {voter.ai && (
-                <span title={`Voted by ${voter.name}'s ${voter.ai}`} className="inline-grid size-4 place-items-center">
-                  <AiLogo name={voter.ai} className="size-3" />
-                  <span className="sr-only">(by {voter.ai})</span>
-                </span>
-              )}
-            </span>
-          ))
-        )}
+        {voters.length === 0 ? <span className="text-ink-faint">Nobody yet</span> : voters.map((name) => <span key={name} className="text-ink">{name}</span>)}
       </dd>
     </div>
   );

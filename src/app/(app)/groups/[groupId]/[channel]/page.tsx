@@ -21,6 +21,7 @@ import { ProposeChannel } from "./propose";
 import { ManageRoles, type Assistant, type Person } from "./manage-roles";
 import { EditRules } from "./edit-rules";
 import { Votes } from "./votes";
+import { readChainVotes } from "@/modules/groups/onchain-votes";
 
 export async function generateMetadata({
   params,
@@ -344,8 +345,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
           people={people}
           startedBy={owner?.displayName ?? "Unknown"}
           startedOn={longDate(group.createdAt)}
-          // UI only: matches the one sample role change in #votes.
-          voting={1}
+          voting={await openVoteCount(group.id, user.id, "MEMBER")}
           rules={{
             addMember: percent(onChain[2]),
             removeMember: percent(onChain[3]),
@@ -367,29 +367,13 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
         drafts={(await listWaitingDrafts(user.id, group.id, "RULE_CHANGE")).map(ruleDraftView)}
         base={`/groups/${group.id}`}
         needs={{ contribution: percent(onChain[5]), rules: percent(onChain[6]) }}
-        // UI only: matches the one sample rule change in #votes.
-        voting={1}
+        voting={await openVoteCount(group.id, user.id, "RULE")}
       />
     );
   }
 
   if (channel.slug === "votes") {
-    const saved = Object.fromEntries(
-      group.governance.map((rule) => [rule.action, rule.thresholdPermille]),
-    ) as Partial<Record<GovernedAction, number>>;
-    const onChain = contractThresholds(saved);
-    return (
-      <Votes
-        rotating={rotating}
-        needs={{
-          smallSpend: percent(onChain[0]),
-          largeSpend: percent(onChain[1]),
-          contribution: percent(onChain[5]),
-          rules: percent(onChain[6]),
-          admin: percent(saved.REMOVE_ADMIN ?? DEFAULT_GOVERNANCE.REMOVE_ADMIN),
-        }}
-      />
-    );
+    return <Votes live={await readChainVotes(group.id, user.id)} base={`/groups/${group.id}`} />;
   }
 
   if (channel.slug === "transactions") {
@@ -526,3 +510,9 @@ const USE_CASES: Record<UseCaseKind, { label: string; description: string }> = {
 };
 
 
+
+/** How many votes of one kind are open on Base right now; 0 when the group isn't on Base. */
+async function openVoteCount(groupId: string, userId: string, kind: "RULE" | "MEMBER"): Promise<number> {
+  const live = await readChainVotes(groupId, userId);
+  return live.ok ? live.votes.filter((vote) => vote.kind === kind && vote.state === "OPEN").length : 0;
+}
