@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { listGroupsForUser } from "@/modules/groups/service";
 import { countVotesAwaitingUser } from "@/modules/governance/service";
 import { countWaitingDrafts } from "@/modules/agents/drafts";
+import { chainSummaries } from "@/modules/groups/onchain-summary";
 import { AppShell, type ShellGroup } from "@/components/shell/app-shell";
 import { ProfilePanel } from "@/components/shell/profile-panel";
 
@@ -26,6 +27,9 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     countVotesAwaitingUser(user.id),
     countWaitingDrafts(user.id),
   ]);
+  // Groups on Base: the vault and the votes waiting come from Base. The old
+  // off-chain records only know about groups from before the move on-chain.
+  const onBase = await chainSummaries(groups, user.walletAddress);
 
   const shellGroups: ShellGroup[] = groups.map((group) => {
     const groupDrafts = drafts.get(group.id) ?? {};
@@ -35,16 +39,18 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       memberCount: group.memberCount,
       kind: group.type,
       // "USDC 15000": the currency's code, then the amount, as the wireframe has it.
-      balance: `${group.balance.total.currency} ${group.balance.total
-        .format({ compact: true, showSymbol: false })
-        .replaceAll(",", "")}`,
-      waiting: waiting.get(group.id) ?? 0,
+      balance:
+        onBase.get(group.id)?.vault ??
+        `${group.balance.total.currency} ${group.balance.total
+          .format({ compact: true, showSymbol: false })
+          .replaceAll(",", "")}`,
+      waiting: onBase.get(group.id)?.votesWaiting ?? waiting.get(group.id) ?? 0,
       // What's waiting for this user, by channel: their AI's drafts, and votes they haven't cast.
       needsYou: {
         propose: groupDrafts.SPEND ?? 0,
         "edit-rules": groupDrafts.RULE_CHANGE ?? 0,
         "manage-roles": groupDrafts.ROLE_CHANGE ?? 0,
-        votes: waiting.get(group.id) ?? 0,
+        votes: onBase.get(group.id)?.votesWaiting ?? waiting.get(group.id) ?? 0,
       },
     };
   });
