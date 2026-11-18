@@ -39,6 +39,7 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         "the user sends it to a vote themselves in Rallied. " +
         "The only money you can move is the user's own dues, into their own group's vault, and only once they've allowed it with set_up_auto_pay. " +
         "When a group is on Base and the user hasn't turned on automatic dues there (get_group shows your_dues.automatic), offer it once, briefly, with the set-up link. " +
+        "When the user started a group that isn't on Base yet (vault_on_base is empty), offer once to start it with start_on_base, mentioning that anyone joining afterwards needs a vote. " +
         "You can't spend, send money anywhere else, or vote.",
     },
   );
@@ -316,7 +317,10 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         created: name.trim(),
         group_id: groupId,
         open_in_rallied: `${grant.origin}/groups/${groupId}/about`,
-        next: "Offer an invite link (invite_link) so friends can join. When the user wants it on Base, use start_on_base; it's best once friends have joined, since anyone joining after needs a vote.",
+        next:
+          "Offer an invite link (invite_link) so friends can join. " +
+          "Then offer to start it on Base (start_on_base), which gives the group its vault so dues and votes can begin: " +
+          "right away if the user is saving alone or everyone is already in, otherwise once their friends have joined, since anyone joining after needs a vote. Ask before starting it.",
       });
     },
   );
