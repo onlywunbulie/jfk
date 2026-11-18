@@ -1,4 +1,6 @@
 import { registerClient } from "@/modules/agents/oauth";
+import { LIMITS, rateLimit } from "@/lib/rate-limit";
+import { requestIp } from "@/lib/request-ip";
 
 /**
  * Dynamic client registration (RFC 7591): an AI app like Claude introduces
@@ -6,6 +8,13 @@ import { registerClient } from "@/modules/agents/oauth";
  * no secret is issued, PKCE protects the code instead.
  */
 export async function POST(request: Request) {
+  const limited = await rateLimit(`oauth-register:ip:${requestIp(request.headers)}`, LIMITS.oauthRegister.limit, LIMITS.oauthRegister.windowSeconds);
+  if (!limited.ok) {
+    return Response.json({ error: "slow_down", error_description: `Too many requests. Try again in ${limited.retryAfterSeconds} seconds.` }, {
+      status: 429,
+      headers: { "Retry-After": String(limited.retryAfterSeconds), "Cache-Control": "no-store" },
+    });
+  }
   let body: Record<string, unknown>;
   try {
     const parsed: unknown = await request.json();

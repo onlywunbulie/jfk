@@ -12,3 +12,4 @@ export * from "./contributions";
 export * from "./governance";
 export * from "./chat";
 export * from "./agents";
+export * from "./rate-limits";

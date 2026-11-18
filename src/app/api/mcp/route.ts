@@ -1,6 +1,7 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { SUPPORTED_PROTOCOL_VERSIONS } from "@modelcontextprotocol/sdk/types.js";
 import { getClient, verifyAccessToken } from "@/modules/agents/oauth";
+import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { buildRalliedServer } from "@/modules/agents/mcp";
 import { agentUrls, publicOrigin } from "@/modules/agents/origin";
 
@@ -27,6 +28,14 @@ async function handle(request: Request): Promise<Response> {
         },
       },
     );
+  }
+
+  const limited = await rateLimit(`mcp:user:${grant.userId}`, LIMITS.mcp.limit, LIMITS.mcp.windowSeconds);
+  if (!limited.ok) {
+    return Response.json({ error: "slow_down", error_description: `Too many requests. Try again in ${limited.retryAfterSeconds} seconds.` }, {
+      status: 429,
+      headers: { "Retry-After": String(limited.retryAfterSeconds), "Cache-Control": "no-store" },
+    });
   }
 
   const client = await getClient(grant.clientId);

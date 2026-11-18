@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/session";
+import { chainActionLimit } from "@/lib/rate-limit";
 import { revokeAllForUser } from "@/modules/agents/oauth";
 import { setAiInGroup } from "@/modules/agents/connection";
 import { discardDraft } from "@/modules/agents/drafts";
@@ -43,6 +44,8 @@ export async function prepareSendAction(
   id: string,
 ): Promise<{ ok: true; call: { to: `0x${string}`; data: `0x${string}` }; wallet: string } | { ok: false; error: string }> {
   const user = await requireUser();
+  const slow = await chainActionLimit(user.id);
+  if (slow) return { ok: false, error: slow };
   const parsed = draftId.safeParse(id);
   if (!parsed.success) return { ok: false, error: "That didn't work. Try again." };
   const prepared = await prepareProposal(user.id, parsed.data);
@@ -55,6 +58,8 @@ const txHash = z.string().regex(/^0x[0-9a-fA-F]{64}$/);
 /** Step 2: the wallet sent it; check Base for the proposal and mark the draft sent. */
 export async function confirmSentAction(id: string, hash: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const user = await requireUser();
+  const slow = await chainActionLimit(user.id);
+  if (slow) return { ok: false, error: slow };
   const parsedId = draftId.safeParse(id);
   const parsedHash = txHash.safeParse(hash);
   if (!parsedId.success || !parsedHash.success) return { ok: false, error: "That didn't work. Try again." };

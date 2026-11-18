@@ -5,6 +5,8 @@ import { z } from "zod";
 import { createSession } from "@/lib/auth/session";
 import { env } from "@/lib/env";
 import { newSignInNonce, signInWithWallet } from "@/modules/identity/wallet";
+import { LIMITS, rateLimit } from "@/lib/rate-limit";
+import { requestIp } from "@/lib/request-ip";
 
 /**
  * The nonce lives in a short-lived httpOnly cookie, so the message a wallet
@@ -46,6 +48,11 @@ export async function finishWalletSignInAction(
       signaturePrefix: typeof input?.signature === "string" ? input.signature.slice(0, 12) : typeof input?.signature,
     });
     return { ok: false, error: "The wallet sent something unexpected. Try again." };
+  }
+
+  const limited = await rateLimit(`sign-in:ip:${requestIp(await headers())}`, LIMITS.signInFinish.limit, LIMITS.signInFinish.windowSeconds);
+  if (!limited.ok) {
+    return { ok: false, error: `Too many sign-in attempts. Try again in ${Math.ceil(limited.retryAfterSeconds / 60)} minutes.` };
   }
 
   const cookieStore = await cookies();

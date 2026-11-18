@@ -1,6 +1,7 @@
 import { env } from "@/lib/env";
 import { checkSponsorable } from "@/lib/chain/sponsor-policy";
 import { isMemberWallet } from "@/modules/identity/wallet";
+import { LIMITS, rateLimit } from "@/lib/rate-limit";
 
 /**
  * Rallied's paymaster proxy (ERC-7677). The member's wallet (Coinbase's
@@ -51,6 +52,8 @@ export async function POST(request: Request) {
   const check = checkSponsorable(userOp, chainId);
   if (!check.ok) return refuse(body.id, `Not sponsored: ${check.reason}.`, 403);
   if (!(await isMemberWallet(check.sender))) return refuse(body.id, "Not sponsored: not a Rallied member's wallet.", 403);
+  const limited = await rateLimit(`paymaster:wallet:${check.sender.toLowerCase()}`, LIMITS.paymaster.limit, LIMITS.paymaster.windowSeconds);
+  if (!limited.ok) return refuse(body.id, `Too many requests. Try again in ${limited.retryAfterSeconds} seconds.`, 429);
 
   let forwarded: Response;
   try {

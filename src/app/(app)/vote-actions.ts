@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/session";
+import { chainActionLimit } from "@/lib/rate-limit";
 import { carryOut, prepareVote } from "@/modules/groups/onchain-votes";
 
 /**
@@ -24,6 +25,8 @@ export async function prepareVoteAction(
   vote: string,
 ): Promise<{ ok: true; call: { to: `0x${string}`; data: `0x${string}` }; wallet: string } | { ok: false; error: string }> {
   const user = await requireUser();
+  const slow = await chainActionLimit(user.id);
+  if (slow) return { ok: false, error: slow };
   const parsed = ids.safeParse({ groupId, proposalId });
   const parsedChoice = choice.safeParse(vote);
   if (!parsed.success || !parsedChoice.success) return { ok: false, error: "That didn't work. Try again." };
@@ -42,6 +45,8 @@ const CARRY_OUT_ERRORS = {
 
 export async function carryOutAction(groupId: string, proposalId: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const user = await requireUser();
+  const slow = await chainActionLimit(user.id);
+  if (slow) return { ok: false, error: slow };
   const parsed = ids.safeParse({ groupId, proposalId });
   if (!parsed.success) return { ok: false, error: "That didn't work. Try again." };
   const result = await carryOut(user.id, parsed.data.groupId, parsed.data.proposalId);
