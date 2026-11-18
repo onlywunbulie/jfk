@@ -411,7 +411,7 @@ function ChannelLink({ href, active, count = 0, children }: { href: Route; activ
         href={href}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "press relative flex h-7 items-center gap-[7px] rounded-[4px] px-[10px] text-base transition-colors",
+          "press relative flex h-10 items-center lg:h-7 gap-[7px] rounded-[4px] px-[10px] text-base transition-colors",
           active || count > 0 ? "text-ink" : "text-ink-muted",
           !active && "hover:bg-raised",
         )}

@@ -74,7 +74,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
                 href={`/groups/${group.id}/verify?profile=1` as Route}
                 className="underline decoration-ink-faint/50 underline-offset-4 transition-colors hover:text-ink hover:decoration-ink"
               >
-                Limits and other groups: manage your AI in your profile
+                Your AI in other groups: manage it in your profile
               </Link>
             </p>
           }
@@ -82,7 +82,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
           <Detail label="Wallet">
             {user.walletAddress ? (
               <>
-                <span className="text-inflow">✓ Verified</span> · Base Account{" "}
+                <span className="text-inflow">✓ Verified</span> ·{" "}
                 <a
                   href={`${EXPLORER_URL}/address/${user.walletAddress}`}
                   target="_blank"
@@ -93,7 +93,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
                 </a>
               </>
             ) : (
-              <span className="text-pending">Not verified. Sign in with your Base Account to verify.</span>
+              <span className="text-pending">Not verified. Sign in with your wallet to verify.</span>
             )}
           </Detail>
           <Detail label="Your AI">
@@ -105,8 +105,10 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
               allowedHere={allowedHere}
             />
           </Detail>
-          {connection && <Detail label="It can">Read this group: money, members, rules and votes</Detail>}
-          <Detail label="This group">Members&rsquo; AIs can vote within their own limits</Detail>
+          {connection && (
+            <Detail label="It can">Read this group, draft changes for you to send, and pay your dues here once you allow it</Detail>
+          )}
+          <Detail label="It can&rsquo;t">Vote, send a draft, or spend: those stay with you</Detail>
         </RallMessage>
       </div>
     );
@@ -231,12 +233,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
               ))}
             </ul>
           </Detail>
-          {/*
-            The group's ceiling on AI. No setting exists yet, so this shows the
-            default; when the group votes it on, it reads "Every vote needs a
-            human tap".
-          */}
-          <Detail label="AI votes">Members&rsquo; AIs can vote within their own limits</Detail>
+          <Detail label="Members' AIs">Can read and draft, and pay their member&rsquo;s dues if allowed. Only members vote and spend.</Detail>
           <Detail label="Leaving">You give up what you&rsquo;ve paid in</Detail>
           <Detail label="Voted out">You get back what you paid in</Detail>
           <Detail label="Closing">The pot is split by how much each person paid in</Detail>
@@ -368,6 +365,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
         </ChannelIntro>
         <ProposeChannel
           drafts={(await listWaitingDrafts(user.id, group.id, "SPEND")).map(spendDraftView)}
+          recent={await recentSpends(group.id, user.id)}
           base={`/groups/${group.id}`}
           rules={{
             // What the vault holds on Base; 0 before the group is on Base.
@@ -580,4 +578,21 @@ function aiNameOf(connection: { appName: string } | null): Assistant {
 async function vaultDollars(groupId: string, userId: string): Promise<number> {
   const dues = await readDues(groupId, userId);
   return dues.ok ? dues.vaultDollars : 0;
+}
+
+/** The user's own spend proposals on Base, newest first, for #propose. */
+async function recentSpends(groupId: string, userId: string) {
+  const live = await readChainVotes(groupId, userId);
+  if (!live.ok) return [];
+  return live.votes
+    .filter((vote) => vote.kind === "SPEND" && vote.proposedBy === "You")
+    .slice(0, 5)
+    .map((vote) => ({
+      id: vote.id,
+      what: vote.detail ?? vote.title,
+      amount: vote.title.replace(/^Spend /, ""),
+      status: { OPEN: "Voting", PASSED: "Passed", DONE: "Passed", FAILED: "Didn't pass" }[vote.state],
+      detail: vote.state === "OPEN" ? `${vote.yes.length} of ${vote.eligible} so far · closes ${vote.closes}` : `${vote.yes.length} of ${vote.eligible} voted yes`,
+      tone: vote.state === "OPEN" ? ("pending" as const) : vote.state === "FAILED" ? ("muted" as const) : ("inflow" as const),
+    }));
 }

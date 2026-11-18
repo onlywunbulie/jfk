@@ -76,7 +76,6 @@ export async function ProfilePanel({ user }: { user: SessionUser }) {
         </h3>
         <dl className="mt-3 space-y-3 text-sm">
           <Row label="Email" value={user.email ?? "Not added"} />
-          <Row label="Transaction PIN" value={user.hasPin ? "Set" : "Not set yet"} tone={user.hasPin ? "default" : "pending"} />
         </dl>
       </section>
 

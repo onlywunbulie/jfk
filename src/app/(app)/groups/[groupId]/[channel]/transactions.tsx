@@ -94,7 +94,7 @@ export function Transactions({
               href={href(option.value)}
               aria-current={filter === option.value ? "page" : undefined}
               className={cn(
-                "press py-1 text-sm underline-offset-[6px] transition-colors",
+                "press py-2.5 text-sm underline-offset-[6px] transition-colors",
                 filter === option.value
                   ? "text-ink underline decoration-ink decoration-2"
                   : "text-ink-muted hover:text-ink",
@@ -206,7 +206,7 @@ function DayAsRows({ entries }: { entries: Entry[] }) {
             <li
               key={entry.id}
               className={cn(
-                "-mx-3 flex items-center gap-3 rounded-[var(--radius-control)] px-3 py-2 text-sm",
+                "flex items-center gap-3 rounded-[var(--radius-control)] px-3 py-2 text-sm sm:-mx-3",
                 entry.mine && "bg-raised",
               )}
             >

@@ -13,8 +13,8 @@ import { DateDivider, Detail, RallMessage } from "./parts";
  * each one to a vote with a tap (the Face ID step Claude can't do). Below the
  * drafts, the user's recent proposals and how they're going.
  *
- * Real: the drafts Claude made, and Discard. Still a sample: the recent
- * proposals, and sending (which goes on Base with the contract step).
+ * All real: the drafts Claude made, Discard, Send to vote, and the user's
+ * recent spend proposals (read from Base).
  */
 
 export interface ProposeRules {
@@ -42,12 +42,27 @@ export interface SpendDraftView {
   made: string;
 }
 
-const SAMPLE_PROPOSALS = [
-  { id: "p1", what: "Generator repair", amount: "USDC 400", status: "Passed", detail: "6 of 8 voted yes", tone: "inflow" as const },
-  { id: "p2", what: "Birthday cake for Bisi", amount: "USDC 60", status: "Voting", detail: "3 of 8 so far · closes Friday", tone: "pending" as const },
-];
+/** One of the user's spend proposals on Base, for the "recent" list. */
+export interface RecentProposal {
+  id: string;
+  what: string;
+  amount: string;
+  status: string;
+  detail: string;
+  tone: "inflow" | "pending" | "muted";
+}
 
-export function ProposeChannel({ base, rules, drafts }: { base: string; rules: ProposeRules; drafts: SpendDraftView[] }) {
+export function ProposeChannel({
+  base,
+  rules,
+  drafts,
+  recent,
+}: {
+  base: string;
+  rules: ProposeRules;
+  drafts: SpendDraftView[];
+  recent: RecentProposal[];
+}) {
   const actions = useDraftActions();
 
   return (
@@ -125,8 +140,9 @@ export function ProposeChannel({ base, rules, drafts }: { base: string; rules: P
       )}
 
       <DateDivider label="Your recent proposals" />
+      {recent.length === 0 && <p className="mt-4 text-sm text-ink-muted">None yet. Spends you send to a vote show here.</p>}
       <ul className="mt-4 max-w-xl space-y-1">
-        {SAMPLE_PROPOSALS.map((proposal) => (
+        {recent.map((proposal) => (
           <li key={proposal.id}>
             <Link
               href={`${base}/votes` as Route}
@@ -140,7 +156,7 @@ export function ProposeChannel({ base, rules, drafts }: { base: string; rules: P
               <span
                 className={cn(
                   "shrink-0 rounded-full px-2 py-0.5 text-xs",
-                  proposal.tone === "inflow" ? "bg-inflow-soft text-inflow" : "bg-pending-soft text-pending",
+                  proposal.tone === "inflow" ? "bg-inflow-soft text-inflow" : proposal.tone === "muted" ? "bg-overlay text-ink-faint" : "bg-pending-soft text-pending",
                 )}
               >
                 {proposal.status}

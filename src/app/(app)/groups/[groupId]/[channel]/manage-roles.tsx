@@ -116,7 +116,7 @@ export function ManageRoles({
               <p className="text-ink">Admins keep the group tidy. They never control the money.</p>
               <div className="mt-3 grid gap-x-8 gap-y-1 sm:grid-cols-2">
                 <ul className="space-y-1" aria-label="Admins can">
-                  {["Edit the about text and banner", "Invite people", "Moderate #chat", "Start the group on Base"].map((item) => (
+                  {["Edit the about text", "Invite people"].map((item) => (
                     <li key={item} className="flex gap-2">
                       <span aria-hidden="true" className="text-inflow">✓</span>
                       <span className="text-ink-muted">{item}</span>

@@ -12,9 +12,10 @@ import { disconnectAiAction } from "@/app/(app)/ai-actions";
  * connection is for the whole account: one AI acts across all the user's
  * groups (each group's #verify & connect can keep it out of that group).
  *
- * Real: whether an AI is connected, since when, last used, and Disconnect,
- * which cuts every token at once. Still a sample: limits, which arrive with
- * the contract work; for now an AI can only read.
+ * Real: whether an AI is connected, since when, last used, what it can and
+ * can't do, and Disconnect, which cuts every token at once. Limits (money
+ * caps, what it may do alone) aren't built yet: their screen ("limits" stage)
+ * is kept but nothing opens it until they are.
  */
 
 export const LIMIT_PRESETS = [
@@ -44,7 +45,7 @@ export function AiConnection({ connection, mcpUrl }: { connection: ConnectionVie
   const [stage, setStage] = useState<Stage>(connection ? "status" : "choose");
   const [confirming, setConfirming] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [preset, setPreset] = useState<Preset>("dues");
+  const [, setPreset] = useState<Preset>("dues");
   const [pendingPreset, setPendingPreset] = useState<Preset>("dues");
   const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -65,7 +66,6 @@ export function AiConnection({ connection, mcpUrl }: { connection: ConnectionVie
       router.refresh();
     });
 
-  const presetLabel = LIMIT_PRESETS.find((p) => p.value === preset)?.label;
   const name = connection?.appName ?? "Claude";
   const logo: AiName = /chatgpt|openai/i.test(name) ? "ChatGPT" : /grok/i.test(name) ? "Grok" : "Claude";
 
@@ -84,8 +84,8 @@ export function AiConnection({ connection, mcpUrl }: { connection: ConnectionVie
           </div>
           <dl className="mt-4 space-y-2 text-sm">
             <Row label="Last used" value={connection.lastUsed ?? "Not yet"} />
-            <Row label="Can" value="Read your groups, members, rules and votes" />
-            <Row label="Limits" value={presetLabel ?? ""} />
+            <Row label="Can" value="Read your groups, create groups, draft changes for you to send, and pay your dues once you allow it" />
+            <Row label="Can't" value="Vote, send a draft, or spend" />
           </dl>
 
           {confirming ? (
@@ -103,18 +103,6 @@ export function AiConnection({ connection, mcpUrl }: { connection: ConnectionVie
             </div>
           ) : (
             <div className="mt-5 flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  setPendingPreset(preset);
-                  setNotice(null);
-                  setStage("limits");
-                }}
-              >
-                Change limits
-              </Button>
               <Button type="button" variant="ghost" size="sm" onClick={() => setConfirming(true)}>
                 Disconnect
               </Button>

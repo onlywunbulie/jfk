@@ -173,7 +173,7 @@ export function WalletSignIn({ returnTo = null }: { returnTo?: string | null }) 
             type="button"
             disabled={busy}
             onClick={() => signIn("test")}
-            className="text-ink-muted underline underline-offset-4 hover:text-ink disabled:opacity-50"
+            className="-my-2 inline-block py-2 text-ink-muted underline underline-offset-4 hover:text-ink disabled:opacity-50"
           >
             {busy && via === "test" ? (stage === "waiting" ? "Waiting for your wallet…" : "Signing you in…") : "Use a browser wallet"}
           </button>{" "}
