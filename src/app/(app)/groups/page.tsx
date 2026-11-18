@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
+import { EmptyState } from "@/components/empty-state";
 import { requireUser } from "@/lib/auth/session";
 import { listGroupsForUser } from "@/modules/groups/service";
 import { sumMoney, type Currency } from "@/lib/money";
 import { GroupCard } from "@/components/group-card";
-import { Card } from "@/components/ui/card";
 import { ButtonLink } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "All groups" };
@@ -22,7 +22,9 @@ export default async function GroupsPage() {
   // Naira and dollars never add together. Dollars lead: every new group is
   // on-chain in USDC, and naira only remains on groups from before.
   const currencies: Currency[] = groups.some((g) => g.currency === "NGN")
-    ? groups.some((g) => g.currency === "USDC") ? ["USDC", "NGN"] : ["NGN"]
+    ? groups.some((g) => g.currency === "USDC")
+      ? ["USDC", "NGN"]
+      : ["NGN"]
     : ["USDC"];
   const totals = currencies.map((currency) =>
     sumMoney(
@@ -30,6 +32,27 @@ export default async function GroupsPage() {
       currency,
     ),
   );
+
+  // Someone with no groups yet: no "$0" to greet them, just the way in.
+  if (groups.length === 0) {
+    return (
+      <main className="animate-rise">
+        <p className="text-sm text-ink-muted">
+          {greeting()}, {user.displayName.split(" ")[0]}
+        </p>
+        <EmptyState
+          illustration="no-groups"
+          title="No groups yet"
+          action={
+            <ButtonLink href="/groups/new">Create your first group</ButtonLink>
+          }
+        >
+          Save with friends: everyone pays into one pot, and money only leaves
+          when the group says yes.
+        </EmptyState>
+      </main>
+    );
+  }
 
   return (
     <main className="animate-rise space-y-8">
@@ -55,31 +78,16 @@ export default async function GroupsPage() {
         )}
       </header>
 
-      {groups.length === 0 ? (
-        <Card className="border-dashed text-center">
-          <div className="py-10">
-            <h2 className="font-medium text-ink">No groups yet</h2>
-            <p className="mx-auto mt-1.5 max-w-[34ch] text-sm text-ink-muted">
-              A group is where you and your people pool money and decide
-              together. Nothing leaves it unless the group votes for it.
-            </p>
-            <ButtonLink href="/groups/new" className="mt-6">
-              Create your first group
-            </ButtonLink>
-          </div>
-        </Card>
-      ) : (
-        <section className="space-y-3">
-          <h2 className="text-sm font-medium tracking-wide text-ink-muted uppercase">
-            My groups
-          </h2>
-          <div className="grid gap-3 lg:grid-cols-2">
-            {groups.map((group) => (
-              <GroupCard key={group.id} group={group} />
-            ))}
-          </div>
-        </section>
-      )}
+      <section className="space-y-3">
+        <h2 className="text-sm font-medium tracking-wide text-ink-muted uppercase">
+          My groups
+        </h2>
+        <div className="grid gap-3 lg:grid-cols-2">
+          {groups.map((group) => (
+            <GroupCard key={group.id} group={group} />
+          ))}
+        </div>
+      </section>
     </main>
   );
 }

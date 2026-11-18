@@ -6,6 +6,7 @@ import { useDraftActions } from "./use-draft-actions";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { DateDivider, Detail, RallMessage } from "./parts";
+import { EmptyState } from "@/components/empty-state";
 
 /**
  * #propose a spend, agent-first: there's no form. The user asks their Claude
@@ -138,7 +139,9 @@ export function ProposeChannel({
         );
       })}
       {drafts.length === 0 && decisions.length === 0 ? (
-        <p className="mt-4 text-sm text-ink-muted">No drafts. When Claude prepares a proposal, it appears here.</p>
+        <EmptyState illustration="no-proposals" size="sm" title="No drafts waiting">
+          When your AI prepares a proposal, it lands here for you to check and send to a vote.
+        </EmptyState>
       ) : (
         drafts.map((draft) => {
           const large = draft.amountMajor > rules.pot * LARGE_SPEND_SHARE;

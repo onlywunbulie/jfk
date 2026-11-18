@@ -62,6 +62,10 @@ export function AutoPayConfirm({
   if (done) {
     return (
       <>
+        {mode === "set-up" && (
+          // eslint-disable-next-line @next/next/no-img-element -- a small static SVG
+          <img src="/illustrations/all-set.svg" alt="" aria-hidden="true" className="mb-8 h-32 w-auto self-start" />
+        )}
         <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tight text-ink">{mode === "set-up" ? "Done" : "Removed"}</h1>
         <p className="mt-3 text-ink-muted">
           {mode === "set-up"

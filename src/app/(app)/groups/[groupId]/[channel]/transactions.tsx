@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { ButtonLink } from "@/components/ui/button";
 import type { Route } from "next";
 import { cn } from "@/lib/cn";
 import { EXPLORER_URL } from "@/lib/chain/addresses";
 import type { History, HistoryEntry } from "@/modules/groups/onchain-history";
 import { ChannelIntro, DateDivider } from "./parts";
 import { ScrollToBottom } from "./scroll-to-bottom";
+import { EmptyState } from "@/components/empty-state";
 
 /**
  * #transactions: the user's own money at the top, filters, then every
@@ -47,19 +49,27 @@ export function Transactions({
   if (!history.ok) {
     const text = {
       not_on_base: "Money moves on Base, where everyone can check it. Start this group on Base first; every payment in and out will show here.",
-      unreachable: "Couldn't reach Base's records just now. Refresh in a moment.",
+      unreachable: "Couldn't reach Base's records just now. The money is safe on Base; only this screen couldn't load it.",
       not_found: "This group isn't available.",
     }[history.reason];
+    if (history.reason === "not_on_base") {
+      return (
+        <EmptyState
+          illustration="not-on-base"
+          title="Money moves once the group is on Base"
+          action={<ButtonLink href={`${base}/about` as Route}>Start it on Base</ButtonLink>}
+        >
+          On Base, every payment in and out shows here, and anyone can check it.
+        </EmptyState>
+      );
+    }
     return (
       <div className="pt-6">
         <ChannelIntro title="Every transaction">{text}</ChannelIntro>
-        {history.reason === "not_on_base" && (
-          <Link
-            href={`${base}/about` as Route}
-            className="mt-6 inline-block text-sm text-ink underline decoration-ink-faint underline-offset-4 hover:decoration-ink"
-          >
-            Go to #about to start it on Base
-          </Link>
+        {history.reason === "unreachable" && (
+          <ButtonLink href={href(filter)} variant="secondary" size="sm" className="mt-6">
+            Try again
+          </ButtonLink>
         )}
       </div>
     );
@@ -112,9 +122,13 @@ export function Transactions({
         <ChannelIntro title="Every transaction">Every dollar in and out of the group.</ChannelIntro>
 
         {shown.length === 0 ? (
-          <p className="mt-10 text-center text-sm text-ink-muted">
-            {filter === "all" ? "Nothing yet. Dues paid in #about show up here." : "Nothing here yet."}
-          </p>
+          filter === "all" ? (
+            <EmptyState illustration="no-transactions" size="sm" title="No payments yet">
+              Dues paid in #about show up here, each with a link to check it on Base.
+            </EmptyState>
+          ) : (
+            <p className="mt-10 text-center text-sm text-ink-muted">Nothing here yet.</p>
+          )
         ) : (
           days.map((day) => {
             const entries = shown.filter((entry) => entry.day === day);

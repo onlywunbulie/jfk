@@ -10,6 +10,7 @@ import { AiLogo } from "@/components/ai-logos";
 import { PinnedTabs } from "./pinned-tabs";
 import { useDraftActions } from "./use-draft-actions";
 import { ChannelIntro, Detail, RallMessage } from "./parts";
+import { EmptyState } from "@/components/empty-state";
 
 /**
  * #manage roles: everything about who's in the group and who looks after it.
@@ -223,7 +224,9 @@ export function ManageRoles({
               </RallMessage>
             ))
           ) : (
-            <p className="mt-6 text-sm text-ink-muted">No drafts. When Claude prepares a change, it appears here.</p>
+            <EmptyState illustration="no-role-changes" size="sm" title="No changes waiting">
+              When your AI prepares a change to who&rsquo;s in the group, it lands here for you to send.
+            </EmptyState>
           ))}
 
         {tab === "history" && (

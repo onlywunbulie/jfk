@@ -1,10 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { EXPLORER_URL } from "@/lib/chain/addresses";
 import { SEND_STAGE_TEXT, useSendToBase } from "@/lib/chain/use-send-to-base";
@@ -14,6 +13,7 @@ import { ChannelIntro } from "./parts";
 import { PinnedTabs } from "./pinned-tabs";
 import { BeforeAfter } from "./edit-rules";
 import { VoteRing } from "./vote-ring";
+import { EmptyState } from "@/components/empty-state";
 
 /**
  * #votes: every decision the group is making, read from Base. Each card
@@ -54,25 +54,16 @@ function VoteList({ votes, safe, base }: { votes: ChainVote[]; safe: string; bas
         </ChannelIntro>
 
         <div className="mt-8 max-w-xl space-y-4">
-          {shown.length === 0 && (
-            <p className="text-sm text-ink-muted">
-              {tab === "closed" ? (
-                "Nothing decided yet."
-              ) : (
-                <>
-                  Nothing being voted on. Ask your AI to draft a change, then send it from{" "}
-                  <Link href={`${base}/edit-rules` as Route} className="text-ink underline decoration-ink-faint underline-offset-4 hover:decoration-ink">
-                    #edit rules
-                  </Link>{" "}
-                  or{" "}
-                  <Link href={`${base}/propose` as Route} className="text-ink underline decoration-ink-faint underline-offset-4 hover:decoration-ink">
-                    #propose
-                  </Link>
-                  .
-                </>
-              )}
-            </p>
-          )}
+          {shown.length === 0 &&
+            (tab === "closed" ? (
+              <EmptyState illustration="no-votes" size="sm" title="Nothing decided yet">
+                Votes land here once they pass or close.
+              </EmptyState>
+            ) : (
+              <EmptyState illustration="no-votes" size="sm" title="Nothing to vote on">
+                Ask your AI to propose something. Once you send it, it shows up here for everyone to decide.
+              </EmptyState>
+            ))}
           {shown.map((vote) => (
             <VoteCard key={vote.id} vote={vote} groupId={base.split("/").pop() ?? ""} />
           ))}
@@ -99,20 +90,24 @@ function NoVotes({ reason, base }: { reason: Exclude<ChainVotes, { ok: true }>["
   const text = {
     not_on_base: "Votes happen on Base, where nobody can change them afterwards. Start this group on Base first.",
     old_contract: "This group runs on Rallied's first contract, which this screen doesn't read. Start a new group to vote here.",
-    unreachable: "Couldn't reach Base just now. Refresh in a moment.",
+    unreachable: "Couldn't reach Base just now. The votes are safe on Base; only this screen couldn't load them.",
     not_found: "This group isn't available.",
   }[reason];
+  if (reason === "not_on_base") {
+    return (
+      <EmptyState
+        illustration="not-on-base"
+        title="Votes start once the group is on Base"
+        action={<ButtonLink href={`${base}/about` as Route}>Start it on Base</ButtonLink>}
+      >
+        On Base, every vote is counted where nobody can change it afterwards.
+      </EmptyState>
+    );
+  }
   return (
     <div className="pt-6">
       <ChannelIntro title="Votes">{text}</ChannelIntro>
-      {reason === "not_on_base" && (
-        <Link
-          href={`${base}/about` as Route}
-          className="mt-6 inline-block text-sm text-ink underline decoration-ink-faint underline-offset-4 hover:decoration-ink"
-        >
-          Go to #about to start it on Base
-        </Link>
-      )}
+      {reason === "unreachable" && <TryAgain />}
     </div>
   );
 }
@@ -270,5 +265,15 @@ function Voters({ label, voters }: { label: string; voters: string[] }) {
         {voters.length === 0 ? <span className="text-ink-faint">Nobody yet</span> : voters.map((name) => <span key={name} className="text-ink">{name}</span>)}
       </dd>
     </div>
+  );
+}
+
+/** Base didn't answer: reload this screen's reads, nothing else. */
+function TryAgain() {
+  const router = useRouter();
+  return (
+    <Button type="button" variant="secondary" size="sm" className="mt-6" onClick={() => router.refresh()}>
+      Try again
+    </Button>
   );
 }

@@ -8,6 +8,7 @@ import { cn } from "@/lib/cn";
 import { ChannelIntro } from "./parts";
 import { PinnedTabs } from "./pinned-tabs";
 import { useDraftActions } from "./use-draft-actions";
+import { EmptyState } from "@/components/empty-state";
 
 /**
  * #edit rules: only about changes. The rules themselves live in #rules, and
@@ -135,7 +136,9 @@ export function EditRules({
 
           {tab === "history" && (
             history.length === 0 ? (
-              <p className="text-sm text-ink-muted">No rule changes decided yet. They show here once a vote on Base closes.</p>
+              <EmptyState illustration="no-rule-changes" size="sm" title="No rule changes yet">
+                Changes show here once their vote on Base closes.
+              </EmptyState>
             ) : (
               <ul className="divide-y divide-border">
                 {history.map((past) => (
