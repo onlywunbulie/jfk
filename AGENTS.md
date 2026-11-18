@@ -127,6 +127,13 @@ vi.mock("@/lib/db", async () => ({ db: t.db }));
 ```
 
 This is how the financial invariants get tested for real rather than mocked.
+
+**Mock and import by the `@/` path, never a relative one.** On Windows a
+relative path can resolve with a different drive-letter case (`d:` vs `D:`)
+than the same module imported elsewhere, so `vi.mock("./x")` silently doesn't
+apply and the test runs the real code, failing only depending on how the
+tests were started. Write `vi.mock("@/modules/groups/x")`, and import
+modules a test will replace by their `@/` path in the code too.
 Test files run **sequentially** (`fileParallelism: false`) — each WASM Postgres
 is memory-hungry and parallel suites exhaust the heap.
 

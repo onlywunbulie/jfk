@@ -8,6 +8,8 @@ import { contractThresholds } from "@/modules/groups/onchain-setup";
 import { startGroupOnChain } from "@/modules/groups/onchain";
 import { readDues } from "@/modules/groups/onchain-dues";
 import { autopayStatus, collectDues, stopAutopay } from "@/modules/groups/onchain-autopay";
+import { readChainVotes } from "@/modules/groups/onchain-votes";
+import { nextAcrossGroups, nextForGroup } from "./next-steps";
 import { EXPLORER_URL } from "@/lib/chain/addresses";
 import { HOW_OFTEN, everyText } from "@/lib/schedule-text";
 import { listProposals } from "@/modules/governance/service";
@@ -40,7 +42,10 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         "The only money you can move is the user's own dues, into their own group's vault, and only once they've allowed it with set_up_auto_pay. " +
         "When a group is on Base and the user hasn't turned on automatic dues there (get_group shows your_dues.automatic), offer it once, briefly, with the set-up link. " +
         "When the user started a group that isn't on Base yet (vault_on_base is empty), offer once to start it with start_on_base, mentioning that anyone joining afterwards needs a vote. " +
-        "You can't spend, send money anywhere else, or vote.",
+        "You can't spend, send money anywhere else, or vote. " +
+        "How to reply: keep it short (one or two lines on what happened, with any link), then offer the result's suggested_next as a numbered list, " +
+        "phrased exactly as given so the user can answer with just the number. If they reply with a number, do that option. " +
+        "Don't add other suggestions or explain options they didn't ask about.",
     },
   );
 
@@ -52,10 +57,11 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
       annotations: { readOnlyHint: true },
     },
     async () => {
-      const [groups, optedOut] = await Promise.all([listGroupsForUser(userId), aiOptedOutGroups(userId)]);
+      const [all, optedOut] = await Promise.all([listGroupsForUser(userId), aiOptedOutGroups(userId)]);
+      const groups = all.filter((group) => !optedOut.has(group.id));
       return json({
+        suggested_next: await nextAcrossGroups(userId, groups),
         groups: groups
-          .filter((group) => !optedOut.has(group.id))
           .map((group) => ({
           group_id: group.id,
           name: group.name,
@@ -96,6 +102,7 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         : [null, null];
 
       return json({
+        suggested_next: await nextForGroup(userId, group),
         group_id: group.id,
         name: group.name,
         description: group.description,
@@ -154,6 +161,29 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
     },
     async ({ group_id, only_open }) => {
       if (!(await aiAllowedInGroup(userId, group_id))) return notFound();
+      const group = await getGroupDetail(group_id, userId);
+      if (!group) return notFound();
+      if (group.safeAddress) {
+        const live = await readChainVotes(group_id, userId);
+        if (!live.ok) return refusal("Couldn't read this group's votes from Base just now. Try again in a moment.");
+        return json({
+          suggested_next: await nextForGroup(userId, group),
+          votes_on_base: live.votes
+            .filter((vote) => !only_open || vote.state === "OPEN" || vote.state === "PASSED")
+            .map((vote) => ({
+              title: vote.title,
+              change: vote.change ? `${vote.change.before} → ${vote.change.after}` : vote.detail,
+              state: { OPEN: "being voted on", PASSED: "passed, being carried out", DONE: "passed and carried out", FAILED: "didn't pass" }[vote.state],
+              closes: vote.closes,
+              yes: vote.yes,
+              no: vote.no,
+              eligible_voters: vote.eligible,
+              must_agree: vote.need,
+              your_vote: vote.mine?.toLowerCase() ?? (vote.canVote ? "not voted yet" : "not voting"),
+            })),
+          vote_in_rallied: `${grant.origin}/groups/${group_id}/votes`,
+        });
+      }
       const proposals = await listProposals(group_id, userId);
       if (!proposals) return notFound();
       return json({
@@ -178,15 +208,22 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
   // Drafting: prepares a draft in the user's Waiting section. Never sends.
   // -------------------------------------------------------------------------
 
-  const drafted = (result: Awaited<ReturnType<typeof draftSpend>>, channel: string, what: string) => {
+  const drafted = async (result: Awaited<ReturnType<typeof draftSpend>>, channel: string, what: string) => {
     if (!result.ok) return { isError: true, content: [{ type: "text" as const, text: result.reason }] };
     const link = `${grant.origin}/groups/${result.draft.groupId}/${channel}`;
+    const group = await getGroupDetail(result.draft.groupId, userId);
     return json({
       drafted: what,
-      status: "waiting for the user to send it to a vote",
+      status: "waiting for the user to send it to a vote (only they can; it does nothing until then)",
       open_in_rallied: link,
-      next: "Tell the user it's ready and share the link. Only they can send it; it does nothing until they do.",
+      suggested_next: group ? await nextForGroup(userId, group, ["Open it to send to a vote"]) : ["Open it to send to a vote"],
     });
+  };
+
+  /** The next steps for a group the user is in, by id, with any that should come first. */
+  const suggest = async (groupId: string, first: string[] = []) => {
+    const group = await getGroupDetail(groupId, userId);
+    return group ? nextForGroup(userId, group, first) : first.slice(0, 3);
   };
 
   const noDraftScope = {
@@ -317,10 +354,8 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         created: name.trim(),
         group_id: groupId,
         open_in_rallied: `${grant.origin}/groups/${groupId}/about`,
-        next:
-          "Offer an invite link (invite_link) so friends can join. " +
-          "Then offer to start it on Base (start_on_base), which gives the group its vault so dues and votes can begin: " +
-          "right away if the user is saving alone or everyone is already in, otherwise once their friends have joined, since anyone joining after needs a vote. Ask before starting it.",
+        // Start on Base after friends join (later joiners need a vote), or now if it's just the user.
+        suggested_next: [`Invite friends to ${name.trim()}`, `Start ${name.trim()} on Base now (just me for now)`],
       });
     },
   );
@@ -352,7 +387,7 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         invite_link: `${grant.origin}/join/${result.code}`,
         uses,
         expires: result.expiresAt.toISOString().slice(0, 10),
-        next: "Share the link with the friends who should join.",
+        suggested_next: await suggest(group_id),
       });
     },
   );
@@ -391,9 +426,8 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         check_it: `${EXPLORER_URL}/address/${result.safeAddress}`,
         open_in_rallied: `${grant.origin}/groups/${group_id}/about`,
         set_up_auto_pay: `${grant.origin}/auto-pay/${group_id}`,
-        next:
-          "The group can now pay dues into its vault and vote on changes. Anyone who joins from now on needs the group's vote. " +
-          "Offer to pay the user's dues automatically: they confirm once in their wallet at set_up_auto_pay, then you (pay_dues) or Rallied on each due date pay for them. Share it as a link.",
+        note: "Dues and votes can begin. Anyone who joins from now on needs the group's vote.",
+        suggested_next: await suggest(group_id),
       });
     },
   );
@@ -417,7 +451,8 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
       return json({
         confirm_here: `${grant.origin}/auto-pay/${group_id}`,
         ...(status.on ? { already_on_until: status.until, note: "Confirming again renews it for a year." } : {}),
-        next: "Share the link. The user taps one button and confirms in their wallet, then comes back here. After that, pay_dues and the due dates take care of it.",
+        how: "One tap and one wallet confirm at the link. After that, dues are paid on each due date, or when asked.",
+        suggested_next: ["I've confirmed it", ...(await suggest(group_id)).filter((step) => !/automatically/.test(step))].slice(0, 3),
       });
     },
   );
@@ -437,16 +472,26 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
       if (!(await aiAllowedInGroup(userId, group_id))) return notFound();
       const result = await collectDues(userId, group_id, "asked");
       if (result.ok) {
-        return json({ paid: result.amount, into: "the group's vault on Base", check_it: `${EXPLORER_URL}/tx/${result.txHash}` });
+        return json({
+          paid: result.amount,
+          into: "the group's vault on Base",
+          check_it: `${EXPLORER_URL}/tx/${result.txHash}`,
+          suggested_next: await suggest(group_id),
+        });
       }
       if (result.reason === "not_found") return notFound();
-      if (result.reason === "already_paid") return json({ paid: false, already: result.text });
+      if (result.reason === "already_paid") return json({ paid: false, already: result.text, suggested_next: await suggest(group_id) });
       const setUp = ["not_set_up", "stopped", "ended", "removed_from_base", "allowance_used_up"].includes(result.reason);
-      return refusal(
-        setUp
-          ? `${result.text} To pay automatically, the user confirms once at ${grant.origin}/auto-pay/${group_id}. Or they can pay by hand at ${grant.origin}/groups/${group_id}/about.`
-          : result.text,
-      );
+      if (setUp) {
+        return json({
+          paid: false,
+          why: result.text,
+          set_up_once: `${grant.origin}/auto-pay/${group_id}`,
+          pay_by_hand: `${grant.origin}/groups/${group_id}/about`,
+          suggested_next: ["Set it up (one wallet confirm)", "I'll pay by hand this time"],
+        });
+      }
+      return refusal(result.text);
     },
   );
 
@@ -470,6 +515,7 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         was_on: stopped.wasOn,
         note: "Rallied won't collect again in this group unless the user sets it up again.",
         remove_from_base_too: `${grant.origin}/auto-pay/${group_id}?remove=1`,
+        suggested_next: ["Remove the permission from Base too", ...(await suggest(group_id)).filter((step) => !/automatically/.test(step))].slice(0, 3),
       });
     },
   );

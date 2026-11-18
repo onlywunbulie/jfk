@@ -183,6 +183,8 @@ describe("/api/mcp", () => {
     expect(created.isError).toBe(false);
     const groupId = created.data.group_id as string;
     expect(created.data.open_in_rallied).toBe(`http://localhost:3000/groups/${groupId}/about`);
+    // Ready-to-say next steps, so the user can just answer "1" or "2".
+    expect(created.data.suggested_next).toEqual(["Invite friends to Detty December", "Start Detty December on Base now (just me for now)"]);
 
     // It's a real group, in dollars, with the user as its starter.
     const listed = await callTool(token, "list_groups");
