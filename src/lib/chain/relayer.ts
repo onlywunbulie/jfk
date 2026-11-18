@@ -1,6 +1,7 @@
 import "server-only";
 import { createWalletClient, http, type Account, type Chain, type Transport, type WalletClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { parseEther } from "viem";
 import { env } from "@/lib/env";
 import { chain } from "./addresses";
 
@@ -27,3 +28,13 @@ export function relayer(): WalletClient<Transport, Chain, Account> | null {
     : null;
   return client;
 }
+
+/**
+ * Below this, the fee wallet stops starting new groups, keeping what's left
+ * for what members already rely on: carrying out passed votes and collecting
+ * automatic dues. About a hundred such transactions on Base.
+ */
+export const RELAYER_RESERVE_WEI = parseEther("0.0005");
+
+/** Below this, it's time to top the fee wallet up: the health check says so. */
+export const RELAYER_LOW_WEI = parseEther("0.002");

@@ -331,7 +331,8 @@ export async function startOnChainAction(
       already_started: "This group has already started.",
       members_without_wallets: "Everyone needs to sign in with Base before the group can start.",
       no_relayer: "The app isn't set up to pay network fees yet. Add RELAYER_PRIVATE_KEY to .env.local.",
-      relayer_out_of_funds: "The app's fee wallet is out of test ETH. Top it up and try again.",
+      relayer_out_of_funds: "Rallied's fee wallet is low, so new groups are paused for now. Try again later.",
+      too_many_starts: "You've started three groups on Base today. Try again tomorrow.",
       reverted: "The network refused to create the group's wallet. Try again.",
       not_confirmed: "The group's wallet was created but didn't check out. Nothing was recorded; tell the developer.",
     }[result.reason];

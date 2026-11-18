@@ -3,7 +3,7 @@ import type { Address, Hex } from "viem";
 import { CONTRACTS } from "@/lib/chain/addresses";
 import { jfkModuleAbi, safeAbi, safeProxyFactoryAbi } from "@/lib/chain/abis";
 import { publicClient } from "@/lib/chain/client";
-import { relayer } from "@/lib/chain/relayer";
+import { RELAYER_RESERVE_WEI, relayer } from "@/lib/chain/relayer";
 import type { GroupSetup } from "./onchain-setup";
 
 /**
@@ -36,8 +36,12 @@ export async function deploySafe(setup: GroupSetup): Promise<DeployResult> {
   const wallet = relayer();
   if (!wallet) return { ok: false, reason: "no_relayer" };
 
+  // Starting groups stops at the reserve, so passed votes and automatic dues keep working.
   const balance = await publicClient().getBalance({ address: wallet.account.address });
-  if (balance === 0n) return { ok: false, reason: "relayer_out_of_funds" };
+  if (balance < RELAYER_RESERVE_WEI) {
+    console.error("[relayer] below its reserve; not starting new groups until it's topped up");
+    return { ok: false, reason: "relayer_out_of_funds" };
+  }
 
   const txHash = await wallet.writeContract({
     address: CONTRACTS.safeProxyFactory,

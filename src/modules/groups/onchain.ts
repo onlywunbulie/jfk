@@ -1,9 +1,10 @@
 import "server-only";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, count, eq, gt, isNull } from "drizzle-orm";
 import { getAddress, type Address, type Hex } from "viem";
 import { db } from "@/lib/db";
 import {
   DEFAULT_VOTE_DAYS,
+  auditLogs,
   governanceRules,
   groupMembers,
   groupSettings,
@@ -27,6 +28,10 @@ import { confirmGroupSafe, deploySafe, hasCode, proxyCreationCode } from "@/modu
  * just to fill the group. Anyone who joins after this needs a vote, because
  * that is the contract's rule.
  */
+
+/** Groups one person may start on Base in a day. */
+const STARTS_PER_DAY = 3;
+const DAY_MS = 86_400_000;
 
 export interface OnChainMember {
   displayName: string;
@@ -80,6 +85,7 @@ export type StartOnChainResult =
         | "members_without_wallets"
         | "no_relayer"
         | "relayer_out_of_funds"
+        | "too_many_starts"
         | "reverted"
         | "not_confirmed";
     };
@@ -92,6 +98,13 @@ export async function startGroupOnChain(
   const membership = await getMembership(groupId, actorId);
   if (!membership || membership.role === null) return { ok: false, reason: "not_found" };
   if (membership.role !== "OWNER") return { ok: false, reason: "not_owner" };
+
+  // Each start spends Rallied's own ETH, and anyone can sign up: a few a day is plenty for a person.
+  const [{ starts }] = await db
+    .select({ starts: count() })
+    .from(auditLogs)
+    .where(and(eq(auditLogs.actorId, actorId), eq(auditLogs.action, "group.started_on_chain"), gt(auditLogs.createdAt, new Date(Date.now() - DAY_MS))));
+  if (starts >= STARTS_PER_DAY) return { ok: false, reason: "too_many_starts" };
 
   const [group] = await db
     .select({

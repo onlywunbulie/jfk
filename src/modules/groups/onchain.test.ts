@@ -189,3 +189,14 @@ describe("joining after the group has started", () => {
     });
   });
 });
+
+describe("the daily cap on starting groups", () => {
+  it("one person can start three groups on Base a day; the fourth waits", async () => {
+    const owner = await user("Amaka", WALLET_A);
+    const started = [];
+    for (let i = 0; i < 4; i++) started.push(await startGroupOnChain(await usdcGroup(owner), owner));
+    expect(started.slice(0, 3).every((r) => r.ok)).toBe(true);
+    expect(started[3]).toEqual({ ok: false, reason: "too_many_starts" });
+    expect(chain.deploys).toBe(3);
+  });
+});
