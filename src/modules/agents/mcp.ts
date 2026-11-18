@@ -6,6 +6,8 @@ import { createGroup, createInvite, getGroupDetail, listGroupsForUser, listMembe
 import { Money } from "@/lib/money";
 import { contractThresholds } from "@/modules/groups/onchain-setup";
 import { startGroupOnChain } from "@/modules/groups/onchain";
+import { readDues } from "@/modules/groups/onchain-dues";
+import { autopayStatus, collectDues, stopAutopay } from "@/modules/groups/onchain-autopay";
 import { EXPLORER_URL } from "@/lib/chain/addresses";
 import { HOW_OFTEN, everyText } from "@/lib/schedule-text";
 import { listProposals } from "@/modules/governance/service";
@@ -34,7 +36,9 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         "Use list_groups first to find the user's groups, then get_group or list_proposals with a group_id. " +
         "Amounts are exact; don't round them. " +
         "The draft_ tools only prepare a draft: confirm the details with the user first, then share the link it returns; " +
-        "the user sends it to a vote themselves in Rallied. Nothing you do here moves money or votes.",
+        "the user sends it to a vote themselves in Rallied. " +
+        "The only money you can move is the user's own dues, into their own group's vault, and only once they've allowed it with set_up_auto_pay. " +
+        "You can't spend, send money anywhere else, or vote.",
     },
   );
 
@@ -84,6 +88,10 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
       const [smallSpend, largeSpend, addMember, removeMember, replaceWallet, changePay, changeRules, close] =
         contractThresholds(saved);
       const rotating = group.type === "ROTATING";
+      // For a group on Base the vault is the balance, and the user's dues are read from it too.
+      const [dues, autopay] = group.safeAddress
+        ? await Promise.all([readDues(group_id, userId), autopayStatus(userId, group_id)])
+        : [null, null];
 
       return json({
         group_id: group.id,
@@ -92,8 +100,15 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         kind: rotating ? "rotating savings" : "shared pot",
         created: group.createdAt.toISOString().slice(0, 10),
         your_role: group.role.toLowerCase(),
-        balance: money(group.balance.total),
+        balance: dues?.ok ? dues.vault : money(group.balance.total),
         each_pays: money(group.contributionAmount),
+        your_dues: dues?.ok
+          ? {
+              this_period: dues.you.paidThisPeriod ?? "not paid yet",
+              automatic: autopay?.on ? `on, until ${autopay.until}` : "off (set_up_auto_pay turns it on)",
+              ...(autopay?.on && autopay.problem ? { last_problem: autopay.problem } : {}),
+            }
+          : "the group isn't on Base yet",
         how_often:
           group.cadence === "MONTHLY"
             ? `every month, due on day ${group.dueDay}`
@@ -371,6 +386,82 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         check_it: `${EXPLORER_URL}/address/${result.safeAddress}`,
         open_in_rallied: `${grant.origin}/groups/${group_id}/about`,
         next: "The group can now pay dues into its vault (from #about) and vote on changes. Anyone who joins from now on needs the group's vote.",
+      });
+    },
+  );
+
+  server.registerTool(
+    "set_up_auto_pay",
+    {
+      title: "Set up automatic dues",
+      description:
+        "Let Rallied pay the user's dues in one group automatically, on each due date, for a year. " +
+        "The user confirms once in their wallet at the link this returns (it opens straight to the wallet confirm). " +
+        "Rallied can then take only the group's amount, once a period, from the user into that group's vault. It can't spend or send money anywhere else.",
+      inputSchema: { group_id: z.string().min(1).max(64) },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async ({ group_id }) => {
+      if (!canDraft) return noDraftScope;
+      if (!(await aiAllowedInGroup(userId, group_id))) return notFound();
+      const status = await autopayStatus(userId, group_id);
+      if (!status) return refusal("That group isn't on Base yet, or you're not in it. Start it on Base first (start_on_base).");
+      return json({
+        confirm_here: `${grant.origin}/auto-pay/${group_id}`,
+        ...(status.on ? { already_on_until: status.until, note: "Confirming again renews it for a year." } : {}),
+        next: "Share the link. The user taps one button and confirms in their wallet, then comes back here. After that, pay_dues and the due dates take care of it.",
+      });
+    },
+  );
+
+  server.registerTool(
+    "pay_dues",
+    {
+      title: "Pay the user's dues now",
+      description:
+        "Pay the user's dues for this period in one group, from their wallet into the group's vault, using the automatic dues they set up. " +
+        "If they haven't set it up, this says so and gives the set-up link (or they can pay by hand in the group's #about).",
+      inputSchema: { group_id: z.string().min(1).max(64) },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async ({ group_id }) => {
+      if (!canDraft) return noDraftScope;
+      if (!(await aiAllowedInGroup(userId, group_id))) return notFound();
+      const result = await collectDues(userId, group_id, "asked");
+      if (result.ok) {
+        return json({ paid: result.amount, into: "the group's vault on Base", check_it: `${EXPLORER_URL}/tx/${result.txHash}` });
+      }
+      if (result.reason === "not_found") return notFound();
+      if (result.reason === "already_paid") return json({ paid: false, already: result.text });
+      const setUp = ["not_set_up", "stopped", "ended", "removed_from_base", "allowance_used_up"].includes(result.reason);
+      return refusal(
+        setUp
+          ? `${result.text} To pay automatically, the user confirms once at ${grant.origin}/auto-pay/${group_id}. Or they can pay by hand at ${grant.origin}/groups/${group_id}/about.`
+          : result.text,
+      );
+    },
+  );
+
+  server.registerTool(
+    "stop_auto_pay",
+    {
+      title: "Stop automatic dues",
+      description:
+        "Stop Rallied paying the user's dues automatically in one group. It takes effect at once. " +
+        "The permission on Base stays until it ends, unless the user also removes it at the link this returns.",
+      inputSchema: { group_id: z.string().min(1).max(64) },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async ({ group_id }) => {
+      if (!canDraft) return noDraftScope;
+      if (!(await aiAllowedInGroup(userId, group_id))) return notFound();
+      const stopped = await stopAutopay(userId, group_id);
+      if (!stopped.ok) return refusal(stopped.reason);
+      return json({
+        stopped: true,
+        was_on: stopped.wasOn,
+        note: "Rallied won't collect again in this group unless the user sets it up again.",
+        remove_from_base_too: `${grant.origin}/auto-pay/${group_id}?remove=1`,
       });
     },
   );

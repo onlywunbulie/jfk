@@ -119,7 +119,17 @@ describe("/api/mcp", () => {
     const readOnly = body.result.tools.filter((tool) => tool.annotations?.readOnlyHint).map((tool) => tool.name).sort();
     const drafting = body.result.tools.filter((tool) => !tool.annotations?.readOnlyHint).map((tool) => tool.name).sort();
     expect(readOnly).toEqual(["get_group", "list_groups", "list_proposals"]);
-    expect(drafting).toEqual(["create_group", "draft_role_change", "draft_rule_change", "draft_spend", "invite_link", "start_on_base"]);
+    expect(drafting).toEqual([
+      "create_group",
+      "draft_role_change",
+      "draft_rule_change",
+      "draft_spend",
+      "invite_link",
+      "pay_dues",
+      "set_up_auto_pay",
+      "start_on_base",
+      "stop_auto_pay",
+    ]);
   });
 
   it("shows the user's own groups, and nothing of anyone else's", async () => {

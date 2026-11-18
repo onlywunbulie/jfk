@@ -340,3 +340,59 @@ export const jfkMoneyEventsAbi = [
     ],
   },
 ] as const;
+
+/** JfkModule's helpers, as automatic dues use them: name one with the collect power, take it away, read it, collect. */
+export const jfkHelperAbi = [
+  {
+    type: "function",
+    name: "setHelper",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "safe", type: "address" },
+      { name: "key", type: "address" },
+      { name: "powers", type: "uint8" },
+      { name: "expiresAt", type: "uint64" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "revokeHelper",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "safe", type: "address" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "getHelper",
+    stateMutability: "view",
+    inputs: [
+      { name: "safe", type: "address" },
+      { name: "member", type: "address" },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        components: [
+          { name: "key", type: "address" },
+          { name: "powers", type: "uint8" },
+          { name: "expiresAt", type: "uint64" },
+        ],
+      },
+    ],
+  },
+  {
+    type: "function",
+    name: "collect",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "safe", type: "address" },
+      { name: "member", type: "address" },
+    ],
+    outputs: [],
+  },
+] as const;
+
+/** JfkModule's helper powers. Automatic dues only ever asks for COLLECT. */
+export const HELPER_POWER = { PROPOSE: 1, VOTE: 2, COLLECT: 4 } as const;

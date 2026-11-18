@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import type { Route } from "next";
+import type { AutopayStatus } from "@/modules/groups/onchain-autopay";
+import { stopAutopayAction } from "@/app/(app)/autopay-actions";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { SEND_STAGE_TEXT, useSendToBase } from "@/lib/chain/use-send-to-base";
@@ -13,7 +17,7 @@ import { prepareDuesAction } from "@/app/(app)/dues-actions";
  * the user's own Pay button. Paying sends from the user's wallet straight
  * into the group's vault; Rallied never holds it.
  */
-export function Dues({ dues, groupId }: { dues: DuesData; groupId: string }) {
+export function Dues({ dues, groupId, autopay }: { dues: DuesData; groupId: string; autopay: AutopayStatus | null }) {
   const router = useRouter();
   const sendToBase = useSendToBase();
   const [busy, setBusy] = useState<string | null>(null);
@@ -52,6 +56,18 @@ export function Dues({ dues, groupId }: { dues: DuesData; groupId: string }) {
   }
 
   const youPaid = dues.you.paidThisPeriod ?? (paid ? "Paid just now" : null);
+
+  async function stop() {
+    setError(null);
+    setBusy("Stopping…");
+    try {
+      const result = await stopAutopayAction(groupId);
+      if (!result.ok) setError(result.error);
+      else router.refresh();
+    } finally {
+      setBusy(null);
+    }
+  }
 
   return (
     <section aria-labelledby="dues-title" className="rounded-[var(--radius-card)] border border-border bg-surface p-5">
@@ -92,6 +108,35 @@ export function Dues({ dues, groupId }: { dues: DuesData; groupId: string }) {
           </p>
         </div>
       )}
+
+      <div className="mt-4 border-t border-border pt-4 text-sm">
+        {autopay?.on ? (
+          <>
+            <p className="text-ink-muted">
+              Automatic: <span className="text-inflow">on</span>, until {autopay.until}. Rallied pays on each due date.
+            </p>
+            {autopay.problem && <p className="mt-1 text-xs text-pending">{autopay.problem}</p>}
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={stop}
+              className="mt-2 text-xs text-ink-muted underline underline-offset-4 hover:text-ink disabled:opacity-50"
+            >
+              Stop automatic dues
+            </button>
+          </>
+        ) : (
+          <p className="text-ink-muted">
+            <Link
+              href={`/auto-pay/${groupId}` as Route}
+              className="text-ink underline decoration-ink-faint underline-offset-4 hover:decoration-ink"
+            >
+              Pay automatically
+            </Link>{" "}
+            <span className="text-xs text-ink-faint">· one confirm, then Rallied (or your AI) pays on each due date</span>
+          </p>
+        )}
+      </div>
 
       {busy && (
         <p role="status" className="mt-2 text-xs text-ink-muted">

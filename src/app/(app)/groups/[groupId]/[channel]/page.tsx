@@ -23,6 +23,7 @@ import { EditRules } from "./edit-rules";
 import { Votes } from "./votes";
 import { readChainVotes } from "@/modules/groups/onchain-votes";
 import { readDues } from "@/modules/groups/onchain-dues";
+import { autopayStatus } from "@/modules/groups/onchain-autopay";
 import { readHistory } from "@/modules/groups/onchain-history";
 import { Dues } from "./dues";
 import { everyText } from "@/lib/schedule-text";
@@ -163,7 +164,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
         )}
         {group.safeAddress && (
           <div className="mt-6 max-w-xl">
-            <Dues dues={await readDues(group.id, user.id)} groupId={group.id} />
+            <Dues dues={await readDues(group.id, user.id)} groupId={group.id} autopay={await autopayStatus(user.id, group.id)} />
           </div>
         )}
       </div>

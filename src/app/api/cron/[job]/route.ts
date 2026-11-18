@@ -16,8 +16,12 @@ import { runJob } from "@/modules/jobs/runner";
  */
 export async function POST(
   request: Request,
-  { params }: RouteContext<"/api/cron/[job]">,
+  context: RouteContext<"/api/cron/[job]">,
 ): Promise<Response> {
+  return run(request, context);
+}
+
+async function run(request: Request, { params }: RouteContext<"/api/cron/[job]">): Promise<Response> {
   const authorized = checkSecret(request);
   if (!authorized.ok) {
     return Response.json({ error: authorized.reason }, { status: 401 });
@@ -59,8 +63,13 @@ function checkSecret(request: Request): { ok: true } | { ok: false; reason: stri
   return { ok: true };
 }
 
-/** Listing the jobs is harmless and useful; running them is not. */
-export async function GET(): Promise<Response> {
+/**
+ * Vercel Cron calls with GET and `Authorization: Bearer <CRON_SECRET>`, so a
+ * GET carrying the secret runs the job. Without it, GET only lists the jobs,
+ * and not at all in production.
+ */
+export async function GET(request: Request, context: RouteContext<"/api/cron/[job]">): Promise<Response> {
+  if (request.headers.get("authorization")) return run(request, context);
   if (env().NODE_ENV === "production") {
     return Response.json({ error: "method not allowed" }, { status: 405 });
   }

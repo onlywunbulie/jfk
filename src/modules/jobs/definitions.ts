@@ -16,6 +16,7 @@ import {
   evaluateProposal,
   findProposalsToClose,
 } from "@/modules/governance/service";
+import { runScheduledCollections } from "@/modules/groups/onchain-autopay";
 import { dayKey, hourKey, type JobDefinition } from "./runner";
 
 /**
@@ -213,7 +214,26 @@ export const closeProposals: JobDefinition = {
   },
 };
 
+/**
+ * Collect dues on Base for members who turned on automatic dues, on each due
+ * date. Safe to run any number of times a day: the contract refuses a second
+ * collection inside the group's gap, and Rallied checks the period first.
+ */
+export const collectDuesOnBase: JobDefinition = {
+  name: "collect-dues-on-base",
+  description: "Collect dues on Base for members with automatic dues on",
+  key: (ctx) => `collect-dues-on-base:${hourKey(ctx.now)}`,
+  async run() {
+    const outcome = await runScheduledCollections();
+    return {
+      summary: `Collected ${outcome.collected} of ${outcome.tried} with automatic dues on`,
+      details: { results: outcome.results },
+    };
+  },
+};
+
 export const ALL_JOBS: JobDefinition[] = [
+  collectDuesOnBase,
   openCycles,
   collectContributions,
   retryFailedCharges,

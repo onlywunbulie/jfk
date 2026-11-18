@@ -248,6 +248,41 @@ export const groupInvites = pgTable(
   ],
 );
 
+/**
+ * Members who let Rallied collect their dues automatically in a group.
+ *
+ * The permission itself lives on Base (the member named Rallied's helper
+ * with only the collect power, until an end date, and approved the amount).
+ * This row is Rallied's own promise on top: while `stoppedAt` is set,
+ * Rallied doesn't collect, even if the permission on Base is still there.
+ * That makes "stop" work at once, from Claude, without the member's wallet.
+ */
+export const duesAutopay = pgTable(
+  "dues_autopay",
+  {
+    id: primaryId(),
+    groupId: text("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** The transaction that named Rallied's helper on Base. */
+    setUpTx: text("set_up_tx").notNull(),
+    /** When the permission on Base ends (the helper's expiry). */
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    stoppedAt: timestamp("stopped_at", { withTimezone: true }),
+    lastCollectedAt: timestamp("last_collected_at", { withTimezone: true }),
+    /** The last time a collection was tried and couldn't happen, and why, so it's said once. */
+    lastProblem: text("last_problem"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [uniqueIndex("dues_autopay_group_user_unique").on(table.groupId, table.userId)],
+);
+
+export type DuesAutopay = typeof duesAutopay.$inferSelect;
+
 export type Group = typeof groups.$inferSelect;
 export type NewGroup = typeof groups.$inferInsert;
 export type GroupMember = typeof groupMembers.$inferSelect;
