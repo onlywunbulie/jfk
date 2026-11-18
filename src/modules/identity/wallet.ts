@@ -5,7 +5,7 @@ import { isAddress, type Address, type Hex } from "viem";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { chain, shortAddress } from "@/lib/chain/addresses";
-import { verifyWalletSignature } from "./wallet-signature";
+import { verifyWalletSignature } from "@/modules/identity/wallet-signature";
 
 /**
  * Signing in with a wallet ("Sign in with Ethereum", EIP-4361).

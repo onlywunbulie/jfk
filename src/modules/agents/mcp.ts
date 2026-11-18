@@ -14,7 +14,7 @@ import { EXPLORER_URL } from "@/lib/chain/addresses";
 import { HOW_OFTEN, everyText } from "@/lib/schedule-text";
 import { listProposals } from "@/modules/governance/service";
 import { aiAllowedInGroup, aiOptedOutGroups } from "./connection";
-import { draftRoleChange, draftRuleChange, draftSpend } from "./drafts";
+import { draftRoleChange, draftRuleChange, draftSpend } from "@/modules/agents/drafts";
 import { DRAFT_SCOPE } from "./oauth";
 
 /**

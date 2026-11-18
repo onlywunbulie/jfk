@@ -16,7 +16,7 @@ import { recordAudit } from "@/modules/audit/service";
 import { announce } from "@/modules/chat/events";
 import { getMembership } from "./service";
 import { buildGroupSetup, predictSafeAddress } from "./onchain-setup";
-import { confirmGroupSafe, deploySafe, hasCode, proxyCreationCode } from "./onchain-chain";
+import { confirmGroupSafe, deploySafe, hasCode, proxyCreationCode } from "@/modules/groups/onchain-chain";
 
 /**
  * Starting a group on-chain: the moment its money stops being an idea and

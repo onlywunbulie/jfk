@@ -1,5 +1,5 @@
 import "server-only";
-import { env, isEmailDisabled } from "./env";
+import { env, isEmailDisabled } from "@/lib/env";
 
 type DeliveryResult = { delivered: boolean };
 
