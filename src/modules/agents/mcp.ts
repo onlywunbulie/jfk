@@ -38,6 +38,7 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         "The draft_ tools only prepare a draft: confirm the details with the user first, then share the link it returns; " +
         "the user sends it to a vote themselves in Rallied. " +
         "The only money you can move is the user's own dues, into their own group's vault, and only once they've allowed it with set_up_auto_pay. " +
+        "When a group is on Base and the user hasn't turned on automatic dues there (get_group shows your_dues.automatic), offer it once, briefly, with the set-up link. " +
         "You can't spend, send money anywhere else, or vote.",
     },
   );
@@ -385,7 +386,10 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         vault: result.safeAddress,
         check_it: `${EXPLORER_URL}/address/${result.safeAddress}`,
         open_in_rallied: `${grant.origin}/groups/${group_id}/about`,
-        next: "The group can now pay dues into its vault (from #about) and vote on changes. Anyone who joins from now on needs the group's vote.",
+        set_up_auto_pay: `${grant.origin}/auto-pay/${group_id}`,
+        next:
+          "The group can now pay dues into its vault and vote on changes. Anyone who joins from now on needs the group's vote. " +
+          "Offer to pay the user's dues automatically: they confirm once in their wallet at set_up_auto_pay, then you (pay_dues) or Rallied on each due date pay for them. Share it as a link.",
       });
     },
   );
