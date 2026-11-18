@@ -13,7 +13,8 @@ export function publicOrigin(headers: Headers): string {
   const configured = new URL(env().APP_URL);
   const host = (headers.get("x-forwarded-host") ?? headers.get("host") ?? "").split(",")[0].trim().toLowerCase();
 
-  const trusted = host === configured.host || TUNNEL_HOST.test(host);
+  // Tunnels are for testing from this PC; the live site only ever answers as APP_URL.
+  const trusted = host === configured.host || (env().NODE_ENV !== "production" && TUNNEL_HOST.test(host));
   if (!trusted) return configured.origin;
 
   const forwardedProto = headers.get("x-forwarded-proto")?.split(",")[0].trim();

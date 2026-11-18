@@ -35,7 +35,13 @@ const executeAbi = [
   },
 ] as const;
 
-const callTo = (target: `0x${string}`): Hex => encodeFunctionData({ abi: executeAbi, functionName: "execute", args: [target, 0n, "0x"] });
+// A real member call (a vote) when it goes to Rallied's contract; anything else is refused anyway.
+const VOTE = encodeFunctionData({
+  abi: [{ type: "function", name: "vote", stateMutability: "nonpayable", inputs: [{ name: "safe", type: "address" }, { name: "id", type: "uint256" }, { name: "choice", type: "uint8" }], outputs: [] }] as const,
+  functionName: "vote",
+  args: ["0x2a7a348bccee61c5ef6c213efc0baa05841a5a70", 1n, 1],
+});
+const callTo = (target: `0x${string}`): Hex => encodeFunctionData({ abi: executeAbi, functionName: "execute", args: [target, 0n, VOTE] });
 
 function ask(sender: string, callData: Hex, method = "pm_getPaymasterStubData", origin = "https://keys.coinbase.com") {
   return POST(

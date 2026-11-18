@@ -12,6 +12,30 @@ const nextConfig: NextConfig = {
    */
   serverExternalPackages: ["@electric-sql/pglite", "@node-rs/argon2"],
 
+  /** No "X-Powered-By: Next.js": nothing gained by announcing the framework. */
+  poweredByHeader: false,
+
+  /**
+   * Security headers on every page. The one that matters most: no other site
+   * may put Rallied in a frame, so nobody can lay a page over the "Allow"
+   * on the AI approval screen or "Confirm in my wallet" and trick a tap.
+   * (The wallet opens in its own window, not a frame, so this costs nothing.)
+   */
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+        ],
+      },
+    ];
+  },
+
   /**
    * Dev only. Lets a testing tunnel load the dev server's assets: Cloudflare
    * and ngrok for opening the app on a phone, and Tailscale Funnel for

@@ -1,12 +1,17 @@
 import { decodeFunctionData, getAddress, isAddress, type Address, type Hex } from "viem";
 import { CONTRACTS, chain } from "./addresses";
+import { erc20Abi, jfkDuesAbi, jfkHelperAbi, jfkModuleAbi } from "./abis";
 
 /**
  * What Rallied will pay the network fee for. A wallet asks the paymaster to
  * sponsor a user operation; this decides whether it qualifies. The rule:
- * on Base Sepolia, every call goes to one of Rallied's own contracts, and no
- * call carries money (ETH). Who's asking (a member's wallet) is checked by
- * the caller, against the database.
+ * on Base Sepolia, every call is one of the exact things Rallied asks a
+ * member's wallet to do, and no call carries money (ETH):
+ *  - Rallied's contract: propose, vote, contribute, name or remove a helper, leave.
+ *  - USDC: approve, and only Rallied's contract as the spender.
+ * Nothing else, not even another USDC function or Safe's factory (Rallied's
+ * own key starts groups). Who's asking (a member's wallet) is checked by the
+ * caller, against the database.
  *
  * Coinbase Developer Platform's allowlist checks the contracts again; this
  * is the first line, so a leaked endpoint can't spend Rallied's gas on
@@ -45,8 +50,42 @@ const smartWalletAbi = [
   },
 ] as const;
 
-/** The only contracts Rallied pays for: its module, test USDC (for dues approvals) and Safe's factory. */
-export const SPONSORED_CONTRACTS: readonly Address[] = [CONTRACTS.jfkModule, CONTRACTS.usdc, CONTRACTS.safeProxyFactory];
+/** The only contracts Rallied pays for: its module, and USDC (only to approve the module). */
+export const SPONSORED_CONTRACTS: readonly Address[] = [CONTRACTS.jfkModule, CONTRACTS.usdc];
+
+/** The member-side functions of Rallied's contract, the only ones a member's wallet sends. */
+const MODULE_FUNCTIONS = new Set(["propose", "vote", "contribute", "setHelper", "revokeHelper", "leave"]);
+const moduleAbi = [
+  ...jfkModuleAbi,
+  ...jfkDuesAbi,
+  ...jfkHelperAbi,
+  { type: "function", name: "leave", stateMutability: "nonpayable", inputs: [{ name: "safe", type: "address" }], outputs: [] },
+] as const;
+
+/** Is this one call something Rallied pays for? A reason when it isn't. */
+function callProblem(target: Address, value: bigint, data: Hex): string | null {
+  if (value !== 0n) return "sends money";
+  const to = target.toLowerCase();
+  if (to === CONTRACTS.jfkModule.toLowerCase()) {
+    try {
+      const call = decodeFunctionData({ abi: moduleAbi, data });
+      return MODULE_FUNCTIONS.has(call.functionName) ? null : `calls ${call.functionName}, which members don't send`;
+    } catch {
+      return "calls something unknown on Rallied's contract";
+    }
+  }
+  if (to === CONTRACTS.usdc.toLowerCase()) {
+    try {
+      const call = decodeFunctionData({ abi: erc20Abi, data });
+      if (call.functionName !== "approve") return "a USDC call other than approving Rallied's contract";
+      const [spender] = call.args as readonly [Address, bigint];
+      return spender.toLowerCase() === CONTRACTS.jfkModule.toLowerCase() ? null : "approves someone other than Rallied's contract";
+    } catch {
+      return "a USDC call other than approving Rallied's contract";
+    }
+  }
+  return "calls a contract Rallied doesn't sponsor";
+}
 
 export type SponsorCheck = { ok: true; sender: Address } | { ok: false; reason: string };
 
@@ -59,22 +98,21 @@ export function checkSponsorable(userOp: unknown, chainIdHex: unknown): SponsorC
   if (typeof sender !== "string" || !isAddress(sender)) return { ok: false, reason: "no sender" };
   if (typeof callData !== "string" || !callData.startsWith("0x")) return { ok: false, reason: "no call data" };
 
-  let calls: { target: Address; value: bigint }[];
+  let calls: { target: Address; value: bigint; data: Hex }[];
   try {
     const decoded = decodeFunctionData({ abi: smartWalletAbi, data: callData as Hex });
     calls =
       decoded.functionName === "execute"
-        ? [{ target: decoded.args[0], value: decoded.args[1] }]
-        : decoded.args[0].map((call) => ({ target: call.target, value: call.value }));
+        ? [{ target: decoded.args[0], value: decoded.args[1], data: decoded.args[2] }]
+        : decoded.args[0].map((call) => ({ target: call.target, value: call.value, data: call.data }));
   } catch {
     return { ok: false, reason: "unrecognised wallet call" };
   }
 
   if (calls.length === 0) return { ok: false, reason: "nothing to do" };
-  const allowed = new Set(SPONSORED_CONTRACTS.map((address) => address.toLowerCase()));
   for (const call of calls) {
-    if (!allowed.has(call.target.toLowerCase())) return { ok: false, reason: "calls a contract Rallied doesn't sponsor" };
-    if (call.value !== 0n) return { ok: false, reason: "sends money" };
+    const problem = callProblem(call.target, call.value, call.data);
+    if (problem) return { ok: false, reason: problem };
   }
   return { ok: true, sender: getAddress(sender) };
 }

@@ -52,11 +52,18 @@ export async function POST(request: Request) {
   if (!check.ok) return refuse(body.id, `Not sponsored: ${check.reason}.`, 403);
   if (!(await isMemberWallet(check.sender))) return refuse(body.id, "Not sponsored: not a Rallied member's wallet.", 403);
 
-  const forwarded = await fetch(upstream, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: body.id ?? 1, method: body.method, params: body.params }),
-  });
+  let forwarded: Response;
+  try {
+    forwarded = await fetch(upstream, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: body.id ?? 1, method: body.method, params: body.params }),
+      // The wallet window is waiting; don't hold it (or a server slot) open forever.
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    return refuse(body.id, "Rallied couldn't reach its paymaster. Try again.", 502);
+  }
   return new Response(await forwarded.text(), {
     status: forwarded.status,
     headers: { ...headers, "content-type": "application/json" },

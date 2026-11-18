@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { AuthFrame } from "../../auth-frame";
 import { checkAuthorizeRequest } from "./checks";
 import { decideAction } from "./actions";
+import { identifyClient } from "@/modules/agents/client-identity";
 
 export const metadata: Metadata = { title: "Connect your AI" };
 
@@ -43,16 +44,25 @@ export default async function AuthorizePage({ searchParams }: PageProps<"/oauth/
   }
 
   const { client, request } = check;
+  const identity = identifyClient(client.name, request.redirectUri);
 
   return (
     <AuthFrame>
       <Logo className="mb-12" />
       <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tight text-balance text-ink">
-        {client.name} wants to help with your Rallied groups
+        {identity.impersonating ? <>An app calling itself &ldquo;{client.name}&rdquo;</> : client.name} wants to help with your Rallied groups
       </h1>
+      {identity.impersonating && (
+        <p role="alert" className="mt-4 rounded-[var(--radius-control)] bg-danger-soft px-4 py-3 text-sm text-danger">
+          This doesn&rsquo;t come from {client.name}&rsquo;s own site. If you didn&rsquo;t just start connecting it yourself, don&rsquo;t allow it.
+        </p>
+      )}
       <p className="mt-3 text-ink-muted">
         Signed in as <span className="text-ink">{user.displayName}</span>
         {user.walletAddress && <span className="font-mono"> · {shortAddress(user.walletAddress)}</span>}
+      </p>
+      <p className="mt-1 text-sm text-ink-faint">
+        Allowing sends you back to <span className="text-ink-muted">{identity.destination}</span>
       </p>
 
       <div className="mt-8 grid gap-6 sm:grid-cols-2">
