@@ -341,3 +341,26 @@ export async function startOnChainAction(
   revalidatePath(`/groups/${groupId}`);
   return { safeAddress: result.safeAddress };
 }
+
+/**
+ * The starter deletes a group that never went on Base (no vault, no money,
+ * so no vote). A group on Base closes by the group's vote instead.
+ */
+export async function deleteGroupAction(groupId: string): Promise<{ ok: false; error: string }> {
+  const user = await requireUser();
+  const parsed = z.string().min(1).max(64).safeParse(groupId);
+  if (!parsed.success) return { ok: false, error: "That didn't work. Try again." };
+  const result = await groupsService.deleteGroup(parsed.data, user.id, { ip: await clientIp() });
+  if (!result.ok) {
+    return {
+      ok: false,
+      error: {
+        not_found: "That group doesn't exist.",
+        not_owner: "Only the person who started the group can delete it.",
+        on_base: "This group is on Base, so closing it is a group vote. Propose it in #propose.",
+      }[result.reason],
+    };
+  }
+  revalidatePath("/", "layout");
+  redirect("/");
+}

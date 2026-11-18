@@ -2,12 +2,14 @@ import { and, count, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { agentDrafts, type AgentDraft } from "@/lib/db/schema";
 import { Money, toCurrency } from "@/lib/money";
+import { isAddress } from "viem";
+import { DEFAULT_GOVERNANCE, type GovernedAction } from "@/lib/db/schema";
 import { getGroupDetail, listMembers, type GroupDetail, type MemberView } from "@/modules/groups/service";
 import { aiAllowedInGroup } from "./connection";
 
 /**
- * Drafts a user's AI prepares for them: a spend, a rule change or a role
- * change. A draft is private and inert: only the user sees it, in the
+ * Drafts a user's AI prepares for them: a spend, a rule change, a change to
+ * who's in the group, or a whole-group decision (closing it). A draft is private and inert: only the user sees it, in the
  * matching channel's Waiting section, and nothing happens until they send it
  * (or they discard it).
  *
@@ -26,7 +28,28 @@ export type SpendDetails = {
   receiptUrl: string | null;
 };
 
-export type RuleKey = "what_everyone_pays" | "due_day" | "votes_count_share";
+export type RuleKey = "what_everyone_pays" | "due_day" | "votes_count_share" | "share_needed" | "vote_days";
+
+/**
+ * Decisions whose share-to-pass can be changed, with their slot in the
+ * contract's rule list (JfkModule's Rule enum) and their Rallied rule, if any.
+ * Changing the rules also sets moving to a new contract (slot 8): it's as
+ * hard as changing the rules.
+ */
+export const DECISIONS = {
+  small_spend: { label: "A small spend", slots: [0], governed: "FUND_RELEASE_SMALL" },
+  large_spend: { label: "A large spend", slots: [1], governed: "FUND_RELEASE_LARGE" },
+  adding_a_member: { label: "Adding a member", slots: [2], governed: null },
+  removing_a_member: { label: "Removing a member", slots: [3], governed: "REMOVE_MEMBER" },
+  replacing_a_lost_wallet: { label: "Replacing a lost wallet", slots: [4], governed: null },
+  what_everyone_pays: { label: "Changing what everyone pays", slots: [5], governed: "CHANGE_CONTRIBUTION" },
+  changing_the_rules: { label: "Changing the rules", slots: [6, 8], governed: "CHANGE_GOVERNANCE" },
+  closing_the_group: { label: "Closing the group", slots: [7], governed: "DISSOLVE_GROUP" },
+} as const satisfies Record<string, { label: string; slots: readonly number[]; governed: GovernedAction | null }>;
+export type DecisionKey = keyof typeof DECISIONS;
+
+/** Shares that live only on Base, as Rallied sets them up (see contractThresholds). */
+const ON_BASE_ONLY_PERMILLE: Record<number, number> = { 2: 500, 4: 750 };
 
 export type RuleDetails = {
   rule: RuleKey;
@@ -38,15 +61,31 @@ export type RuleDetails = {
   money: boolean;
   /**
    * The exact new value, for sending: minor units for what everyone pays, a
-   * day for the due day, a whole percentage for the share that must vote.
-   * Missing on drafts made before it was recorded.
+   * day for the due day, a whole percentage for the share that must vote,
+   * tenths of a percent for a decision's share, days for how long votes stay
+   * open. Missing on drafts made before it was recorded.
    */
   value?: string;
+  /** share_needed only: which decision. */
+  decision?: DecisionKey;
 };
 
-export type RoleChange = "make_admin" | "remove_admin" | "remove_member";
+export type RoleChange = "make_admin" | "remove_admin" | "remove_member" | "add_member" | "replace_wallet";
 
-export type RoleDetails = { change: RoleChange; label: string; memberId: string; memberName: string };
+export type RoleDetails = {
+  change: RoleChange;
+  label: string;
+  /** Empty for add_member: they aren't a member yet. */
+  memberId: string;
+  memberName: string;
+  /** add_member: their wallet. replace_wallet: the member's new wallet. */
+  wallet?: string;
+};
+
+/** Whole-group decisions. Moving to a new contract comes with that contract. */
+export type GroupChange = "close_group";
+
+export type GroupDetails = { change: GroupChange; label: string; detail: string };
 
 type Made = { ok: true; draft: AgentDraft } | { ok: false; reason: string };
 
@@ -181,6 +220,8 @@ export async function draftRuleChange(input: {
   madeBy: string;
   rule: RuleKey;
   value: string;
+  /** share_needed only. */
+  decision?: DecisionKey;
 }): Promise<Made> {
   const checked = await draftableGroup(input.userId, input.groupId);
   if (!checked.ok) return checked;
@@ -222,6 +263,40 @@ export async function draftRuleChange(input: {
       money: true,
       value: String(day),
     };
+  } else if (input.rule === "share_needed") {
+    const decision = input.decision;
+    if (!decision || !(decision in DECISIONS)) {
+      return { ok: false, reason: `Say which decision: ${Object.keys(DECISIONS).join(", ")}.` };
+    }
+    const percent = Number(value.replace("%", ""));
+    // The contract allows 50% to 100%: less than half could never be a group decision.
+    if (!Number.isFinite(percent) || percent < 50 || percent > 100) return { ok: false, reason: "Give the share as a percentage from 50 to 100." };
+    const permille = Math.round(percent * 10);
+    const now = currentPermille(group, decision);
+    if (permille === now) return { ok: false, reason: `${DECISIONS[decision].label} already needs ${now / 10}%.` };
+    details = {
+      rule: input.rule,
+      ruleLabel: `${DECISIONS[decision].label}: share that must agree`,
+      before: `${now / 10}%`,
+      after: `${permille / 10}%`,
+      starts: "As soon as it passes",
+      money: false,
+      value: String(permille),
+      decision,
+    };
+  } else if (input.rule === "vote_days") {
+    const days = Number(value);
+    if (!Number.isInteger(days) || days < 1 || days > 30) return { ok: false, reason: "Votes can stay open from 1 to 30 days." };
+    if (days === group.defaultVoteDays) return { ok: false, reason: `Votes already stay open ${days} days.` };
+    details = {
+      rule: input.rule,
+      ruleLabel: "How long votes stay open",
+      before: `${group.defaultVoteDays} days`,
+      after: `${days} ${days === 1 ? "day" : "days"}`,
+      starts: "For votes opened after it passes",
+      money: false,
+      value: String(days),
+    };
   } else {
     const share = Number(value);
     if (!Number.isInteger(share) || share < 1 || share > 100) return { ok: false, reason: "Give the share as a whole percentage from 1 to 100." };
@@ -250,9 +325,46 @@ export async function draftRoleChange(input: {
   madeBy: string;
   change: RoleChange;
   memberName: string;
+  /** add_member: their wallet. replace_wallet: the member's new wallet. */
+  wallet?: string;
 }): Promise<Made> {
   const checked = await draftableGroup(input.userId, input.groupId);
   if (!checked.ok) return checked;
+
+  if (input.change === "add_member" || input.change === "replace_wallet") {
+    if (!checked.group.safeAddress) {
+      return {
+        ok: false,
+        reason:
+          input.change === "add_member"
+            ? "This group isn't on Base yet, so nobody needs voting in: share an invite link instead."
+            : "This group isn't on Base yet, so there's no wallet to replace.",
+      };
+    }
+    const wallet = input.wallet?.trim() ?? "";
+    if (!isAddress(wallet)) return { ok: false, reason: "Give their wallet address on Base (0x followed by 40 letters and digits)." };
+    const lower = wallet.toLowerCase();
+    if (checked.members.some((member) => member.walletAddress === lower)) {
+      return { ok: false, reason: "That wallet already belongs to a member of this group." };
+    }
+    if (input.change === "add_member") {
+      const name = input.memberName.trim();
+      const details: RoleDetails = { change: "add_member", label: `Add ${name} to the group`, memberId: "", memberName: name, wallet: lower };
+      return save(input.userId, input.groupId, input.madeBy, "ROLE_CHANGE", details);
+    }
+    const found = findMember(checked.members, input.memberName);
+    if (!found.ok) return found;
+    const { member } = found;
+    const details: RoleDetails = {
+      change: "replace_wallet",
+      label: `Move ${member.displayName} to a new wallet`,
+      memberId: member.memberId,
+      memberName: member.displayName,
+      wallet: lower,
+    };
+    return save(input.userId, input.groupId, input.madeBy, "ROLE_CHANGE", details);
+  }
+
   const found = findMember(checked.members, input.memberName);
   if (!found.ok) return found;
   const { member } = found;
@@ -275,6 +387,28 @@ export async function draftRoleChange(input: {
         : `Remove ${member.displayName} from the group`;
   const details: RoleDetails = { change: input.change, label, memberId: member.memberId, memberName: member.displayName };
   return save(input.userId, input.groupId, input.madeBy, "ROLE_CHANGE", details);
+}
+
+// ---------------------------------------------------------------------------
+// Whole-group decisions
+// ---------------------------------------------------------------------------
+
+export async function draftGroupChange(input: { userId: string; groupId: string; madeBy: string; change: GroupChange }): Promise<Made> {
+  const checked = await draftableGroup(input.userId, input.groupId);
+  if (!checked.ok) return checked;
+  const { group } = checked;
+  if (!group.safeAddress) {
+    return {
+      ok: false,
+      reason: "This group isn't on Base, so there's no vault to close. Its starter can delete it instead, with no vote.",
+    };
+  }
+  const details: GroupDetails = {
+    change: "close_group",
+    label: `Close ${group.name}`,
+    detail: "The vault is shared out by how much each member paid in, and the group ends.",
+  };
+  return save(input.userId, input.groupId, input.madeBy, "GROUP_CHANGE", details);
 }
 
 // ---------------------------------------------------------------------------
@@ -321,4 +455,11 @@ export async function discardDraft(userId: string, draftId: string, now: Date = 
     .where(and(eq(agentDrafts.id, draftId), eq(agentDrafts.userId, userId), eq(agentDrafts.status, "WAITING")))
     .returning({ id: agentDrafts.id });
   return row ? { ok: true } : { ok: false, reason: "not_found" };
+}
+
+/** The share a decision needs now, in tenths of a percent: the group's rule, or how Rallied set it up on Base. */
+function currentPermille(group: GroupDetail, decision: DecisionKey): number {
+  const { slots, governed } = DECISIONS[decision];
+  if (!governed) return ON_BASE_ONLY_PERMILLE[slots[0]];
+  return group.governance.find((rule) => rule.action === governed)?.thresholdPermille ?? DEFAULT_GOVERNANCE[governed];
 }

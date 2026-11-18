@@ -121,6 +121,8 @@ describe("/api/mcp", () => {
     expect(readOnly).toEqual(["get_group", "list_groups", "list_proposals"]);
     expect(drafting).toEqual([
       "create_group",
+      "delete_group",
+      "draft_group_change",
       "draft_role_change",
       "draft_rule_change",
       "draft_spend",
@@ -268,6 +270,28 @@ describe("/api/mcp", () => {
     await setAiInGroup(amaka, groupId, false);
     expect((await callTool(full, "start_on_base", { group_id: groupId })).isError).toBe(true);
     expect(startGroupOnChain).not.toHaveBeenCalled();
+  });
+
+  it("deletes a group that isn't on Base (its starter, confirmed), and points a group on Base to a closing vote", async () => {
+    const amaka = await makeUser("Amaka");
+    const token = await tokenFor(amaka, GRANTED_SCOPES);
+    const { groupId } = await createGroup(amaka, {
+      name: "Oops",
+      type: "TREASURY",
+      contributionAmount: Money.fromMajor(5, "USDC"),
+      cadence: "MONTHLY",
+      dueDay: 1,
+    });
+    // Not without the user's confirmation.
+    expect((await callTool(token, "delete_group", { group_id: groupId })).isError).toBe(true);
+
+    const closing = await callTool(token, "draft_group_change", { group_id: groupId, change: "close_group" });
+    expect(closing.isError).toBe(true);
+    expect(closing.text).toContain("delete");
+
+    const deleted = await callTool(token, "delete_group", { group_id: groupId, confirmed: true });
+    expect(deleted.isError).toBe(false);
+    expect((await callTool(token, "list_groups")).data.groups).toEqual([]);
   });
 
   it("drafts only with the drafting permission, and a draft lands in Waiting", async () => {

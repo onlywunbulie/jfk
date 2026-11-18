@@ -84,7 +84,7 @@ export async function readChainVotes(groupId: string, userId: string): Promise<C
       client.readContract({ address: CONTRACTS.jfkModule, abi: jfkModuleAbi, functionName: "getGroup", args: [safe] }),
     ]);
     if (!onV2) return { ok: false, reason: "old_contract" };
-    const [, contribution, , quorumNow, , , proposalCount] = chainGroup;
+    const [, contribution, votingPeriodNow, quorumNow, , thresholdsNow, proposalCount] = chainGroup;
 
     const count = Number(proposalCount);
     const ids = Array.from({ length: Math.min(count, MAX_SHOWN) }, (_, i) => BigInt(count - i));
@@ -114,7 +114,14 @@ export async function readChainVotes(groupId: string, userId: string): Promise<C
 
       const executed = p.status === 2;
       const state: ChainVote["state"] = executed ? "DONE" : decision === "APPROVED" ? "PASSED" : decision === "REJECTED" ? "FAILED" : "OPEN";
-      const described = describe(ACTIONS[p.action] ?? "SPEND", p.payload, { contribution, quorumNow, open: state === "OPEN", names });
+      const described = describe(ACTIONS[p.action] ?? "SPEND", p.payload, {
+        contribution,
+        quorumNow,
+        thresholdsNow: [...thresholdsNow],
+        votingPeriodNow,
+        open: state === "OPEN",
+        names,
+      });
 
       return {
         id: id.toString(),
@@ -153,7 +160,14 @@ const usdc = (minor: bigint) => Money.fromMinor(minor, "USDC").format();
 function describe(
   action: Action,
   payload: Hex,
-  ctx: { contribution: bigint; quorumNow: number; open: boolean; names: (wallet: string) => string },
+  ctx: {
+    contribution: bigint;
+    quorumNow: number;
+    thresholdsNow: number[];
+    votingPeriodNow: number;
+    open: boolean;
+    names: (wallet: string) => string;
+  },
 ): Pick<ChainVote, "kind" | "title" | "detail" | "change"> {
   const one = <T extends readonly { type: string }[]>(types: T) => decodeAbiParameters(types, payload);
   switch (action) {
@@ -184,16 +198,31 @@ function describe(
       };
     }
     case "CHANGE_RULES": {
-      const [, quorum] = one([{ type: "uint16[9]" }, { type: "uint8" }, { type: "uint32" }, { type: "bool" }] as const);
-      if (ctx.open && quorum !== ctx.quorumNow) {
-        return {
-          kind: "RULE",
-          title: "Votes count",
-          detail: null,
-          change: { before: `When ${ctx.quorumNow}% vote`, after: `When ${quorum}% vote` },
-        };
+      const [thresholds, quorum, votingPeriod] = one([{ type: "uint16[9]" }, { type: "uint8" }, { type: "uint32" }, { type: "bool" }] as const);
+      // Name the one thing that changes, against the rules on Base now. Once carried out, "now" is the new rule.
+      if (ctx.open) {
+        if (quorum !== ctx.quorumNow) {
+          return { kind: "RULE", title: "Votes count", detail: null, change: { before: `When ${ctx.quorumNow}% vote`, after: `When ${quorum}% vote` } };
+        }
+        if (votingPeriod !== ctx.votingPeriodNow) {
+          return {
+            kind: "RULE",
+            title: "How long votes stay open",
+            detail: null,
+            change: { before: days(ctx.votingPeriodNow), after: days(votingPeriod) },
+          };
+        }
+        const slot = thresholds.findIndex((permille, i) => permille !== ctx.thresholdsNow[i]);
+        if (slot >= 0) {
+          return {
+            kind: "RULE",
+            title: `${RULE_NAMES[slot] ?? "A decision"}: share that must agree`,
+            detail: null,
+            change: { before: `${ctx.thresholdsNow[slot] / 10}%`, after: `${thresholds[slot] / 10}%` },
+          };
+        }
       }
-      return { kind: "RULE", title: "The group's voting rules", detail: `Votes count when ${quorum}% vote`, change: null };
+      return { kind: "RULE", title: "The group's voting rules", detail: `Votes count when ${quorum}% vote, open ${days(votingPeriod)}`, change: null };
     }
     case "CLOSE_GROUP":
       return { kind: "GROUP", title: "Close the group", detail: "Everyone gets their share of the vault back.", change: null };
@@ -289,4 +318,22 @@ export async function carryOut(userId: string, groupId: string, proposalId: stri
     console.error("[votes] carrying out failed", cause);
     return { ok: false, reason: "failed" };
   }
+}
+
+/** The contract's rule slots in plain words (JfkModule's Rule enum). */
+const RULE_NAMES = [
+  "A small spend",
+  "A large spend",
+  "Adding a member",
+  "Removing a member",
+  "Replacing a lost wallet",
+  "Changing what everyone pays",
+  "Changing the rules",
+  "Closing the group",
+  "Moving to a new contract",
+];
+
+function days(seconds: number): string {
+  const d = Math.round(seconds / 86_400);
+  return d >= 1 ? `${d} ${d === 1 ? "day" : "days"}` : `${Math.round(seconds / 3600)} hours`;
 }

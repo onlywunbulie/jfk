@@ -27,7 +27,7 @@ vi.mock("@/lib/chain/client", () => ({
 }));
 
 const { prepareProposal, confirmProposal } = await import("./send");
-const { draftSpend, draftRuleChange, draftRoleChange, listWaitingDrafts } = await import("./drafts");
+const { draftSpend, draftRuleChange, draftRoleChange, draftGroupChange, listWaitingDrafts } = await import("@/modules/agents/drafts");
 const { createGroup } = await import("@/modules/groups/service");
 const { users, groups, groupMembers, agentDrafts } = await import("@/lib/db/schema");
 const { Money } = await import("@/lib/money");
@@ -191,5 +191,63 @@ describe("confirming it was sent", () => {
     expect(await confirmProposal(amaka, made.draft.id, TX)).toMatchObject({ ok: false });
 
     expect(await listWaitingDrafts(amaka, groupId)).toHaveLength(1);
+  });
+});
+
+describe("sending the proposals beyond spends", () => {
+  const RULES = [{ type: "uint16[9]" }, { type: "uint8" }, { type: "uint32" }, { type: "bool" }] as const;
+
+  it("closing the group becomes propose(CLOSE_GROUP) with nothing else", async () => {
+    const { amaka, groupId } = await setup();
+    const made = await draftGroupChange({ ...base(amaka, groupId), change: "close_group" });
+    if (!made.ok) throw new Error(made.reason);
+    const prepared = await prepareProposal(amaka, made.draft.id);
+    if (!prepared.ok) throw new Error(prepared.reason);
+    const [, action, payload] = proposeArgs(prepared.call.data);
+    expect([action, payload]).toEqual([6, "0x"]);
+  });
+
+  it("adding someone becomes propose(ADD_MEMBER, their wallet)", async () => {
+    const { amaka, groupId } = await setup();
+    const made = await draftRoleChange({ ...base(amaka, groupId), change: "add_member", memberName: "Tunde", wallet: "0x1111111111111111111111111111111111111111" });
+    if (!made.ok) throw new Error(made.reason);
+    const prepared = await prepareProposal(amaka, made.draft.id);
+    if (!prepared.ok) throw new Error(prepared.reason);
+    const [, action, payload] = proposeArgs(prepared.call.data);
+    expect(action).toBe(1);
+    expect(decodeAbiParameters([{ type: "address" }], payload)[0]).toBe(getAddress("0x1111111111111111111111111111111111111111"));
+  });
+
+  it("a lost wallet becomes propose(REPLACE_MEMBER, old wallet, new wallet)", async () => {
+    const { amaka, groupId } = await setup();
+    const made = await draftRoleChange({ ...base(amaka, groupId), change: "replace_wallet", memberName: "Kemi", wallet: "0x2222222222222222222222222222222222222222" });
+    if (!made.ok) throw new Error(made.reason);
+    const prepared = await prepareProposal(amaka, made.draft.id);
+    if (!prepared.ok) throw new Error(prepared.reason);
+    const [, action, payload] = proposeArgs(prepared.call.data);
+    expect(action).toBe(3);
+    expect(decodeAbiParameters([{ type: "address" }, { type: "address" }], payload)).toEqual([
+      getAddress(KEMI_WALLET),
+      getAddress("0x2222222222222222222222222222222222222222"),
+    ]);
+  });
+
+  it("a decision's share changes only that slot (both for the rules, which also guard moving contracts); vote days change only the period", async () => {
+    const { amaka, groupId } = await setup();
+    const share = await draftRuleChange({ ...base(amaka, groupId), rule: "share_needed", decision: "changing_the_rules", value: "90" });
+    if (!share.ok) throw new Error(share.reason);
+    const p1 = await prepareProposal(amaka, share.draft.id);
+    if (!p1.ok) throw new Error(p1.reason);
+    const [thresholds, quorum, period] = decodeAbiParameters(RULES, proposeArgs(p1.call.data)[2]);
+    expect([...thresholds]).toEqual([500, 667, 500, 667, 750, 667, 900, 800, 900]);
+    expect([quorum, period]).toEqual([60, 3 * 86400]);
+
+    const days = await draftRuleChange({ ...base(amaka, groupId), rule: "vote_days", value: "7" });
+    if (!days.ok) throw new Error(days.reason);
+    const p2 = await prepareProposal(amaka, days.draft.id);
+    if (!p2.ok) throw new Error(p2.reason);
+    const [unchanged, , newPeriod] = decodeAbiParameters(RULES, proposeArgs(p2.call.data)[2]);
+    expect([...unchanged]).toEqual([500, 667, 500, 667, 750, 667, 750, 800, 750]);
+    expect(newPeriod).toBe(7 * 86400);
   });
 });

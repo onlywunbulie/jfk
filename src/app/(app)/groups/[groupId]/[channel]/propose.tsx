@@ -52,16 +52,33 @@ export interface RecentProposal {
   tone: "inflow" | "pending" | "muted";
 }
 
+/** A whole-group decision draft (closing the group), ready to show. */
+export interface DecisionDraftView {
+  id: string;
+  /** "Close Detty December" */
+  label: string;
+  /** What happens if it passes. */
+  detail: string;
+  /** "80%" must agree */
+  need: string;
+  made: string;
+}
+
 export function ProposeChannel({
   base,
   rules,
   drafts,
+  decisions,
   recent,
+  rotating,
 }: {
   base: string;
   rules: ProposeRules;
   drafts: SpendDraftView[];
+  decisions: DecisionDraftView[];
   recent: RecentProposal[];
+  /** Rotating savings: every round's money already has a destination, so no spends. */
+  rotating: boolean;
 }) {
   const actions = useDraftActions();
 
@@ -69,16 +86,58 @@ export function ProposeChannel({
     <>
       {/* How to propose: through Claude. */}
       <RallMessage time="Pinned" body="text" footnote={null}>
-        <p className="text-ink">Ask your Claude to propose a spend. For example:</p>
+        <p className="text-ink">Ask your Claude to propose. For example:</p>
         <ul className="mt-2 space-y-1 text-ink-muted">
-          <li>&ldquo;Propose USDC 400 for the Airbnb deposit, paid to Kemi.&rdquo;</li>
-          <li>&ldquo;Ask the group to pay Musa USDC 150 for the generator. Here&rsquo;s his invoice.&rdquo;</li>
+          {!rotating && (
+            <>
+              <li>&ldquo;Propose USDC 400 for the Airbnb deposit, paid to Kemi.&rdquo;</li>
+              <li>&ldquo;Ask the group to pay Musa USDC 150 for the generator. Here&rsquo;s his invoice.&rdquo;</li>
+            </>
+          )}
+          <li>&ldquo;Propose closing the group and sharing out the pot.&rdquo;</li>
         </ul>
+        <p className="mt-2 text-ink-muted">Changes to who&rsquo;s in the group go in #manage roles; changes to the rules in #edit rules.</p>
         <p className="mt-2 text-ink-muted">Claude&rsquo;s draft shows up here for you to check and send.</p>
       </RallMessage>
 
       <DateDivider label="Waiting for you" />
-      {drafts.length === 0 ? (
+      {decisions.map((decision) => {
+        const notice = actions.noticeFor(decision.id);
+        return (
+          <RallMessage
+            key={decision.id}
+            time={decision.made}
+            footnote={
+              <div className="space-y-3 border-t border-border pt-4">
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" loading={Boolean(actions.sending(decision.id))} onClick={() => void actions.send(decision.id)}>
+                    Send to vote
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    loading={actions.discarding(decision.id)}
+                    onClick={() => actions.discard(decision.id)}
+                  >
+                    Discard
+                  </Button>
+                </div>
+                {notice && (
+                  <p role="status" className="text-xs text-ink-muted">
+                    {notice}
+                  </p>
+                )}
+              </div>
+            }
+          >
+            <Detail label="Decision">{decision.label}</Detail>
+            <Detail label="If it passes">{decision.detail}</Detail>
+            <Detail label="To pass">{decision.need} must agree</Detail>
+          </RallMessage>
+        );
+      })}
+      {drafts.length === 0 && decisions.length === 0 ? (
         <p className="mt-4 text-sm text-ink-muted">No drafts. When Claude prepares a proposal, it appears here.</p>
       ) : (
         drafts.map((draft) => {

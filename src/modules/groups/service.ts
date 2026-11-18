@@ -264,6 +264,8 @@ export type InvitePreview = {
   cadence: Cadence;
   /** Weekly groups: every 1, 2 or 3 weeks. */
   intervalWeeks: number;
+  /** On Base: new members are voted in, so the link can't add them by itself. */
+  onBase: boolean;
 };
 
 /** What a prospective member sees before deciding to join. */
@@ -282,6 +284,7 @@ export async function previewInvite(code: string): Promise<InvitePreview | null>
       uses: groupInvites.uses,
       maxUses: groupInvites.maxUses,
       status: groups.status,
+      safeAddress: groups.safeAddress,
     })
     .from(groupInvites)
     .innerJoin(groups, eq(groups.id, groupInvites.groupId))
@@ -313,6 +316,7 @@ export async function previewInvite(code: string): Promise<InvitePreview | null>
     contributionAmount: Money.fromMinor(row.contributionAmount, toCurrency(row.currency)),
     cadence: row.cadence,
     intervalWeeks: row.intervalWeeks,
+    onBase: row.safeAddress !== null,
   };
 }
 
@@ -811,6 +815,8 @@ export interface GroupDetail extends GroupSummary {
   createdAt: Date;
   membersCanPropose: boolean;
   quorumPct: number;
+  /** How long a vote stays open, in days. On Base the contract holds it; Rallied's copy follows. */
+  defaultVoteDays: number;
   dueDay: number;
   governance: { action: string; thresholdPermille: number }[];
 }
@@ -839,6 +845,7 @@ export async function getGroupDetail(
       dueDay: groupSettings.dueDay,
       membersCanPropose: groupSettings.membersCanPropose,
       quorumPct: groupSettings.quorumPct,
+      defaultVoteDays: groupSettings.defaultVoteDays,
     })
     .from(groups)
     .innerJoin(groupSettings, eq(groupSettings.groupId, groups.id))
@@ -878,4 +885,35 @@ function balanceIn(currency: Currency, ledger: GroupBalances | undefined): Group
   if (currency === "NGN" && ledger) return ledger;
   const zero = Money.zero(currency);
   return { available: zero, reserved: zero, total: zero };
+}
+
+export type DeleteGroupResult = { ok: true } | { ok: false; reason: "not_found" | "not_owner" | "on_base" };
+
+/**
+ * The starter deletes a group that never went on Base: no vault, no money,
+ * nothing to vote on, so no vote. The group drops out of everyone's lists
+ * (it's marked dissolved, and the record stays for the audit trail).
+ * A group on Base can only close by the group's vote.
+ */
+export async function deleteGroup(groupId: string, actorId: string, meta: { ip?: string | null } = {}): Promise<DeleteGroupResult> {
+  const membership = await getMembership(groupId, actorId);
+  if (!membership || membership.role === null) return { ok: false, reason: "not_found" };
+  if (membership.role !== "OWNER") return { ok: false, reason: "not_owner" };
+
+  return db.transaction(async (tx) => {
+    const [group] = await tx.select({ safeAddress: groups.safeAddress, status: groups.status }).from(groups).where(eq(groups.id, groupId)).limit(1);
+    if (!group || group.status === "DISSOLVED") return { ok: false as const, reason: "not_found" as const };
+    if (group.safeAddress) return { ok: false as const, reason: "on_base" as const };
+    await tx.update(groups).set({ status: "DISSOLVED" }).where(and(eq(groups.id, groupId), isNull(groups.safeAddress)));
+    await recordAudit(tx, {
+      action: "group.dissolved",
+      actorId,
+      actorIp: meta.ip,
+      groupId,
+      subjectType: "group",
+      subjectId: groupId,
+      after: { deletedBeforeBase: true },
+    });
+    return { ok: true as const };
+  });
 }

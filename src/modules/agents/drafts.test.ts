@@ -5,10 +5,15 @@ import { createTestDb, type TestDb } from "@/lib/db/testing";
 const t: TestDb = await createTestDb();
 vi.mock("@/lib/db", async () => ({ db: t.db }));
 
-const { draftSpend, draftRuleChange, draftRoleChange, listWaitingDrafts, discardDraft, countWaitingDrafts } = await import("./drafts");
+const { draftSpend, draftRuleChange, draftRoleChange, draftGroupChange, listWaitingDrafts, discardDraft, countWaitingDrafts } = await import("@/modules/agents/drafts");
 const { setAiInGroup } = await import("./connection");
 const { createGroup, grantAdmin } = await import("@/modules/groups/service");
-const { users, groupMembers } = await import("@/lib/db/schema");
+const { users, groupMembers, groups } = await import("@/lib/db/schema");
+const { eq } = await import("drizzle-orm");
+
+/** Put a group on Base, as Start on Base leaves it. */
+const onBase = (groupId: string) =>
+  t.db.update(groups).set({ safeAddress: "0x2a7a348bccee61c5ef6c213efc0baa05841a5a70" }).where(eq(groups.id, groupId));
 const { Money } = await import("@/lib/money");
 
 beforeEach(async () => {
@@ -172,5 +177,55 @@ describe("who can draft, and who sees drafts", () => {
     expect(await listWaitingDrafts(amaka, groupId)).toEqual([]);
     // Already discarded: a second discard finds nothing.
     expect(await discardDraft(amaka, made.draft.id)).toEqual({ ok: false, reason: "not_found" });
+  });
+});
+
+describe("the proposals beyond spends", () => {
+  it("the share a decision needs: 50% to 100%, shown against today's rule", async () => {
+    const amaka = await makeUser("Amaka");
+    const groupId = await groupWith(amaka, "TREASURY");
+    expect(await draftRuleChange({ ...base(amaka, groupId), rule: "share_needed", value: "40" })).toMatchObject({ ok: false, reason: expect.stringContaining("Say which decision") });
+    expect(await draftRuleChange({ ...base(amaka, groupId), rule: "share_needed", decision: "closing_the_group", value: "40" })).toMatchObject({ ok: false, reason: expect.stringContaining("50 to 100") });
+
+    const made = await draftRuleChange({ ...base(amaka, groupId), rule: "share_needed", decision: "closing_the_group", value: "90" });
+    expect(made.ok && made.draft.details).toMatchObject({ ruleLabel: "Closing the group: share that must agree", before: "80%", after: "90%", value: "900", decision: "closing_the_group" });
+  });
+
+  it("how long votes stay open: 1 to 30 days", async () => {
+    const amaka = await makeUser("Amaka");
+    const groupId = await groupWith(amaka, "TREASURY");
+    expect(await draftRuleChange({ ...base(amaka, groupId), rule: "vote_days", value: "45" })).toMatchObject({ ok: false });
+    const made = await draftRuleChange({ ...base(amaka, groupId), rule: "vote_days", value: "5" });
+    expect(made.ok && made.draft.details).toMatchObject({ before: "3 days", after: "5 days", value: "5" });
+  });
+
+  it("adding someone needs the group on Base and a real wallet that isn't already in", async () => {
+    const amaka = await makeUser("Amaka");
+    const groupId = await groupWith(amaka, "TREASURY");
+    const add = (wallet: string) => draftRoleChange({ ...base(amaka, groupId), change: "add_member", memberName: "Tunde", wallet });
+    expect(await add("0x1111111111111111111111111111111111111111")).toMatchObject({ ok: false, reason: expect.stringContaining("invite link") });
+
+    await onBase(groupId);
+    expect(await add("not a wallet")).toMatchObject({ ok: false, reason: expect.stringContaining("wallet address") });
+    const made = await add("0x1111111111111111111111111111111111111111");
+    expect(made.ok && made.draft.details).toMatchObject({ change: "add_member", label: "Add Tunde to the group", memberId: "", wallet: "0x1111111111111111111111111111111111111111" });
+  });
+
+  it("moving a member to a new wallet, found by name", async () => {
+    const amaka = await makeUser("Amaka");
+    const kemi = await makeUser("Kemi");
+    const groupId = await groupWith(amaka, "TREASURY", [kemi]);
+    await onBase(groupId);
+    const made = await draftRoleChange({ ...base(amaka, groupId), change: "replace_wallet", memberName: "kemi", wallet: "0x2222222222222222222222222222222222222222" });
+    expect(made.ok && made.draft.details).toMatchObject({ change: "replace_wallet", label: "Move Kemi to a new wallet", memberName: "Kemi" });
+  });
+
+  it("closing the group is a vote on Base; a group not on Base is deleted instead", async () => {
+    const amaka = await makeUser("Amaka");
+    const groupId = await groupWith(amaka, "ROTATING");
+    expect(await draftGroupChange({ ...base(amaka, groupId), change: "close_group" })).toMatchObject({ ok: false, reason: expect.stringContaining("delete") });
+    await onBase(groupId);
+    const made = await draftGroupChange({ ...base(amaka, groupId), change: "close_group" });
+    expect(made.ok && made.draft).toMatchObject({ kind: "GROUP_CHANGE", details: { change: "close_group", label: "Close Detty December" } });
   });
 });

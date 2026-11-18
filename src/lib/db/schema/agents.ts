@@ -110,7 +110,7 @@ export const aiGroupOptouts = pgTable(
 // agent_drafts: something a user's AI prepared, waiting for the user to send
 // ---------------------------------------------------------------------------
 
-export const agentDraftKindEnum = pgEnum("agent_draft_kind", ["SPEND", "RULE_CHANGE", "ROLE_CHANGE"]);
+export const agentDraftKindEnum = pgEnum("agent_draft_kind", ["SPEND", "RULE_CHANGE", "ROLE_CHANGE", "GROUP_CHANGE"]);
 export const agentDraftStatusEnum = pgEnum("agent_draft_status", ["WAITING", "SENT", "DISCARDED"]);
 
 /**

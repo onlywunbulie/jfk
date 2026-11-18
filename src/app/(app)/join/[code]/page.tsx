@@ -29,7 +29,7 @@ export default async function JoinPage({
 
   // Signing in first means we know who is accepting, and the invite preview
   // never leaks group details to an anonymous visitor.
-  await requireUser();
+  const user = await requireUser();
 
   const preview = await previewInvite(code);
   const errorMessage = typeof error === "string" ? ERROR_MESSAGES[error] : undefined;
@@ -94,6 +94,20 @@ export default async function JoinPage({
         </p>
       )}
 
+      {preview.onBase ? (
+        // On Base, members vote new people in. The person's part is their wallet;
+        // a member's AI drafts the proposal (draft_role_change, add_member).
+        <Card>
+          <h2 className="font-medium text-ink">New members are voted in</h2>
+          <p className="mt-1.5 text-sm text-ink-muted">
+            {preview.groupName} is on Base, so joining takes a vote. Send this to a member; their AI can propose adding you:
+          </p>
+          <p className="mt-3 rounded-[var(--radius-control)] bg-overlay px-3 py-2 text-sm text-ink select-all">
+            Please add me to {preview.groupName}. My wallet: <span className="font-mono break-all">{user.walletAddress ?? "sign in with a wallet first"}</span>
+          </p>
+          <p className="mt-3 text-xs text-ink-faint">Once the vote passes, {preview.groupName} shows up in your groups.</p>
+        </Card>
+      ) : (
       <form action={acceptWithCode} className="space-y-3">
         <Button type="submit" size="lg" fullWidth>
           Join {preview.groupName}
@@ -105,6 +119,7 @@ export default async function JoinPage({
           Not now
         </Link>
       </form>
+      )}
     </main>
   );
 }

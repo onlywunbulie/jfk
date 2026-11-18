@@ -11,7 +11,7 @@ import { StartOnChain } from "../start-on-chain";
 import { EXPLORER_URL, shortAddress } from "@/lib/chain/addresses";
 import { VerifyAi } from "./verify-ai";
 import { listWaitingDrafts } from "@/modules/agents/drafts";
-import { roleDraftView, ruleDraftView, spendDraftView } from "./draft-views";
+import { roleDraftView, ruleDraftView, spendDraftView, decisionDraftView } from "./draft-views";
 import { aiAllowedInGroup, getAiConnection } from "@/modules/agents/connection";
 import { DEFAULT_GOVERNANCE, type GovernedAction, type GroupType } from "@/lib/db/schema/groups";
 import { contractThresholds } from "@/modules/groups/onchain-setup";
@@ -26,6 +26,7 @@ import { readDues } from "@/modules/groups/onchain-dues";
 import { autopayStatus } from "@/modules/groups/onchain-autopay";
 import { readHistory } from "@/modules/groups/onchain-history";
 import { Dues } from "./dues";
+import { DeleteGroup } from "./delete-group";
 import { everyText } from "@/lib/schedule-text";
 import { cyclePeriodFor } from "@/modules/contributions/schedule";
 
@@ -162,6 +163,11 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
               members={onChain.members}
               inviteHref={`/groups/${group.id}/members`}
             />
+          </div>
+        )}
+        {!group.safeAddress && group.role === "OWNER" && (
+          <div className="mt-6 max-w-xl">
+            <DeleteGroup groupId={group.id} groupName={group.name} />
           </div>
         )}
         {group.safeAddress && (
@@ -357,14 +363,16 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
     const saved = Object.fromEntries(
       group.governance.map((rule) => [rule.action, rule.thresholdPermille]),
     ) as Partial<Record<GovernedAction, number>>;
-    const [small, large] = contractThresholds(saved);
+    const [small, large, , , , , , close] = contractThresholds(saved);
     return (
       <div className="flex min-h-full flex-col justify-end">
-        <ChannelIntro title="Propose a spend">
-          Ask your Claude to propose. Its drafts land here for you to check and send to a vote.
+        <ChannelIntro title="Propose">
+          Decisions for the whole group{rotating ? "" : ": spends from the pot, and closing the group"}. Ask your Claude; its drafts land here for you to check and send to a vote.
         </ChannelIntro>
         <ProposeChannel
-          drafts={(await listWaitingDrafts(user.id, group.id, "SPEND")).map(spendDraftView)}
+          rotating={rotating}
+          decisions={(await listWaitingDrafts(user.id, group.id, "GROUP_CHANGE")).map((draft) => decisionDraftView(draft, percent(close)))}
+          drafts={rotating ? [] : (await listWaitingDrafts(user.id, group.id, "SPEND")).map(spendDraftView)}
           recent={await recentSpends(group.id, user.id)}
           base={`/groups/${group.id}`}
           rules={{

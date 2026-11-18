@@ -79,11 +79,9 @@ export const CHANNEL_SECTIONS: ChannelSection[] = [
     channels: [
       {
         slug: "propose",
-        label: "propose a spend",
+        label: "propose",
         icon: <PlusCircleIcon />,
-        promise: "Ask the group to spend money. Everyone gets a say before anything moves.",
-        // In rotating savings every round's money already has a destination.
-        only: "TREASURY",
+        promise: "Ask the group to decide: a spend from the pot, or closing the group. Everyone gets a say before anything moves.",
       },
       {
         slug: "payout-order",

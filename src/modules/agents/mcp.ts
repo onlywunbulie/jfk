@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import { DEFAULT_GOVERNANCE, type GovernedAction } from "@/lib/db/schema";
-import { createGroup, createInvite, getGroupDetail, listGroupsForUser, listMembers } from "@/modules/groups/service";
+import { createGroup, createInvite, deleteGroup, getGroupDetail, listGroupsForUser, listMembers } from "@/modules/groups/service";
 import { Money } from "@/lib/money";
 import { contractThresholds } from "@/modules/groups/onchain-setup";
 import { startGroupOnChain } from "@/modules/groups/onchain";
@@ -14,7 +14,7 @@ import { EXPLORER_URL } from "@/lib/chain/addresses";
 import { HOW_OFTEN, everyText } from "@/lib/schedule-text";
 import { listProposals } from "@/modules/governance/service";
 import { aiAllowedInGroup, aiOptedOutGroups } from "./connection";
-import { draftRoleChange, draftRuleChange, draftSpend } from "@/modules/agents/drafts";
+import { DECISIONS, draftGroupChange, draftRoleChange, draftRuleChange, draftSpend } from "@/modules/agents/drafts";
 import { DRAFT_SCOPE } from "./oauth";
 
 /**
@@ -265,18 +265,24 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
       title: "Draft a rule change",
       description:
         "Prepare a change to a group's rules: what everyone pays (rule what_everyone_pays, value like '150'), the due day " +
-        "(rule due_day, value 1-28 for monthly groups or 1-7 Monday-Sunday for weekly ones), or how many must vote for a vote to count " +
-        "(rule votes_count_share, value a whole percentage). It lands in the user's Waiting section in #edit rules; they send it to a vote.",
+        "(rule due_day, value 1-28 for monthly groups or 1-7 Monday-Sunday for weekly ones), how many must vote for a vote to count " +
+        "(rule votes_count_share, value a whole percentage), the share that must agree for one kind of decision " +
+        "(rule share_needed with decision, value a percentage from 50 to 100), or how long votes stay open (rule vote_days, value 1-30). " +
+        "It lands in the user's Waiting section in #edit rules; they send it to a vote.",
       inputSchema: {
         group_id: z.string().min(1).max(64),
-        rule: z.enum(["what_everyone_pays", "due_day", "votes_count_share"]),
+        rule: z.enum(["what_everyone_pays", "due_day", "votes_count_share", "share_needed", "vote_days"]),
         value: z.string().min(1).max(20).describe("The new value"),
+        decision: z
+          .enum(Object.keys(DECISIONS) as [keyof typeof DECISIONS, ...(keyof typeof DECISIONS)[]])
+          .optional()
+          .describe("share_needed only: which decision's share to change"),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     },
-    async ({ group_id, rule, value }) => {
+    async ({ group_id, rule, value, decision }) => {
       if (!canDraft) return noDraftScope;
-      const result = await draftRuleChange({ userId, groupId: group_id, madeBy: grant.appName, rule, value });
+      const result = await draftRuleChange({ userId, groupId: group_id, madeBy: grant.appName, rule, value, decision });
       return drafted(result, "edit-rules", `a rule change (${rule.replaceAll("_", " ")} → ${value})`);
     },
   );
@@ -284,21 +290,70 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
   server.registerTool(
     "draft_role_change",
     {
-      title: "Draft a role change",
+      title: "Draft a change to who's in the group",
       description:
-        "Prepare a change to who looks after a group: make a member an admin, remove an admin, or remove a member. " +
+        "Prepare a change to who's in a group or looks after it: make a member an admin, remove an admin, remove a member, " +
+        "add someone to a group already on Base (add_member, with their name and wallet; invite links stop working once a group is on Base), " +
+        "or move a member who lost their wallet to a new one (replace_wallet, with the member's name and new wallet). " +
         "It lands in the user's Waiting section in #manage roles; they send it to a vote.",
       inputSchema: {
         group_id: z.string().min(1).max(64),
-        change: z.enum(["make_admin", "remove_admin", "remove_member"]),
-        member_name: z.string().min(1).max(64).describe("The member's name exactly as get_group shows it"),
+        change: z.enum(["make_admin", "remove_admin", "remove_member", "add_member", "replace_wallet"]),
+        member_name: z.string().min(1).max(64).describe("The member's name exactly as get_group shows it; for add_member, the new person's name"),
+        wallet: z.string().max(64).optional().describe("add_member: their wallet on Base. replace_wallet: the member's new wallet."),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     },
-    async ({ group_id, change, member_name }) => {
+    async ({ group_id, change, member_name, wallet }) => {
       if (!canDraft) return noDraftScope;
-      const result = await draftRoleChange({ userId, groupId: group_id, madeBy: grant.appName, change, memberName: member_name });
+      const result = await draftRoleChange({ userId, groupId: group_id, madeBy: grant.appName, change, memberName: member_name, wallet });
       return drafted(result, "manage-roles", `a role change (${change.replaceAll("_", " ")}: ${member_name})`);
+    },
+  );
+
+  server.registerTool(
+    "draft_group_change",
+    {
+      title: "Draft a whole-group decision",
+      description:
+        "Prepare a decision about the whole group on Base: close it (close_group), sharing the vault out by how much each member paid in. " +
+        "It lands in the user's Waiting section in #propose; they send it to a vote. A group not on Base isn't closed by vote: its starter deletes it (delete_group).",
+      inputSchema: {
+        group_id: z.string().min(1).max(64),
+        change: z.enum(["close_group"]),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    },
+    async ({ group_id, change }) => {
+      if (!canDraft) return noDraftScope;
+      const result = await draftGroupChange({ userId, groupId: group_id, madeBy: grant.appName, change });
+      return drafted(result, "propose", "closing the group");
+    },
+  );
+
+  server.registerTool(
+    "delete_group",
+    {
+      title: "Delete a group that isn't on Base",
+      description:
+        "Delete one of the user's groups that was never started on Base: it has no vault and no money, so it needs no vote. " +
+        "Only its starter can, and only after confirming with the user, since it can't be undone. A group on Base closes by vote instead (draft_group_change).",
+      inputSchema: { group_id: z.string().min(1).max(64), confirmed: z.literal(true).describe("The user confirmed they want it deleted") },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    async ({ group_id }) => {
+      if (!canDraft) return noDraftScope;
+      if (!(await aiAllowedInGroup(userId, group_id))) return notFound();
+      const result = await deleteGroup(group_id, userId);
+      if (!result.ok) {
+        if (result.reason === "not_found") return notFound();
+        return refusal(
+          result.reason === "not_owner"
+            ? "Only the person who started this group can delete it."
+            : "This group is on Base, so it can't just be deleted: closing it is a group vote (draft_group_change), which shares the vault out.",
+        );
+      }
+      return json({ deleted: true, suggested_next: await nextAcrossGroups(userId, (await listGroupsForUser(userId)).filter((g) => g.id !== group_id)) });
     },
   );
 

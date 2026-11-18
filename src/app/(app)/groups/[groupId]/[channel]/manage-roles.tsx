@@ -1,5 +1,6 @@
 "use client";
 
+import type { RoleChange } from "@/modules/agents/drafts";
 import Link from "next/link";
 import type { Route } from "next";
 import { useState } from "react";
@@ -28,7 +29,9 @@ export interface RoleDraftView {
   id: string;
   /** "Make Tunde an admin" */
   label: string;
-  change: "make_admin" | "remove_admin" | "remove_member";
+  change: RoleChange;
+  /** add_member and replace_wallet: the wallet, shortened. */
+  wallet: string | null;
   /** "Drafted by Claude · 16 Nov, 11:40" */
   made: string;
 }
@@ -201,8 +204,20 @@ export function ManageRoles({
                 }
               >
                 <Detail label="Change">{draft.label}</Detail>
+                {draft.wallet && (
+                  <Detail label={draft.change === "add_member" ? "Their wallet" : "New wallet"}>
+                    <span className="font-mono">{draft.wallet}</span>
+                  </Detail>
+                )}
                 <Detail label="To pass">
-                  {draft.change === "remove_member" ? rules.removeMember : rules.admin} must agree
+                  {draft.change === "remove_member"
+                    ? rules.removeMember
+                    : draft.change === "add_member"
+                      ? rules.addMember
+                      : draft.change === "replace_wallet"
+                        ? rules.replaceWallet
+                        : rules.admin}{" "}
+                  must agree
                   <span className="text-ink-muted"> · voting closes 3 days after it&rsquo;s sent</span>
                 </Detail>
               </RallMessage>

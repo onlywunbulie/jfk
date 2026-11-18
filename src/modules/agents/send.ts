@@ -7,7 +7,7 @@ import { publicClient } from "@/lib/chain/client";
 import { CONTRACTS } from "@/lib/chain/addresses";
 import { jfkModuleAbi, safeAbi } from "@/lib/chain/abis";
 import { getGroupDetail, listMembers } from "@/modules/groups/service";
-import type { RoleDetails, RuleDetails, SpendDetails } from "./drafts";
+import { DECISIONS, type GroupDetails, type RoleDetails, type RuleDetails, type SpendDetails } from "@/modules/agents/drafts";
 
 /**
  * Sending a draft to a vote: turning it into a real proposal on the group's
@@ -29,9 +29,12 @@ import type { RoleDetails, RuleDetails, SpendDetails } from "./drafts";
 /** JfkModule.Action, in the contract's order. */
 const ACTION = {
   SPEND: 0,
+  ADD_MEMBER: 1,
   REMOVE_MEMBER: 2,
+  REPLACE_MEMBER: 3,
   CHANGE_CONTRIBUTION: 4,
   CHANGE_RULES: 5,
+  CLOSE_GROUP: 6,
 } as const;
 
 export type Prepared =
@@ -103,6 +106,30 @@ async function buildPayload(
     return { ok: true, action: ACTION.SPEND, payload };
   }
 
+  if (draft.kind === "GROUP_CHANGE") {
+    const details = draft.details as unknown as GroupDetails;
+    if (details.change === "close_group") return { ok: true, action: ACTION.CLOSE_GROUP, payload: "0x" };
+    return { ok: false, reason: "Rallied can't send that kind of group decision yet." };
+  }
+
+  if (draft.kind === "ROLE_CHANGE" && (draft.details as unknown as RoleDetails).change === "add_member") {
+    const details = draft.details as unknown as RoleDetails;
+    if (!details.wallet || !isAddress(details.wallet)) return { ok: false, reason: "This draft has no valid wallet to add. Ask your AI to draft it again." };
+    return { ok: true, action: ACTION.ADD_MEMBER, payload: encodeAbiParameters([{ type: "address" }], [getAddress(details.wallet)]) };
+  }
+
+  if (draft.kind === "ROLE_CHANGE" && (draft.details as unknown as RoleDetails).change === "replace_wallet") {
+    const details = draft.details as unknown as RoleDetails;
+    const member = members.find((m) => m.memberId === details.memberId);
+    if (!member?.walletAddress) return { ok: false, reason: `${details.memberName} has no wallet on Base to replace.` };
+    if (!details.wallet || !isAddress(details.wallet)) return { ok: false, reason: "This draft has no valid new wallet. Ask your AI to draft it again." };
+    return {
+      ok: true,
+      action: ACTION.REPLACE_MEMBER,
+      payload: encodeAbiParameters([{ type: "address" }, { type: "address" }], [getAddress(member.walletAddress), getAddress(details.wallet)]),
+    };
+  }
+
   if (draft.kind === "ROLE_CHANGE") {
     const details = draft.details as unknown as RoleDetails;
     if (details.change !== "remove_member") {
@@ -119,18 +146,27 @@ async function buildPayload(
   if (details.rule === "what_everyone_pays") {
     return { ok: true, action: ACTION.CHANGE_CONTRIBUTION, payload: encodeAbiParameters([{ type: "uint256" }], [BigInt(details.value)]) };
   }
-  if (details.rule === "votes_count_share") {
+  if (details.rule === "votes_count_share" || details.rule === "share_needed" || details.rule === "vote_days") {
     // CHANGE_RULES replaces the whole rule set, so everything else is kept as it is on Base now.
     const client = publicClient();
     const [group, settings] = await Promise.all([
       client.readContract({ address: CONTRACTS.jfkModule, abi: jfkModuleAbi, functionName: "getGroup", args: [safe] }),
       client.readContract({ address: CONTRACTS.jfkModule, abi: jfkModuleAbi, functionName: "getGroupSettings", args: [safe] }),
     ]);
-    const [, , votingPeriod, , , thresholds] = group;
+    const [, , votingPeriodNow, quorumNow, , thresholdsNow] = group;
     const [humanVotesOnly] = settings;
+    const thresholds = [...thresholdsNow] as number[];
+    let quorum = quorumNow;
+    let votingPeriod = votingPeriodNow;
+    if (details.rule === "votes_count_share") quorum = Number(details.value);
+    if (details.rule === "vote_days") votingPeriod = Number(details.value) * 86_400;
+    if (details.rule === "share_needed") {
+      if (!details.decision || !(details.decision in DECISIONS)) return { ok: false, reason: "This draft doesn't say which decision. Ask your AI to draft it again." };
+      for (const slot of DECISIONS[details.decision].slots) thresholds[slot] = Number(details.value);
+    }
     const payload = encodeAbiParameters(
       [{ type: "uint16[9]" }, { type: "uint8" }, { type: "uint32" }, { type: "bool" }],
-      [thresholds, Number(details.value), votingPeriod, humanVotesOnly],
+      [thresholds as unknown as readonly [number, number, number, number, number, number, number, number, number], quorum, votingPeriod, humanVotesOnly],
     );
     return { ok: true, action: ACTION.CHANGE_RULES, payload };
   }

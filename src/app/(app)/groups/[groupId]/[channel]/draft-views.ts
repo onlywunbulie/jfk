@@ -1,8 +1,8 @@
 import type { AgentDraft } from "@/lib/db/schema";
 import { Money, toCurrency } from "@/lib/money";
 import { shortAddress } from "@/lib/chain/addresses";
-import type { RoleDetails, RuleDetails, SpendDetails } from "@/modules/agents/drafts";
-import type { SpendDraftView } from "./propose";
+import type { GroupDetails, RoleDetails, RuleDetails, SpendDetails } from "@/modules/agents/drafts";
+import type { DecisionDraftView, SpendDraftView } from "./propose";
 import type { RuleDraftView } from "./edit-rules";
 import type { RoleDraftView } from "./manage-roles";
 
@@ -54,5 +54,16 @@ export function ruleDraftView(draft: AgentDraft): RuleDraftView {
 
 export function roleDraftView(draft: AgentDraft): RoleDraftView {
   const details = draft.details as unknown as RoleDetails;
-  return { id: draft.id, label: details.label, change: details.change, made: made(draft) };
+  return {
+    id: draft.id,
+    label: details.label,
+    change: details.change,
+    wallet: details.wallet ? shortAddress(details.wallet) : null,
+    made: made(draft),
+  };
+}
+
+export function decisionDraftView(draft: AgentDraft, need: string): DecisionDraftView {
+  const details = draft.details as unknown as GroupDetails;
+  return { id: draft.id, label: details.label, detail: details.detail, need, made: made(draft) };
 }

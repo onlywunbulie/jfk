@@ -1,0 +1,1 @@
+ALTER TYPE "public"."agent_draft_kind" ADD VALUE 'GROUP_CHANGE';

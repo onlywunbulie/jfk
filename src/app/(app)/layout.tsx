@@ -47,7 +47,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       waiting: onBase.get(group.id)?.votesWaiting ?? waiting.get(group.id) ?? 0,
       // What's waiting for this user, by channel: their AI's drafts, and votes they haven't cast.
       needsYou: {
-        propose: groupDrafts.SPEND ?? 0,
+        propose: (groupDrafts.SPEND ?? 0) + (groupDrafts.GROUP_CHANGE ?? 0),
         "edit-rules": groupDrafts.RULE_CHANGE ?? 0,
         "manage-roles": groupDrafts.ROLE_CHANGE ?? 0,
         votes: onBase.get(group.id)?.votesWaiting ?? waiting.get(group.id) ?? 0,
