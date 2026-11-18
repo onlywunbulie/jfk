@@ -34,6 +34,8 @@ export function WalletSignIn({ returnTo = null }: { returnTo?: string | null }) 
   const [error, setError] = useState<string | null>(null);
   // Which wallet the last attempt used, so the words match the window open.
   const [via, setVia] = useState<"base" | "test">("base");
+  // No browser wallet here: where to get one (on a phone, MetaMask's own app browser).
+  const [walletHelp, setWalletHelp] = useState<{ href: string; label: string } | null>(null);
   // Fetched ahead of the tap. Browsers only allow a pop-up that opens straight
   // from a tap; a server round trip in between gets the Coinbase window
   // blocked. A nonce is single-use, so a fresh one follows every attempt.
@@ -70,8 +72,11 @@ export function WalletSignIn({ returnTo = null }: { returnTo?: string | null }) 
     setVia(choice);
     attempting.current = true;
     const connector = connectors.find((c) => c.id === (choice === "test" ? TEST_WALLET_ID : BASE_ACCOUNT_ID));
-    if (!connector) {
-      setError("No browser wallet found. Install MetaMask (or another wallet extension), then try again.");
+    setWalletHelp(null);
+    if (!connector || (choice === "test" && !hasBrowserWallet())) {
+      const help = noWalletHelp();
+      setError(help.text);
+      setWalletHelp(help);
       setStage("failed");
       return;
     }
@@ -153,9 +158,19 @@ export function WalletSignIn({ returnTo = null }: { returnTo?: string | null }) 
       </Button>
 
       {stage === "failed" && error ? (
-        <p role="alert" className="mt-3 rounded-[var(--radius-control)] bg-danger-soft px-4 py-3 text-sm text-danger">
-          {error}
-        </p>
+        <div role="alert" className="mt-3 rounded-[var(--radius-control)] bg-danger-soft px-4 py-3 text-sm text-danger">
+          <p>{error}</p>
+          {walletHelp && (
+            <a
+              href={walletHelp.href}
+              className="mt-2 inline-block py-1 font-semibold text-ink underline underline-offset-4"
+              target={walletHelp.href.startsWith("https://metamask.io") ? "_blank" : undefined}
+              rel="noreferrer"
+            >
+              {walletHelp.label}
+            </a>
+          )}
+        </div>
       ) : (
         <p className="mt-3 text-sm text-ink-faint">
           {stage === "waiting"
@@ -196,4 +211,31 @@ function describeWalletError(cause: unknown, choice: "base" | "test"): string {
   if (/reject|denied|cancel/i.test(text)) return "You closed the Coinbase window before confirming.";
   if (/popup|blocked/i.test(text)) return "Your browser blocked the Coinbase window. Allow pop-ups for this site, then try again.";
   return "Couldn't reach your wallet. Your account is safe.";
+}
+
+/** Whether this browser has a wallet in it (an extension on a computer, or a wallet app's own browser). */
+function hasBrowserWallet(): boolean {
+  return typeof window !== "undefined" && Boolean((window as unknown as { ethereum?: unknown }).ethereum);
+}
+
+/**
+ * What to do without a browser wallet. Phone browsers can't hold wallet
+ * extensions, so on a phone the answer is MetaMask's app, which opens this
+ * same page in its own browser with the wallet built in.
+ */
+function noWalletHelp(): { text: string; href: string; label: string } {
+  const phone = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (phone) {
+    const here = `${window.location.host}${window.location.pathname}${window.location.search}`;
+    return {
+      text: "Phone browsers can't hold a wallet. Open this page in the MetaMask app instead: it has the wallet built in.",
+      href: `https://metamask.app.link/dapp/${here}`,
+      label: "Open in the MetaMask app",
+    };
+  }
+  return {
+    text: "No browser wallet found. Install MetaMask (or another wallet extension), then try again.",
+    href: "https://metamask.io/download/",
+    label: "Get MetaMask",
+  };
 }
