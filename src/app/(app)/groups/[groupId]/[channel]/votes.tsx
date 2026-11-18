@@ -13,7 +13,7 @@ import { carryOutAction, prepareVoteAction } from "@/app/(app)/vote-actions";
 import { ChannelIntro } from "./parts";
 import { PinnedTabs } from "./pinned-tabs";
 import { BeforeAfter } from "./edit-rules";
-import { VoteBar } from "./vote-bar";
+import { VoteRing } from "./vote-ring";
 
 /**
  * #votes: every decision the group is making, read from Base. Each card
@@ -201,15 +201,18 @@ function VoteCard({ vote, groupId }: { vote: ChainVote; groupId: string }) {
       )}
       {vote.detail && <p className="mt-1 text-sm text-ink-muted tabular-nums">{vote.detail}</p>}
 
-      <div className="mt-5">
-        <VoteBar yes={yes.length} members={vote.eligible} need={vote.need} />
+      <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-4">
+        <VoteRing yes={yes.length} no={no.length} eligible={vote.eligible} neededYes={vote.neededYes} />
+        <div className="min-w-0 flex-1">
+          <dl className="space-y-2 text-sm">
+            <Voters label="Yes" voters={yes} />
+            <Voters label="No" voters={no} />
+          </dl>
+          <p className="mt-3 text-xs text-ink-faint">
+            {vote.eligible - yes.length - no.length} still to vote · {vote.need} must agree · proposed by {vote.proposedBy}
+          </p>
+        </div>
       </div>
-
-      <dl className="mt-4 space-y-1.5 text-sm">
-        <Voters label="Yes" voters={yes} />
-        <Voters label="No" voters={no} />
-      </dl>
-      <p className="mt-3 text-xs text-ink-faint">Proposed by {vote.proposedBy}</p>
 
       <div className="mt-5 border-t border-border pt-4 text-sm">
         <p className="text-ink-muted">

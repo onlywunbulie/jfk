@@ -49,6 +49,8 @@ export interface ChainVote {
   change: { before: string; after: string } | null;
   /** "67%": the share of yes votes needed, fixed when the vote opened. */
   need: string;
+  /** How many yes votes pass it if everyone votes: the contract's rounding, in people. */
+  neededYes: number;
   quorumPct: number;
   eligible: number;
   yes: string[];
@@ -127,6 +129,7 @@ export async function readChainVotes(groupId: string, userId: string): Promise<C
         id: id.toString(),
         ...described,
         need: `${Math.round(p.thresholdPermille / 10)}%`,
+        neededYes: yesNeeded(p.thresholdPermille, p.eligible),
         quorumPct: p.quorumPct,
         eligible: p.eligible,
         yes: who("YES"),
@@ -336,4 +339,16 @@ const RULE_NAMES = [
 function days(seconds: number): string {
   const d = Math.round(seconds / 86_400);
   return d >= 1 ? `${d} ${d === 1 ? "day" : "days"}` : `${Math.round(seconds / 3600)} hours`;
+}
+
+/**
+ * The fewest yes votes that pass, if every eligible member votes: the
+ * contract rounds approval half-up in tenths of a percent, so 2 of 3 is
+ * 66.7% and passes a 66.7% rule.
+ */
+export function yesNeeded(thresholdPermille: number, eligible: number): number {
+  for (let yes = 1; yes <= eligible; yes++) {
+    if (Math.floor((yes * 1000 * 2 + eligible) / (eligible * 2)) >= thresholdPermille) return yes;
+  }
+  return eligible;
 }
