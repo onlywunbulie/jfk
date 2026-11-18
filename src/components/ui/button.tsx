@@ -11,14 +11,15 @@ type Size = "sm" | "md" | "lg";
  *
  * One clear first choice per screen: the blue button. Everything else is a
  * quieter grey. A disabled button looks clearly off: grey, not faded blue.
+ *
+ * Hover is the spotlight (globals.css, fed by components/spotlight.tsx): a
+ * soft light follows the pointer across the button. No colour swaps.
  */
 const VARIANTS: Record<Variant, string> = {
-  primary:
-    "bg-accent text-accent-ink hover:bg-accent-hover disabled:bg-overlay disabled:text-ink-faint",
-  secondary:
-    "bg-raised text-ink border border-border hover:bg-overlay disabled:text-ink-faint",
-  ghost: "text-ink-muted hover:text-ink hover:bg-raised",
-  danger: "bg-danger-soft text-danger border border-danger/30 hover:bg-danger/20",
+  primary: "bg-accent text-accent-ink disabled:bg-overlay disabled:text-ink-faint",
+  secondary: "bg-raised text-ink border border-border disabled:text-ink-faint",
+  ghost: "text-ink-muted hover:text-ink",
+  danger: "bg-danger-soft text-danger border border-danger/30",
 };
 
 // Rounded rectangles on the 10px control radius, never capsules.
@@ -45,9 +46,9 @@ export function buttonClasses({
   className?: string;
 } = {}): string {
   return cn(
-    "inline-flex items-center justify-center gap-2 font-medium whitespace-nowrap",
-    "transition-[background-color,border-color,transform] duration-150",
-    "active:scale-[0.98] disabled:cursor-not-allowed disabled:active:scale-100",
+    "spotlight relative isolate overflow-hidden inline-flex items-center justify-center gap-2 font-medium whitespace-nowrap",
+    // Gives under the finger: down to 0.97 in 90ms, back on release.
+    "transition-[color,transform] duration-[90ms] active:scale-[0.97] disabled:cursor-not-allowed disabled:active:scale-100",
     VARIANTS[variant],
     SIZES[size],
     fullWidth && "w-full",

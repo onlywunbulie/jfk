@@ -167,8 +167,39 @@
       inset 0 -1px 0 rgb(0 0 0 / 0.12),
       0 4px 14px -8px rgb(165 200 255 / 0.4);
   }
-  .bg-accent:is(:hover, :focus-visible):not(:disabled) {
-    filter: brightness(1.05);
+  /* Hover: a soft light follows the pointer across the button
+     (components/spotlight.tsx tells it where). Brighter on the ice-blue
+     button, a faint glow on the grey ones. Only where there's a pointer. */
+  .spotlight::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    background: radial-gradient(
+      90px circle at var(--spot-x, 50%) var(--spot-y, 50%),
+      rgb(255 255 255 / 0.09),
+      transparent 70%
+    );
+    transition: opacity 240ms ease;
+  }
+  .spotlight.bg-accent::before {
+    background: radial-gradient(
+      90px circle at var(--spot-x, 50%) var(--spot-y, 50%),
+      rgb(255 255 255 / 0.42),
+      transparent 70%
+    );
+  }
+  @media (hover: hover) {
+    .spotlight:hover:not(:disabled)::before {
+      opacity: 1;
+    }
+  }
+  /* The keyboard gets the light too, centred, so focus is just as clear. */
+  .spotlight:focus-visible:not(:disabled)::before {
+    opacity: 1;
   }
   /* A disabled button looks clearly off: plain grey, no depth. */
   .bg-accent:disabled {
