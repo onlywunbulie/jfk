@@ -134,6 +134,13 @@
       "when": 1795024514060,
       "tag": "0018_bitter_scrambler",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795043775932,
+      "tag": "0019_striped_moonstone",
+      "breakpoints": true
     }
   ]
 }

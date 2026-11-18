@@ -1,0 +1,1 @@
+ALTER TABLE "groups" ADD COLUMN "banner_url" text;

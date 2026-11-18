@@ -69,7 +69,10 @@ export const groups = pgTable(
     id: primaryId(),
     name: text("name").notNull(),
     description: text("description"),
+    /** The group picture, shown in the rail. Null: the rail shows the first letter. */
     avatarUrl: text("avatar_url"),
+    /** The wide image across the top of the sidebar. Null: an empty banner. */
+    bannerUrl: text("banner_url"),
     type: groupTypeEnum("type").notNull().default("TREASURY"),
     currency: text("currency").notNull().default("NGN"),
 

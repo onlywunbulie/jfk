@@ -719,6 +719,9 @@ export interface GroupSummary {
   safeAddress: string | null;
   /** Live from the ledger. Zero for a group that has never received money. */
   balance: GroupBalances;
+  /** The group picture and banner, or null for the fallbacks. */
+  avatarUrl: string | null;
+  bannerUrl: string | null;
 }
 
 /** Every group the user actively belongs to, for the home screen. */
@@ -732,6 +735,8 @@ export async function listGroupsForUser(userId: string): Promise<GroupSummary[]>
       role: groupMembers.role,
       currency: groups.currency,
       safeAddress: groups.safeAddress,
+      avatarUrl: groups.avatarUrl,
+      bannerUrl: groups.bannerUrl,
       contributionAmount: groupSettings.contributionAmount,
       cadence: groupSettings.cadence,
       intervalWeeks: groupSettings.intervalWeeks,
@@ -838,6 +843,8 @@ export async function getGroupDetail(
       status: groups.status,
       currency: groups.currency,
       safeAddress: groups.safeAddress,
+      avatarUrl: groups.avatarUrl,
+      bannerUrl: groups.bannerUrl,
       createdAt: groups.createdAt,
       contributionAmount: groupSettings.contributionAmount,
       cadence: groupSettings.cadence,
@@ -913,6 +920,50 @@ export async function deleteGroup(groupId: string, actorId: string, meta: { ip?:
       subjectType: "group",
       subjectId: groupId,
       after: { deletedBeforeBase: true },
+    });
+    return { ok: true as const };
+  });
+}
+
+export type GroupImageKind = "avatar" | "banner";
+export type SetGroupImageResult = { ok: true } | { ok: false; reason: "not_found" | "not_admin" | "bad_url" };
+
+/**
+ * Set or clear the group picture (the rail) or banner (the sidebar). Owners
+ * and admins only: it changes how the group looks to everyone, but moves no
+ * money, so it needs no vote. `url` is where the upload landed; null puts the
+ * fallback back (the first letter, the empty banner).
+ */
+export async function setGroupImage(
+  groupId: string,
+  actorId: string,
+  kind: GroupImageKind,
+  url: string | null,
+  meta: { ip?: string | null } = {},
+): Promise<SetGroupImageResult> {
+  if (url !== null && !/^https:\/\/[^\s"'<>]+$/.test(url)) return { ok: false, reason: "bad_url" };
+  const membership = await getMembership(groupId, actorId);
+  if (!membership || membership.role === null) return { ok: false, reason: "not_found" };
+  if (membership.role !== "OWNER" && membership.role !== "ADMIN") return { ok: false, reason: "not_admin" };
+
+  const column = kind === "avatar" ? "avatarUrl" : "bannerUrl";
+  return db.transaction(async (tx) => {
+    const [before] = await tx
+      .select({ url: groups[column], status: groups.status })
+      .from(groups)
+      .where(eq(groups.id, groupId))
+      .limit(1);
+    if (!before || before.status === "DISSOLVED") return { ok: false as const, reason: "not_found" as const };
+    await tx.update(groups).set({ [column]: url }).where(eq(groups.id, groupId));
+    await recordAudit(tx, {
+      action: "group.settings.updated",
+      actorId,
+      actorIp: meta.ip,
+      groupId,
+      subjectType: "group",
+      subjectId: groupId,
+      before: { [column]: before.url },
+      after: { [column]: url },
     });
     return { ok: true as const };
   });

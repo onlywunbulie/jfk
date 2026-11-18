@@ -12,6 +12,10 @@ import { ProfileModal } from "./profile-modal";
 export interface ShellGroup {
   id: string;
   name: string;
+  /** The group picture for the rail; null shows the first letter. */
+  avatarUrl: string | null;
+  /** The sidebar banner; null shows the empty banner. */
+  bannerUrl: string | null;
   memberCount: number;
   /** Shared pot or rotating savings: decides which channels it has. */
   kind: GroupKind;
@@ -276,7 +280,9 @@ function Rail({
                 label={group.name}
                 selected={group.id === currentId}
                 hasNew={Object.values(group.needsYou).some((n) => (n ?? 0) > 0)}
-              />
+              >
+                <GroupMark name={group.name} avatarUrl={group.avatarUrl} />
+              </RailItem>
             </li>
           ))}
         </ul>
@@ -300,6 +306,20 @@ function Rail({
       </div>
     </nav>
   );
+}
+
+/**
+ * The group in the rail: its picture filling the square, or its first letter
+ * when there isn't one. The picture is decorative; the square's label names it.
+ */
+function GroupMark({ name, avatarUrl }: { name: string; avatarUrl: string | null }) {
+  if (avatarUrl) {
+    // A user upload on Blob, already resized to a small square: the image optimiser adds nothing.
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={avatarUrl} alt="" aria-hidden="true" className="absolute inset-0 size-full rounded-[8px] object-cover" />;
+  }
+  const letter = Array.from(name.trim())[0]?.toUpperCase() ?? "?";
+  return <span className="text-base font-semibold">{letter}</span>;
 }
 
 /** A 43×41 square (the wireframe's 48px less 15%). Selected gets a 2px ice-blue outline. */
@@ -350,8 +370,7 @@ function SidebarCard({ current, pathname }: { current: ShellGroup; pathname: str
       aria-label={`${current.name} channels`}
       className="flex h-full w-full flex-col overflow-y-auto rounded-[var(--radius-control)] bg-canvas pb-[27px]"
     >
-      {/* The banner stays blank until a member uploads a real image. */}
-      <div aria-hidden="true" className="h-28 shrink-0 rounded-t-[var(--radius-control)] bg-border-strong" />
+      <Banner url={current.bannerUrl} />
 
       <div className="mt-[15px] p-[10px]">
         <div className="flex flex-col gap-8 px-[6px]">
@@ -359,6 +378,29 @@ function SidebarCard({ current, pathname }: { current: ShellGroup; pathname: str
         </div>
       </div>
     </aside>
+  );
+}
+
+/**
+ * The group's banner, or, before one is added, an empty one: a quiet wash of
+ * the accent over a fine dot grid, so the top of the card is designed, not grey.
+ */
+function Banner({ url }: { url: string | null }) {
+  const frame = "h-28 shrink-0 overflow-hidden rounded-t-[var(--radius-control)]";
+  if (url) {
+    // eslint-disable-next-line @next/next/no-img-element -- a user upload on Blob, already resized
+    return <img src={url} alt="" aria-hidden="true" className={cn(frame, "w-full object-cover")} />;
+  }
+  return (
+    <div
+      aria-hidden="true"
+      className={cn(frame, "bg-raised")}
+      style={{
+        backgroundImage:
+          "radial-gradient(120% 140% at 0% 0%, color-mix(in oklab, var(--color-accent) 22%, transparent), transparent 60%), radial-gradient(circle, color-mix(in oklab, var(--color-ink) 9%, transparent) 1px, transparent 1.5px)",
+        backgroundSize: "100% 100%, 14px 14px",
+      }}
+    />
   );
 }
 

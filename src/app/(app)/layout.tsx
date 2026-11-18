@@ -42,6 +42,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     return {
       id: group.id,
       name: group.name,
+      avatarUrl: group.avatarUrl,
+      bannerUrl: group.bannerUrl,
       memberCount: group.memberCount,
       kind: group.type,
       // "USDC 15000": the currency's code, then the amount, as the wireframe has it.

@@ -529,3 +529,39 @@ describe("choosing thresholds at creation", () => {
     }
   });
 });
+
+describe("setGroupImage", () => {
+  const URL = "https://abc.public.blob.vercel-storage.com/groups/x/avatar-1.webp";
+
+  it("lets the owner set and clear the picture and banner, and logs it", async () => {
+    const owner = await makeUser("geoffrey");
+    const { groupId } = await service.createGroup(owner, EMPIRE);
+
+    expect(await service.setGroupImage(groupId, owner, "avatar", URL)).toEqual({ ok: true });
+    expect(await service.setGroupImage(groupId, owner, "banner", URL)).toEqual({ ok: true });
+    let [summary] = await service.listGroupsForUser(owner);
+    expect(summary).toMatchObject({ avatarUrl: URL, bannerUrl: URL });
+
+    expect(await service.setGroupImage(groupId, owner, "avatar", null)).toEqual({ ok: true });
+    [summary] = await service.listGroupsForUser(owner);
+    expect(summary.avatarUrl).toBeNull();
+
+    const logged = await t.db.select().from(auditLogs).where(eq(auditLogs.action, "group.settings.updated"));
+    expect(logged).toHaveLength(3);
+  });
+
+  it("refuses plain members, outsiders and anything but an https address", async () => {
+    const owner = await makeUser("geoffrey");
+    const { groupId } = await service.createGroup(owner, EMPIRE);
+    const invite = await service.createInvite(groupId, owner);
+    if (!invite.ok) throw new Error("setup failed");
+    const chuka = await makeUser("chuka");
+    await service.acceptInvite(invite.code, chuka);
+    const stranger = await makeUser("stranger");
+
+    expect(await service.setGroupImage(groupId, chuka, "avatar", URL)).toEqual({ ok: false, reason: "not_admin" });
+    expect(await service.setGroupImage(groupId, stranger, "avatar", URL)).toEqual({ ok: false, reason: "not_found" });
+    expect(await service.setGroupImage(groupId, owner, "avatar", "javascript:alert(1)")).toEqual({ ok: false, reason: "bad_url" });
+    expect(await service.setGroupImage(groupId, owner, "avatar", "http://x.test/a.png")).toEqual({ ok: false, reason: "bad_url" });
+  });
+});
