@@ -6,6 +6,7 @@ import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Route } from "next";
 import { cn } from "@/lib/cn";
 import { DEFAULT_CHANNEL, MenuIcon, findChannel, sectionsFor, type GroupKind } from "./channels";
+import { AiNudge } from "./ai-nudge";
 import { ProfileModal } from "./profile-modal";
 
 export interface ShellGroup {
@@ -43,6 +44,7 @@ export function AppShell({
   groups,
   userInitial,
   profile,
+  aiNudge = false,
   children,
 }: {
   groups: ShellGroup[];
@@ -50,6 +52,8 @@ export function AppShell({
   userInitial: string;
   /** The profile's contents, rendered on the server, shown in the modal. */
   profile: ReactNode;
+  /** No AI connected yet: show the reminder above the page. */
+  aiNudge?: boolean;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -141,7 +145,10 @@ export function AppShell({
             </h1>
           </header>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 lg:px-8">{children}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 lg:px-8">
+            {aiNudge && <AiNudge onConnect={openProfile} />}
+            {children}
+          </div>
         </main>
       </div>
     </div>

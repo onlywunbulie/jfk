@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { signInHref } from "@/lib/auth/return-to";
 import { getCurrentUser } from "@/lib/auth/session";
 import { listGroupsForUser } from "@/modules/groups/service";
 import { countVotesAwaitingUser } from "@/modules/governance/service";
 import { countWaitingDrafts } from "@/modules/agents/drafts";
+import { getAiConnection } from "@/modules/agents/connection";
+import { AI_NUDGE_COOKIE } from "@/components/shell/ai-nudge-cookie";
 import { chainSummaries } from "@/modules/groups/onchain-summary";
 import { AppShell, type ShellGroup } from "@/components/shell/app-shell";
 import { ProfilePanel } from "@/components/shell/profile-panel";
@@ -22,11 +24,15 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   // Back to the page they asked for once signed in (see proxy.ts).
   if (!user) redirect(signInHref((await headers()).get("x-rallied-path")));
 
-  const [groups, waiting, drafts] = await Promise.all([
+  const [groups, waiting, drafts, connection, cookieStore] = await Promise.all([
     listGroupsForUser(user.id),
     countVotesAwaitingUser(user.id),
     countWaitingDrafts(user.id),
+    getAiConnection(user.id),
+    cookies(),
   ]);
+  // No AI connected and not snoozed: remind them. Rallied is built around one.
+  const aiNudge = connection === null && !cookieStore.has(AI_NUDGE_COOKIE);
   // Groups on Base: the vault and the votes waiting come from Base. The old
   // off-chain records only know about groups from before the move on-chain.
   const onBase = await chainSummaries(groups, user.walletAddress);
@@ -60,6 +66,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       groups={shellGroups}
       userInitial={user.displayName.trim().charAt(0).toUpperCase() || "?"}
       profile={<ProfilePanel user={user} />}
+      aiNudge={aiNudge}
     >
       {children}
     </AppShell>

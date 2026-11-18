@@ -29,7 +29,7 @@ function finish(start: Answers, typed: Record<string, string>): Answers {
 }
 
 describe("the create-group conversation", () => {
-  it("asks nine questions when the suggested rules are accepted", () => {
+  it("asks seven questions when the suggested rules are accepted", () => {
     expect(ids({})).toEqual([
       "name",
       "description",
@@ -38,9 +38,14 @@ describe("the create-group conversation", () => {
       "cadence",
       "dueDay",
       "rules",
-      "quorumPct",
-      "membersCanPropose",
     ]);
+  });
+
+  it("asks about turnout and who can suggest spending only when you set your own rules", () => {
+    expect(ids({ rules: "custom" })).toEqual(expect.arrayContaining(["quorumPct", "membersCanPropose"]));
+    const changed = answer({ rules: "custom", quorumPct: "100", membersCanPropose: "no" }, "rules", "recommended");
+    expect(changed.quorumPct).toBeUndefined();
+    expect(changed.membersCanPropose).toBeUndefined();
   });
 
   it("asks for a date in a monthly group and a weekday in a weekly one", () => {
@@ -181,7 +186,7 @@ describe("what gets posted at the end", () => {
       amount: "50000",
       cadence: "MONTHLY",
       dueDay: "1",
-      quorumPct: "40",
+      quorumPct: "60",
       membersCanPropose: "on",
       "threshold.FUND_RELEASE_SMALL": "500",
       "threshold.DISSOLVE_GROUP": "800",
@@ -202,7 +207,7 @@ describe("what gets posted at the end", () => {
   });
 
   it("leaves the checkbox field out entirely for admins-only", () => {
-    const answers = finish({}, { ...typed, membersCanPropose: "no" });
+    const answers = finish({}, { ...typed, rules: "custom", membersCanPropose: "no" });
     expect(toFormFields(answers).map(([name]) => name)).not.toContain("membersCanPropose");
   });
 });

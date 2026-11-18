@@ -90,6 +90,9 @@ const SHARE_WORDS: Record<number, string> = {
   1000: "Everyone",
 };
 
+/** The share of members who must take part, unless the creator picks another. */
+const DEFAULT_TURNOUT = "60";
+
 const SMALL_AMOUNT = "A small amount is up to one fifth (20%) of the group's money.";
 const ADMIN =
   "An admin is a member who helps run the group. Admins can't move money without a vote either.";
@@ -294,17 +297,31 @@ export function buildScript(answers: Answers): Question[] {
       kind: "choice",
       ask: "Now the voting. Nothing happens in the group unless enough members say yes. Here is how many I suggest for each thing:",
       detail: `${SMALL_AMOUNT} Anything more is a big amount. ${ADMIN} Choose carefully: once the group starts, changing a rule needs a vote too.`,
-      facts: rulesFor(answers).map(({ action, label }) => ({
-        label,
-        value: describeThreshold(DEFAULT_GOVERNANCE[action]),
-      })),
+      facts: [
+        ...rulesFor(answers).map(({ action, label }) => ({
+          label,
+          value: describeThreshold(DEFAULT_GOVERNANCE[action]),
+        })),
+        { label: "Must take part for a vote to count", value: describeTurnout(DEFAULT_TURNOUT) },
+        { label: "Who can suggest spending", value: "Any member" },
+      ],
       choices: [
         { value: "recommended", label: "Use these" },
         { value: "custom", label: "Let me choose" },
       ],
       display: (value) => (value === "custom" ? "Let me choose" : "Use these"),
     },
-    ...(answers.rules === "custom" ? thresholdQuestions(answers) : []),
+    // Turnout and who may suggest spending come with the suggested rules;
+    // only someone choosing their own is asked about them.
+    ...(answers.rules === "custom" ? [...thresholdQuestions(answers), ...votingQuestions()] : []),
+  ];
+
+  return questions;
+}
+
+/** The last two rules, asked only of someone who chose to set their own. */
+function votingQuestions(): ChoiceQuestion[] {
+  return [
     {
       id: "quorumPct",
       kind: "choice",
@@ -330,13 +347,11 @@ export function buildScript(answers: Answers): Question[] {
       display: (value) => (value === "no" ? "Admins only" : "Any member"),
     },
   ];
-
-  return questions;
 }
 
 /** How the turnout answer reads in the closing summary. */
 export function summariseTurnout(answers: Answers): string {
-  return describeTurnout(answers.quorumPct ?? "60");
+  return describeTurnout(answers.quorumPct ?? DEFAULT_TURNOUT);
 }
 
 /**
@@ -356,6 +371,8 @@ export function answer(answers: Answers, id: string, value: string): Answers {
   }
   if (id === "rules" && value === "recommended") {
     for (const action of ALL_GOVERNED_ACTIONS) delete next[thresholdId(action)];
+    delete next.quorumPct;
+    delete next.membersCanPropose;
   }
 
   return next;
@@ -386,7 +403,7 @@ export function toFormFields(answers: Answers): [name: string, value: string][] 
     ["cadence", scheduleOf(answers).cadence],
     ["intervalWeeks", String(scheduleOf(answers).intervalWeeks)],
     ["dueDay", answers.dueDay ?? "1"],
-    ["quorumPct", answers.quorumPct ?? "60"],
+    ["quorumPct", answers.quorumPct ?? DEFAULT_TURNOUT],
   ];
 
   // A checkbox in the original form: present when on, absent when off.

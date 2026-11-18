@@ -13,7 +13,7 @@ import { SetupProgress } from "../auth-frame";
 /**
  * Steps 2 and 3 of first-time setup. Step 2: what the group should call
  * them. Step 3: connect their AI, the point of Rallied, offered up front but
- * skippable with "Later".
+ * skippable with "Skip for now" (the app reminds them until they connect).
  *
  * Step 3 shows Rallied's real connector address; "I've added it" opens the
  * app (the connection itself finishes in Claude).
@@ -60,7 +60,7 @@ export function Setup({ initialName, mcpUrl, next = "/" }: { initialName: string
       <SetupProgress step={3} />
       <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tight text-ink">Connect your AI</h1>
       <p className="mt-3 mb-8 text-ink-muted">
-        Your AI pays your dues, votes and keeps you posted, within limits you choose. You can do it later in your profile.
+        Ask Claude for a group, a spend or a rule change in plain words. It drafts it, and you send it to a vote here. Once you allow it, it can pay your dues too. It can never vote or spend the group&rsquo;s money.
       </p>
 
       {!showSteps ? (
@@ -117,13 +117,10 @@ export function Setup({ initialName, mcpUrl, next = "/" }: { initialName: string
 
       <p className="mt-4 text-sm text-ink-faint">ChatGPT and Grok are coming.</p>
 
-      <button
-        type="button"
-        onClick={enterApp}
-        className="press mt-8 text-sm text-ink-muted underline decoration-ink-faint underline-offset-4 hover:text-ink hover:decoration-ink"
-      >
-        Later
-      </button>
+      <Button type="button" variant="secondary" fullWidth className="mt-8" onClick={enterApp}>
+        Skip for now
+      </Button>
+      <p className="mt-3 text-center text-sm text-ink-faint">You can connect it any time from your profile.</p>
     </div>
   );
 }

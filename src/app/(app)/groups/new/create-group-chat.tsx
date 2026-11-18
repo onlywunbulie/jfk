@@ -303,8 +303,28 @@ function LiveSummary({
       </SummarySection>
 
       <SummarySection title="Voting">
-        {row("quorumPct")}
-        {row("membersCanPropose")}
+        {custom ? (
+          <>
+            {row("quorumPct")}
+            {row("membersCanPropose")}
+          </>
+        ) : (
+          <>
+            {/* Part of the suggested rules: known once "Use these" is tapped. */}
+            <SummaryRow
+              label={SUMMARY_LABELS.quorumPct}
+              value={answers.rules === undefined ? null : summariseTurnout(answers)}
+              current={false}
+              onEdit={() => onEdit("rules")}
+            />
+            <SummaryRow
+              label={SUMMARY_LABELS.membersCanPropose}
+              value={answers.rules === undefined ? null : "Any member"}
+              current={false}
+              onEdit={() => onEdit("rules")}
+            />
+          </>
+        )}
       </SummarySection>
     </>
   );
