@@ -1,8 +1,6 @@
 import "server-only";
-import { eq } from "drizzle-orm";
 import { decodeAbiParameters, encodeFunctionData, getAddress, type Address, type Hex } from "viem";
 import { db } from "@/lib/db";
-import { groupSettings } from "@/lib/db/schema";
 import { CONTRACTS, shortAddress } from "@/lib/chain/addresses";
 import { jfkModuleAbi, safeAbi } from "@/lib/chain/abis";
 import { publicClient } from "@/lib/chain/client";
@@ -10,6 +8,7 @@ import { relayer } from "@/lib/chain/relayer";
 import { Money } from "@/lib/money";
 import { recordAudit } from "@/modules/audit/service";
 import { getGroupDetail, listMembers, type MemberView } from "./service";
+import { applyOnRallied } from "@/modules/groups/onchain-apply";
 
 /**
  * A group's votes, read from Base. For a group on Base the contract is the
@@ -274,14 +273,8 @@ export async function carryOut(userId: string, groupId: string, proposalId: stri
 
     const action = ACTIONS[proposal.action];
     await db.transaction(async (tx) => {
-      // Rallied's copy of the group's settings follows what Base now says.
-      if (action === "CHANGE_CONTRIBUTION") {
-        const [amount] = decodeAbiParameters([{ type: "uint256" }], proposal.payload);
-        await tx.update(groupSettings).set({ contributionAmount: amount }).where(eq(groupSettings.groupId, groupId));
-      } else if (action === "CHANGE_RULES") {
-        const [, quorum] = decodeAbiParameters([{ type: "uint16[9]" }, { type: "uint8" }, { type: "uint32" }, { type: "bool" }], proposal.payload);
-        await tx.update(groupSettings).set({ quorumPct: quorum }).where(eq(groupSettings.groupId, groupId));
-      }
+      // Rallied's own records follow what Base now says: settings, rules, members, a closed group.
+      await applyOnRallied(tx, groupId, action, proposal.payload);
       await recordAudit(tx, {
         action: "proposal.executed",
         actorId: userId,
