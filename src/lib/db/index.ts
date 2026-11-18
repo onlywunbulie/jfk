@@ -66,7 +66,7 @@ function createClient(): Database {
     // A pooled connection (Neon's "-pooler" host, or PgBouncer) hands each
     // query to whichever server connection is free, so a statement prepared
     // on one isn't there on the next. Plain queries work everywhere.
-    prepare: !/-pooler.|pgbouncer=true/.test(url),
+    prepare: !/-pooler\.|pgbouncer=true/.test(url),
   });
 
   return drizzlePostgres(client, { schema, casing: "snake_case" });

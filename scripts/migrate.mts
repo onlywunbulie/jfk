@@ -17,6 +17,14 @@ import { isEmbeddedUrl, resolveDataDir } from "../src/lib/db/embedded.js";
 config({ path: ".env.local" });
 config({ path: ".env" });
 
+// On Vercel this runs before every build (see "vercel-build" in package.json),
+// but only for the live site: a preview build must never change the real
+// database. Locally, VERCEL_ENV is unset and it always runs.
+if (process.argv.includes("--deploy") && process.env.VERCEL_ENV !== "production") {
+  console.log(`Skipping migrations: this is a ${process.env.VERCEL_ENV ?? "local"} build, not the live site.`);
+  process.exit(0);
+}
+
 const url = process.env.DATABASE_URL;
 if (!url) {
   console.error("DATABASE_URL is not set. Copy .env.example to .env.local.");
@@ -34,7 +42,8 @@ if (isEmbeddedUrl(url)) {
 } else {
   // A dedicated single-connection client: migrations must run serially, and
   // this one is closed as soon as they finish.
-  const client = postgres(url, { max: 1 });
+  // A pooled address (Neon's "-pooler") can't keep prepared statements; see src/lib/db.
+  const client = postgres(url, { max: 1, prepare: !/-pooler\.|pgbouncer=true/.test(url) });
   await migratePostgres(drizzlePostgres(client), { migrationsFolder });
   await client.end();
   console.log("✓ Migrations applied to remote Postgres");
