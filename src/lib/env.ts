@@ -51,10 +51,12 @@ const serverEnvSchema = z.object({
    */
   PAYMASTER_URL: z.url().optional(),
   /**
-   * Vercel Blob, for group pictures and banners. Vercel sets it once a Blob
-   * store is connected to the project. Without it, uploads say they aren't
-   * set up and groups keep their first letter and empty banner.
+   * Vercel Blob, for group pictures and banners. On Vercel, connecting a
+   * store sets BLOB_STORE_ID (signed in with Vercel's OIDC); locally, a
+   * BLOB_READ_WRITE_TOKEN works instead. With neither, uploads say they
+   * aren't set up and groups keep their first letter and empty banner.
    */
+  BLOB_STORE_ID: z.string().optional(),
   BLOB_READ_WRITE_TOKEN: z.string().optional(),
 });
 

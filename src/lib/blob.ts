@@ -8,13 +8,23 @@ import type { ImageKind } from "@/lib/shrink-image";
  * them as plain images; the address carries a random suffix, so nobody can
  * guess another group's. Only WebP that `isWebp` has checked ever reaches
  * here (see the upload action).
+ *
+ * Credentials: on Vercel, a connected store sets BLOB_STORE_ID and the
+ * package signs in with Vercel's own short-lived identity (OIDC), no secret
+ * to keep. Elsewhere (local), a BLOB_READ_WRITE_TOKEN works instead. The
+ * package picks whichever is there; nothing is passed in by hand.
  */
+
+/** Whether any Blob credentials are present, so uploads can say plainly when they aren't. */
+function configured(): boolean {
+  const { BLOB_READ_WRITE_TOKEN, BLOB_STORE_ID } = env();
+  return Boolean(BLOB_READ_WRITE_TOKEN || BLOB_STORE_ID);
+}
 
 export type StoreResult = { ok: true; url: string } | { ok: false; reason: "not_configured" | "failed" };
 
 export async function storeGroupImage(groupId: string, kind: ImageKind, bytes: Uint8Array): Promise<StoreResult> {
-  const token = env().BLOB_READ_WRITE_TOKEN;
-  if (!token) return { ok: false, reason: "not_configured" };
+  if (!configured()) return { ok: false, reason: "not_configured" };
   try {
     const blob = await put(`groups/${groupId}/${kind}.webp`, Buffer.from(bytes), {
       access: "public",
@@ -22,7 +32,6 @@ export async function storeGroupImage(groupId: string, kind: ImageKind, bytes: U
       addRandomSuffix: true,
       // A replaced image gets a new address, so it can be cached for good.
       cacheControlMaxAge: 60 * 60 * 24 * 365,
-      token,
     });
     return { ok: true, url: blob.url };
   } catch (error) {
@@ -43,10 +52,9 @@ export function isStoredImage(url: string): boolean {
 
 /** Remove a replaced image. Best effort: a leftover file costs pennies, a failed swap costs the user. */
 export async function removeStoredImage(url: string | null): Promise<void> {
-  const token = env().BLOB_READ_WRITE_TOKEN;
-  if (!url || !token || !isStoredImage(url)) return;
+  if (!url || !configured() || !isStoredImage(url)) return;
   try {
-    await del(url, { token });
+    await del(url);
   } catch (error) {
     console.error("[blob] delete failed", error instanceof Error ? error.message : error);
   }
