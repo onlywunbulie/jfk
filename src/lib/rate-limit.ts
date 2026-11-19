@@ -56,6 +56,8 @@ export const LIMITS = {
   paymaster: { limit: 30, windowSeconds: 60 },
   /** Preparing anything for the wallet, or Rallied acting on Base for you: per account. */
   chainAction: { limit: 30, windowSeconds: 60 },
+  /** Uploading a group picture or banner: per account. Each one is a stored file. */
+  imageUpload: { limit: 20, windowSeconds: 3600 },
 } as const;
 
 /**

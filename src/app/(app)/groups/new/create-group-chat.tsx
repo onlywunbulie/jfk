@@ -140,6 +140,10 @@ export function CreateGroupChat({ heading }: { heading: React.ReactNode }) {
                     </p>
                     <Summary answers={answers} />
                   </div>
+                  <p className="mt-3 text-sm text-ink-muted">
+                    Once it&rsquo;s created, you can add a picture and a banner so
+                    friends know it at a glance.
+                  </p>
                 </AgentBubble>
 
                 <form action={formAction} className="space-y-3 pl-11">

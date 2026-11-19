@@ -926,13 +926,14 @@ export async function deleteGroup(groupId: string, actorId: string, meta: { ip?:
 }
 
 export type GroupImageKind = "avatar" | "banner";
-export type SetGroupImageResult = { ok: true } | { ok: false; reason: "not_found" | "not_admin" | "bad_url" };
+export type SetGroupImageResult = { ok: true; previous: string | null } | { ok: false; reason: "not_found" | "not_admin" | "bad_url" };
 
 /**
  * Set or clear the group picture (the rail) or banner (the sidebar). Owners
  * and admins only: it changes how the group looks to everyone, but moves no
  * money, so it needs no vote. `url` is where the upload landed; null puts the
- * fallback back (the first letter, the empty banner).
+ * fallback back (the first letter, the empty banner). Returns the address
+ * it replaced, so the caller can remove the old file.
  */
 export async function setGroupImage(
   groupId: string,
@@ -965,6 +966,6 @@ export async function setGroupImage(
       before: { [column]: before.url },
       after: { [column]: url },
     });
-    return { ok: true as const };
+    return { ok: true as const, previous: before.url };
   });
 }

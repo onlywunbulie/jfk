@@ -371,7 +371,8 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         "It moves no money and isn't on Base yet. Put it on Base with start_on_base when the user asks, usually once friends have joined (anyone joining after needs a vote). " +
         "Before creating, ask the user how often everyone pays: every week, every 2 weeks, every 3 weeks or every month " +
         "(every 2 or 3 months isn't available yet; it comes with Rallied's next contract). " +
-        "Confirm the name, kind, amount, how often and due day with the user first. Then offer an invite link.",
+        "Confirm the name, kind, amount, how often and due day with the user first. " +
+        "Once it's created, say in one line that they can add a group picture and banner at add_picture_and_banner (you can't upload images yourself), then offer the suggested next steps.",
       inputSchema: {
         name: z.string().min(1).max(60).describe("The group's name, e.g. 'Detty December'"),
         kind: z.enum(["shared_pot", "rotating_savings"]),
@@ -409,6 +410,8 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         created: name.trim(),
         group_id: groupId,
         open_in_rallied: `${grant.origin}/groups/${groupId}/about`,
+        // Pictures are picked and uploaded in Rallied: the AI only passes the link on.
+        add_picture_and_banner: `${grant.origin}/groups/${groupId}/about#picture`,
         // Start on Base after friends join (later joiners need a vote), or now if it's just the user.
         suggested_next: [`Invite friends to ${name.trim()}`, `Start ${name.trim()} on Base now (just me for now)`],
       });

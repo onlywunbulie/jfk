@@ -50,6 +50,12 @@ const serverEnvSchema = z.object({
    * the browser (the browser goes through Rallied's own proxy).
    */
   PAYMASTER_URL: z.url().optional(),
+  /**
+   * Vercel Blob, for group pictures and banners. Vercel sets it once a Blob
+   * store is connected to the project. Without it, uploads say they aren't
+   * set up and groups keep their first letter and empty banner.
+   */
+  BLOB_READ_WRITE_TOKEN: z.string().optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

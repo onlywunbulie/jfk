@@ -537,12 +537,12 @@ describe("setGroupImage", () => {
     const owner = await makeUser("geoffrey");
     const { groupId } = await service.createGroup(owner, EMPIRE);
 
-    expect(await service.setGroupImage(groupId, owner, "avatar", URL)).toEqual({ ok: true });
-    expect(await service.setGroupImage(groupId, owner, "banner", URL)).toEqual({ ok: true });
+    expect(await service.setGroupImage(groupId, owner, "avatar", URL)).toEqual({ ok: true, previous: null });
+    expect(await service.setGroupImage(groupId, owner, "banner", URL)).toEqual({ ok: true, previous: null });
     let [summary] = await service.listGroupsForUser(owner);
     expect(summary).toMatchObject({ avatarUrl: URL, bannerUrl: URL });
 
-    expect(await service.setGroupImage(groupId, owner, "avatar", null)).toEqual({ ok: true });
+    expect(await service.setGroupImage(groupId, owner, "avatar", null)).toEqual({ ok: true, previous: URL });
     [summary] = await service.listGroupsForUser(owner);
     expect(summary.avatarUrl).toBeNull();
 

@@ -294,3 +294,14 @@
     padding-bottom: max(env(safe-area-inset-bottom), 0.5rem);
   }
 }
+
+/*
+ * A group's banner before one is added: a quiet wash of the accent from the
+ * top-left over a fine dot grid. Used in the sidebar and the #about preview.
+ */
+.empty-banner {
+  background-image:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in oklab, var(--color-accent) 22%, transparent), transparent 60%),
+    radial-gradient(circle, color-mix(in oklab, var(--color-ink) 9%, transparent) 1px, transparent 1.5px);
+  background-size: 100% 100%, 14px 14px;
+}

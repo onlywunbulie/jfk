@@ -392,15 +392,7 @@ function Banner({ url }: { url: string | null }) {
     return <img src={url} alt="" aria-hidden="true" className={cn(frame, "w-full object-cover")} />;
   }
   return (
-    <div
-      aria-hidden="true"
-      className={cn(frame, "bg-raised")}
-      style={{
-        backgroundImage:
-          "radial-gradient(120% 140% at 0% 0%, color-mix(in oklab, var(--color-accent) 22%, transparent), transparent 60%), radial-gradient(circle, color-mix(in oklab, var(--color-ink) 9%, transparent) 1px, transparent 1.5px)",
-        backgroundSize: "100% 100%, 14px 14px",
-      }}
-    />
+<div aria-hidden="true" className={cn(frame, "empty-banner bg-raised")} />
   );
 }
 

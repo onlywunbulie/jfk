@@ -7,3 +7,9 @@ export function requestIp(headers: Headers): string {
   const ip = headers.get("x-forwarded-for")?.split(",")[0]?.trim() || headers.get("x-real-ip") || "";
   return /^[0-9a-fA-F.:]{3,45}$/.test(ip) ? ip : "unknown";
 }
+
+/** The same address for an audit row, whose column only takes a real IP: null when there isn't one. */
+export function auditIp(headers: Headers): string | null {
+  const ip = requestIp(headers);
+  return ip === "unknown" ? null : ip;
+}
