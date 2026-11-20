@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
+import { cn } from "@/lib/cn";
 
 /**
  * The profile, as a modal over whatever screen the user is on. A native
@@ -8,8 +9,24 @@ import { useEffect, useRef, type ReactNode } from "react";
  * it and the page behind can't be clicked. Tapping the dim area outside also
  * closes it. A centred panel on desktop; a sheet sliding up from the bottom on
  * a phone.
+ *
+ * Also holds the group profile (`wide`, with its own title and close label).
  */
-export function ProfileModal({ open, onClose, children }: { open: boolean; onClose: () => void; children: ReactNode }) {
+export function ProfileModal({
+  open,
+  onClose,
+  children,
+  labelledBy = "profile-title",
+  closeLabel = "Close your profile",
+  wide = false,
+}: {
+  open: boolean;
+  onClose: () => void;
+  children: ReactNode;
+  labelledBy?: string;
+  closeLabel?: string;
+  wide?: boolean;
+}) {
   const dialog = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -22,7 +39,7 @@ export function ProfileModal({ open, onClose, children }: { open: boolean; onClo
   return (
     <dialog
       ref={dialog}
-      aria-labelledby="profile-title"
+      aria-labelledby={labelledBy}
       onClose={onClose}
       onCancel={(event) => {
         event.preventDefault();
@@ -32,7 +49,10 @@ export function ProfileModal({ open, onClose, children }: { open: boolean; onClo
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
-      className="profile-modal m-0 mt-auto max-h-[90dvh] w-full max-w-none overflow-y-auto rounded-t-[var(--radius-sheet)] border border-border bg-surface p-0 text-ink backdrop:bg-black/60 sm:m-auto sm:max-h-[85dvh] sm:w-[min(36rem,calc(100vw-2rem))] sm:rounded-[var(--radius-big)]"
+      className={cn(
+        "profile-modal m-0 mt-auto outline-none max-h-[90dvh] w-full max-w-none overflow-y-auto rounded-t-[var(--radius-sheet)] border border-border bg-surface p-0 text-ink backdrop:bg-black/60 sm:m-auto sm:max-h-[85dvh] sm:rounded-[var(--radius-big)]",
+        wide ? "sm:w-[min(52rem,calc(100vw-2rem))]" : "sm:w-[min(36rem,calc(100vw-2rem))]",
+      )}
     >
       <div className="relative p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:p-8">
         {/* The grab bar says "swipe me" on a phone. */}
@@ -40,7 +60,7 @@ export function ProfileModal({ open, onClose, children }: { open: boolean; onClo
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close your profile"
+          aria-label={closeLabel}
           className="press absolute top-4 right-4 grid size-10 place-items-center rounded-[var(--radius-control)] text-ink-muted hover:bg-raised hover:text-ink"
         >
           <svg viewBox="0 0 16 16" aria-hidden="true" className="size-4" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round">

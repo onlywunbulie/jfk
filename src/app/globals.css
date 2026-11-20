@@ -289,6 +289,30 @@
     transform: scale(0.97);
   }
 
+  /* Unsaved changes, and someone tried to leave: the save bar shakes once. */
+  @keyframes jfk-shake {
+    0%,
+    100% {
+      transform: none;
+    }
+    20%,
+    60% {
+      transform: translateX(-6px);
+    }
+    40%,
+    80% {
+      transform: translateX(6px);
+    }
+  }
+  .nudge-shake {
+    animation: jfk-shake 420ms var(--ease-out-quint);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .nudge-shake {
+      animation: none;
+    }
+  }
+
   /* Safe-area padding for anything pinned to the bottom on notched phones. */
   .pb-safe {
     padding-bottom: max(env(safe-area-inset-bottom), 0.5rem);
@@ -297,11 +321,25 @@
 
 /*
  * A group's banner before one is added: a quiet wash of the accent from the
- * top-left over a fine dot grid. Used in the sidebar and the #about preview.
+ * top-left over a fine dot grid. Used in the sidebar and the group profile preview.
  */
 .empty-banner {
   background-image:
     radial-gradient(120% 140% at 0% 0%, color-mix(in oklab, var(--color-accent) 22%, transparent), transparent 60%),
     radial-gradient(circle, color-mix(in oklab, var(--color-ink) 9%, transparent) 1px, transparent 1.5px);
   background-size: 100% 100%, 14px 14px;
+}
+
+/*
+ * Scrollbars: thin, and invisible until the pointer is over the area that
+ * scrolls. :hover also matches every ancestor of what's under the pointer,
+ * so the scrolling box shows its bar exactly while it can be scrolled. The
+ * space stays reserved, so nothing shifts when the bar appears.
+ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+*:hover {
+  scrollbar-color: var(--color-border-strong) transparent;
 }

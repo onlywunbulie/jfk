@@ -92,8 +92,8 @@ export async function createGroupAction(
 
   revalidatePath("/");
   revalidatePath("/groups");
-  // To #about, where the starter can add a picture and banner straight away.
-  redirect(`/groups/${groupId}/about#picture`);
+  // Into the new group with its profile open, so the starter can add a picture and banner straight away.
+  redirect(`/groups/${groupId}/about?group-profile=1`);
 }
 
 export async function createInviteAction(

@@ -7,6 +7,8 @@ import type { Route } from "next";
 import { cn } from "@/lib/cn";
 import { DEFAULT_CHANNEL, MenuIcon, findChannel, sectionsFor, type GroupKind } from "./channels";
 import { AiNudge } from "./ai-nudge";
+import { GroupProfile } from "./group-profile";
+import { EditPencilIcon, GroupIcon, WalletIcon } from "@/components/ui/iconoir";
 import { ProfileModal } from "./profile-modal";
 
 export interface ShellGroup {
@@ -16,6 +18,8 @@ export interface ShellGroup {
   avatarUrl: string | null;
   /** The sidebar banner; null shows the empty banner. */
   bannerUrl: string | null;
+  /** Owners and admins: may change the picture and banner. */
+  canEdit: boolean;
   memberCount: number;
   /** Shared pot or rotating savings: decides which channels it has. */
   kind: GroupKind;
@@ -69,10 +73,24 @@ export function AppShell({
     (current !== null && findChannel(match?.[2] ?? DEFAULT_CHANNEL) !== undefined) || pathname === "/groups/new";
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  // The group profile (picture and banner): owners and admins only.
+  const [groupProfileOpen, setGroupProfileOpen] = useState(false);
+  const [groupDirty, setGroupDirty] = useState(false);
+  const [attention, setAttention] = useState(0);
   useRefreshOnReturn();
   const openProfile = () => {
     setMenuOpen(false);
     setProfileOpen(true);
+  };
+  const openGroupProfile = () => {
+    setMenuOpen(false);
+    setAttention(0);
+    setGroupProfileOpen(true);
+  };
+  // Leaving with changes unsaved shakes the save bar instead, as in Discord.
+  const closeGroupProfile = () => {
+    if (groupDirty) setAttention((n) => n + 1);
+    else setGroupProfileOpen(false);
   };
 
   // Going somewhere closes the menu. Keyed on the path, so it only fires on a
@@ -105,6 +123,24 @@ export function AppShell({
         <OpenProfileFromLink onOpen={openProfile} />
       </Suspense>
 
+      {current?.canEdit && (
+        <ProfileModal
+          open={groupProfileOpen}
+          onClose={closeGroupProfile}
+          labelledBy="group-profile-title"
+          closeLabel="Close the group profile"
+          wide
+        >
+          {/* Keyed by group, so moving between groups starts afresh. */}
+          <GroupProfile key={current.id} group={current} attention={attention} onDirtyChange={setGroupDirty} />
+        </ProfileModal>
+      )}
+      {current?.canEdit && (
+        <Suspense fallback={null}>
+          <OpenProfileFromLink onOpen={openGroupProfile} param="group-profile" />
+        </Suspense>
+      )}
+
       {/* Phone: the rail and, inside a group, its sidebar card, sliding in over the page. */}
       <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)}>
         <Rail
@@ -117,7 +153,7 @@ export function AppShell({
         />
         {current && (
           <div className="flex min-w-0 flex-1 rounded-[var(--radius-control)] bg-raised p-3">
-            <SidebarCard current={current} pathname={pathname} />
+            <SidebarCard current={current} pathname={pathname} onEditProfile={openGroupProfile} />
           </div>
         )}
       </MobileMenu>
@@ -126,7 +162,7 @@ export function AppShell({
         {/* The channels card belongs to a group. Outside one (settings, profile), the main card takes the space. */}
         {current && (
           <div className="hidden w-[var(--sidebar-width)] shrink-0 lg:flex">
-            <SidebarCard current={current} pathname={pathname} />
+            <SidebarCard current={current} pathname={pathname} onEditProfile={openGroupProfile} />
           </div>
         )}
 
@@ -189,17 +225,17 @@ function useRefreshOnReturn() {
  * address so a refresh doesn't reopen it. Kept apart so reading the query
  * sits inside its own Suspense boundary.
  */
-function OpenProfileFromLink({ onOpen }: { onOpen: () => void }) {
+function OpenProfileFromLink({ onOpen, param = "profile" }: { onOpen: () => void; param?: string }) {
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const wanted = params.get("profile") === "1";
+  const wanted = params.get(param) === "1";
 
   useEffect(() => {
     if (!wanted) return;
     onOpen();
     const rest = new URLSearchParams(params.toString());
-    rest.delete("profile");
+    rest.delete(param);
     const query = rest.toString();
     router.replace((query ? `${pathname}?${query}` : pathname) as Route, { scroll: false });
     // onOpen is stable enough for this: it only sets state.
@@ -364,17 +400,33 @@ function RailItem({
 // The sidebar card
 // ---------------------------------------------------------------------------
 
-function SidebarCard({ current, pathname }: { current: ShellGroup; pathname: string }) {
+function SidebarCard({ current, pathname, onEditProfile }: { current: ShellGroup; pathname: string; onEditProfile: () => void }) {
   return (
     <aside
       aria-label={`${current.name} channels`}
-      className="flex h-full w-full flex-col overflow-y-auto rounded-[var(--radius-control)] bg-canvas pb-[27px]"
+      className="flex h-full w-full flex-col overflow-hidden rounded-[var(--radius-control)] bg-canvas"
     >
-      <Banner url={current.bannerUrl} />
+      {/* The banner stays put and spans the whole card; only the channels below it scroll. */}
+      <div className="relative shrink-0">
+        <Banner url={current.bannerUrl} />
+        {current.canEdit && (
+          <button
+            type="button"
+            onClick={onEditProfile}
+            title="Edit the group picture and banner"
+            aria-label="Edit the group picture and banner"
+            className="press absolute top-2 right-2 grid size-8 place-items-center rounded-[var(--radius-control)] bg-black/45 text-white/85 backdrop-blur-sm transition-colors hover:bg-black/65 hover:text-white"
+          >
+            <EditPencilIcon className="size-4" />
+          </button>
+        )}
+      </div>
 
-      <div className="mt-[15px] p-[10px]">
-        <div className="flex flex-col gap-8 px-[6px]">
-          <GroupSections group={current} pathname={pathname} />
+      <div className="min-h-0 flex-1 overflow-y-auto pb-[27px]">
+        <div className="mt-[15px] p-[10px]">
+          <div className="flex flex-col gap-8 px-[6px]">
+            <GroupSections group={current} pathname={pathname} />
+          </div>
         </div>
       </div>
     </aside>
@@ -386,7 +438,7 @@ function SidebarCard({ current, pathname }: { current: ShellGroup; pathname: str
  * the accent over a fine dot grid, so the top of the card is designed, not grey.
  */
 function Banner({ url }: { url: string | null }) {
-  const frame = "h-28 shrink-0 overflow-hidden rounded-t-[var(--radius-control)]";
+  const frame = "block h-28 w-full shrink-0 overflow-hidden";
   if (url) {
     // eslint-disable-next-line @next/next/no-img-element -- a user upload on Blob, already resized
     return <img src={url} alt="" aria-hidden="true" className={cn(frame, "w-full object-cover")} />;
@@ -401,8 +453,8 @@ function GroupSections({ group, pathname }: { group: ShellGroup; pathname: strin
   return (
     <>
       <Section label="Group Stats" gap="gap-4">
-        <Stat>Balance: {group.balance}</Stat>
-        <Stat>Members: {group.memberCount}</Stat>
+        <Stat icon={<WalletIcon className="size-5" />}>Balance: {group.balance}</Stat>
+        <Stat icon={<GroupIcon className="size-5" />}>Members: {group.memberCount}</Stat>
       </Section>
 
       {sectionsFor(group.kind).map((section) => (
@@ -432,10 +484,10 @@ function Section({ label, gap = "gap-3", children }: { label: string; gap?: stri
 }
 
 /** Group stats are information, not links, so they never look clickable. */
-function Stat({ children }: { children: ReactNode }) {
+function Stat({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
     <li className="flex h-5 items-center gap-[7px] px-[10px] text-base text-ink">
-      <Dot />
+      <span className="shrink-0 text-ink-muted">{icon}</span>
       <span className="truncate tabular-nums">{children}</span>
     </li>
   );

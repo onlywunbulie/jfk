@@ -27,7 +27,6 @@ import { autopayStatus } from "@/modules/groups/onchain-autopay";
 import { readHistory } from "@/modules/groups/onchain-history";
 import { Dues } from "./dues";
 import { DeleteGroup } from "./delete-group";
-import { GroupLook } from "./group-look";
 import { everyText } from "@/lib/schedule-text";
 import { cyclePeriodFor } from "@/modules/contributions/schedule";
 
@@ -164,11 +163,6 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
               members={onChain.members}
               inviteHref={`/groups/${group.id}/members`}
             />
-          </div>
-        )}
-        {(group.role === "OWNER" || group.role === "ADMIN") && (
-          <div className="mt-6 max-w-xl">
-            <GroupLook groupId={group.id} groupName={group.name} avatarUrl={group.avatarUrl} bannerUrl={group.bannerUrl} />
           </div>
         )}
         {!group.safeAddress && group.role === "OWNER" && (

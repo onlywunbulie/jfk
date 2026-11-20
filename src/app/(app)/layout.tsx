@@ -44,6 +44,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       name: group.name,
       avatarUrl: group.avatarUrl,
       bannerUrl: group.bannerUrl,
+      canEdit: group.role === "OWNER" || group.role === "ADMIN",
       memberCount: group.memberCount,
       kind: group.type,
       // "USDC 15000": the currency's code, then the amount, as the wireframe has it.

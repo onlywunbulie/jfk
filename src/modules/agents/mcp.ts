@@ -411,7 +411,7 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         group_id: groupId,
         open_in_rallied: `${grant.origin}/groups/${groupId}/about`,
         // Pictures are picked and uploaded in Rallied: the AI only passes the link on.
-        add_picture_and_banner: `${grant.origin}/groups/${groupId}/about#picture`,
+        add_picture_and_banner: `${grant.origin}/groups/${groupId}/about?group-profile=1`,
         // Start on Base after friends join (later joiners need a vote), or now if it's just the user.
         suggested_next: [`Invite friends to ${name.trim()}`, `Start ${name.trim()} on Base now (just me for now)`],
       });
