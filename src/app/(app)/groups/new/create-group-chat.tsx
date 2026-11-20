@@ -476,7 +476,7 @@ function AgentBubble({
           </span>
         </p>
         <span className="sr-only">Rall asks: </span>
-        <div className="rounded-3xl bg-raised px-5 py-4">{children}</div>
+        <div className="rounded-[var(--radius-big)] bg-raised px-5 py-4">{children}</div>
         {counter && (
           <p className="mt-1.5 pl-1 text-[0.6875rem] text-ink-faint">{counter}</p>
         )}
@@ -502,7 +502,7 @@ function UserBubble({
       >
         <span className="sr-only">You answered: </span>
         {/* The same rounded rectangle as Rall's bubble: same corners, same padding. */}
-        <span className="inline-block rounded-3xl bg-ink px-5 py-4 text-left font-medium break-words text-canvas transition-colors group-hover:bg-white">
+        <span className="inline-block rounded-[var(--radius-big)] bg-ink px-5 py-4 text-left font-medium break-words text-canvas transition-colors group-hover:bg-white">
           {children}
         </span>
         <span className="mt-1 block pr-1 text-[0.6875rem] text-ink-faint transition-colors group-hover:text-ink-muted">
@@ -577,9 +577,9 @@ function Composer({
 
       <div
         className={cn(
-          // A pill, solid enough that the thread scrolling underneath never
+          // A rounded box, solid enough that the thread scrolling underneath never
           // shows through the box you are typing in.
-          "flex items-center gap-2 rounded-full border border-border bg-raised py-1.5 pr-1.5 pl-3 transition-colors focus-within:border-border-strong",
+          "flex items-center gap-2 rounded-[var(--radius-control)] border border-border bg-raised py-1.5 pr-1.5 pl-3 transition-colors focus-within:border-border-strong",
           !active && "[&>*]:opacity-50",
         )}
       >
@@ -614,7 +614,7 @@ function Composer({
             type="button"
             variant="ghost"
             onClick={() => onAnswer("")}
-            className="h-10 shrink-0 rounded-full px-3"
+            className="h-10 shrink-0 rounded-[var(--radius-control)] px-3"
           >
             {question.skipLabel}
           </Button>
@@ -668,13 +668,12 @@ function ChoiceAnswer({
           onClick={() => onAnswer(choice.value)}
           aria-pressed={selected === choice.value}
           className={cn(
-            // Pills, like the typing field. A choice with an explanation
-            // under it is too tall for a full pill, so it gets the same
-            // generous rounding as Rall's bubble instead.
+            // Rounded rectangles like the typing field; a choice with an
+            // explanation under it gets the bubble's larger corners.
             "press border border-border bg-raised text-left transition-colors duration-150",
             "hover:border-border-strong hover:bg-overlay",
             selected === choice.value && "border-border-strong bg-overlay",
-            descriptive ? "block w-full rounded-3xl px-5 py-4" : "rounded-full px-4 py-2.5",
+            descriptive ? "block w-full rounded-[var(--radius-big)] px-5 py-4" : "rounded-[var(--radius-control)] px-4 py-2.5",
           )}
         >
           <span className="text-sm font-medium text-ink">{choice.label}</span>

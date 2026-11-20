@@ -57,7 +57,7 @@ export function AppShell({
 }: {
   groups: ShellGroup[];
   /** The signed-in user's initial, for the profile square. */
-  userInitial: string;
+  userInitial: ReactNode;
   /** The profile's contents, rendered on the server, shown in the modal. */
   profile: ReactNode;
   /** No AI connected yet: show the reminder above the page. */
@@ -296,7 +296,7 @@ function Rail({
   groups: ShellGroup[];
   currentId: string | null;
   pathname: string;
-  userInitial: string;
+  userInitial: ReactNode;
   profileOpen: boolean;
   onOpenProfile: () => void;
 }) {
@@ -520,7 +520,7 @@ function ChannelLink({ href, active, count = 0, children }: { href: Route; activ
         <Hash />
         <span className="min-w-0 flex-1 truncate">{children}</span>
         {count > 0 && (
-          <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-danger px-1.5 text-xs font-semibold text-white tabular-nums">
+          <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-[4px] bg-danger px-1.5 text-xs font-semibold text-white tabular-nums">
             {count > 99 ? "99+" : count}
             <span className="sr-only"> waiting for you</span>
           </span>

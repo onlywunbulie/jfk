@@ -47,7 +47,7 @@ export function StartOnChain({
             </span>
             <span
               className={cn(
-                "shrink-0 rounded-full px-2 py-0.5 text-[0.6875rem] font-medium",
+                "shrink-0 rounded-[4px] px-2 py-0.5 text-[0.6875rem] font-medium",
                 member.hasWallet ? "bg-inflow-soft text-inflow" : "bg-pending-soft text-pending",
               )}
             >

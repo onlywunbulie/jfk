@@ -48,7 +48,7 @@ function TypeBadge({ type }: { type: GroupSummary["type"] }) {
   return (
     <span
       className={
-        "shrink-0 rounded-full px-2.5 py-1 text-[0.6875rem] font-medium " +
+        "shrink-0 rounded-[4px] px-2.5 py-1 text-[0.6875rem] font-medium " +
         (rotating
           ? "bg-held-soft text-held"
           : "bg-white/10 text-ink")

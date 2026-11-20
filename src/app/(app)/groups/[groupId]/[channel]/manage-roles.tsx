@@ -297,7 +297,7 @@ function ChangeRow({
         </span>
         <span
           className={cn(
-            "shrink-0 rounded-full px-2 py-0.5 text-xs",
+            "shrink-0 rounded-[4px] px-2 py-0.5 text-xs",
             tone === "inflow" ? "bg-inflow-soft text-inflow" : tone === "muted" ? "bg-overlay text-ink-faint" : "bg-pending-soft text-pending",
           )}
         >

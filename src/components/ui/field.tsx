@@ -27,7 +27,7 @@ export function Field({ label, hint, error, className, id, ...props }: FieldProp
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
         className={cn(
-          "h-12 w-full rounded-xl border bg-surface px-4 text-ink",
+          "h-12 w-full rounded-[var(--radius-control)] border bg-surface px-4 text-ink",
           "placeholder:text-ink-faint",
           "transition-colors duration-150",
           error

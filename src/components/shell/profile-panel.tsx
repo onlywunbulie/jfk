@@ -1,6 +1,9 @@
 import type { SessionUser } from "@/lib/auth/session";
 import { Button } from "@/components/ui/button";
 import { AiConnection } from "@/components/ai-connection";
+import { PersonInitial } from "@/components/person-initial";
+import { NameEditor } from "./name-editor";
+import { isWalletName } from "@/lib/names";
 import { EXPLORER_URL, shortAddress } from "@/lib/chain/addresses";
 import { signOutAction } from "@/app/(app)/actions";
 import { headers } from "next/headers";
@@ -32,11 +35,11 @@ export async function ProfilePanel({ user }: { user: SessionUser }) {
           aria-hidden="true"
           className="grid size-14 shrink-0 place-items-center rounded-full bg-overlay text-xl font-semibold text-ink"
         >
-          {user.displayName.trim().charAt(0).toUpperCase() || "?"}
+          <PersonInitial name={user.displayName} iconClassName="size-7" />
         </span>
         <div className="min-w-0">
           <h2 id="profile-title" className="truncate text-lg font-semibold text-ink">
-            {user.displayName}
+            {isWalletName(user.displayName) ? "No name yet" : user.displayName}
           </h2>
           {user.walletAddress && (
             <a
@@ -50,6 +53,8 @@ export async function ProfilePanel({ user }: { user: SessionUser }) {
           )}
         </div>
       </header>
+
+      <NameEditor name={user.displayName} />
 
       <section aria-labelledby="profile-ai">
         <h3 id="profile-ai" className="text-sm font-semibold text-ink">

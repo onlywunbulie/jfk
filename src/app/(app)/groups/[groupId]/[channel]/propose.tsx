@@ -217,7 +217,7 @@ export function ProposeChannel({
               <span className="shrink-0 tabular-nums text-ink-muted">{proposal.amount}</span>
               <span
                 className={cn(
-                  "shrink-0 rounded-full px-2 py-0.5 text-xs",
+                  "shrink-0 rounded-[4px] px-2 py-0.5 text-xs",
                   proposal.tone === "inflow" ? "bg-inflow-soft text-inflow" : proposal.tone === "muted" ? "bg-overlay text-ink-faint" : "bg-pending-soft text-pending",
                 )}
               >

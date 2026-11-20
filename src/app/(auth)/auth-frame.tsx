@@ -38,7 +38,7 @@ function Preview() {
             <span className="rounded-[4px] bg-raised px-1.5 py-px text-[0.6875rem] leading-4 font-semibold text-ink-muted">AGENT</span>
             <span className="text-xs text-ink-faint">Today, 08:00</span>
           </p>
-          <dl className="mt-2 space-y-2 rounded-3xl bg-raised px-5 py-4 text-sm">
+          <dl className="mt-2 space-y-2 rounded-[var(--radius-big)] bg-raised px-5 py-4 text-sm">
             <Row label="Round">4 of 8</Row>
             <Row label="Getting paid">Tunde on 1 December, $800.00</Row>
             <Row label="This round">
@@ -57,7 +57,7 @@ function Preview() {
             <span className="font-semibold text-ink">Your Claude</span>
             <span className="text-xs text-ink-faint">08:02</span>
           </p>
-          <p className="mt-2 inline-block rounded-3xl bg-raised px-5 py-4 text-sm text-ink">
+          <p className="mt-2 inline-block rounded-[var(--radius-big)] bg-raised px-5 py-4 text-sm text-ink">
             Paid your $100.00 to Detty December. <span className="text-inflow">Done</span>
           </p>
         </div>

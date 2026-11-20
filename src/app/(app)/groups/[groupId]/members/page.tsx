@@ -14,6 +14,9 @@ import { Button } from "@/components/ui/button";
 import { InvitePanel } from "./invite-panel";
 import { MemberActions } from "./member-actions";
 import { leaveGroupAction } from "../../actions";
+import type { Route } from "next";
+import { isWalletName } from "@/lib/names";
+import { UserIcon } from "@/components/ui/iconoir";
 
 export const metadata: Metadata = { title: "Members" };
 
@@ -32,6 +35,10 @@ export default async function MembersPage({
   if (!group || !members || !membership) notFound();
 
   const canInvite = can("member.invite", membership).allowed;
+  // On Base, who is in the group and who is an admin live on the contract, so
+  // every change is a group vote (in #manage roles), never a button here.
+  const onBase = group.safeAddress !== null;
+  const link = "text-ink underline decoration-ink-faint underline-offset-4 hover:decoration-ink";
 
   return (
     <main className="animate-rise space-y-6">
@@ -78,6 +85,11 @@ export default async function MembersPage({
                           <span className="text-ink-faint"> (you)</span>
                         )}
                       </p>
+                      {isSelf && isWalletName(member.displayName) && (
+                        <Link href={`/groups/${groupId}/members?profile=1` as Route} className={`text-xs ${link}`}>
+                          Add your name
+                        </Link>
+                      )}
                       <p className="text-xs text-ink-muted">
                         {ROLE_LABEL[member.role]}
                         {member.rotationPosition !== null && (
@@ -88,7 +100,7 @@ export default async function MembersPage({
                   </div>
                 </div>
 
-                {!isSelf && (
+                {!isSelf && !onBase && (
                   <MemberActions
                     groupId={groupId}
                     userId={member.userId}
@@ -104,7 +116,7 @@ export default async function MembersPage({
         </ul>
       </Card>
 
-      {membership.role !== "OWNER" && (
+      {membership.role !== "OWNER" && !onBase && (
         <form action={leaveGroupAction}>
           <input type="hidden" name="groupId" value={groupId} />
           <Button type="submit" variant="ghost" size="sm">
@@ -114,8 +126,18 @@ export default async function MembersPage({
       )}
 
       <p className="text-xs leading-relaxed text-ink-faint">
-        Removing someone from a group of three or more needs a vote, not an
-        admin. Admins can never move money on their own.
+        {onBase ? (
+          <>
+            This group is on Base, so adding or removing someone, or changing an admin, is a group vote. Ask your AI to draft it,
+            then send it from{" "}
+            <Link href={`/groups/${groupId}/manage-roles` as Route} className={link}>
+              #manage roles
+            </Link>
+            . Admins can never move money on their own.
+          </>
+        ) : (
+          <>Removing someone from a group of three or more needs a vote, not an admin. Admins can never move money on their own.</>
+        )}
       </p>
     </main>
   );
@@ -139,7 +161,7 @@ function Avatar({ name }: { name: string }) {
       aria-hidden="true"
       className="grid size-10 shrink-0 place-items-center rounded-full bg-white/10 text-sm font-medium text-ink"
     >
-      {initials || "?"}
+      {isWalletName(name) || !initials ? <UserIcon className="size-5 text-ink-muted" /> : initials}
     </span>
   );
 }

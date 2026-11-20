@@ -10,6 +10,7 @@ import { AI_NUDGE_COOKIE } from "@/components/shell/ai-nudge-cookie";
 import { chainSummaries } from "@/modules/groups/onchain-summary";
 import { AppShell, type ShellGroup } from "@/components/shell/app-shell";
 import { ProfilePanel } from "@/components/shell/profile-panel";
+import { PersonInitial } from "@/components/person-initial";
 
 /**
  * The authenticated frame: a rail of groups, the open group's sidebar card
@@ -63,7 +64,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <AppShell
       groups={shellGroups}
-      userInitial={user.displayName.trim().charAt(0).toUpperCase() || "?"}
+      userInitial={<PersonInitial name={user.displayName} iconClassName="size-4" />}
       profile={<ProfilePanel user={user} />}
       aiNudge={aiNudge}
     >

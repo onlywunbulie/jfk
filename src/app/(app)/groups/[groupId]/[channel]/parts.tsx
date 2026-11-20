@@ -118,7 +118,7 @@ export function RallMessage({
 
         <div
           className={cn(
-            "mt-2 w-fit max-w-xl space-y-3 rounded-3xl bg-raised px-5 py-4 text-sm leading-relaxed",
+            "mt-2 w-fit max-w-xl space-y-3 rounded-[var(--radius-big)] bg-raised px-5 py-4 text-sm leading-relaxed",
             highlight && "ring-1 ring-border-strong",
           )}
         >
