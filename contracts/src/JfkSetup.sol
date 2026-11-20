@@ -31,4 +31,23 @@ contract JfkSetup {
         ISafe(address(this)).enableModule(address(module));
         module.registerGroup(token, contribution, thresholds, quorumPct, votingPeriod, payGap);
     }
+
+    /// The same, for a rotating group (Ajo): see JfkModule.registerRotatingGroup.
+    function setupForRotatingGroup(
+        JfkModule module,
+        IERC20 token,
+        uint256 contribution,
+        uint16[9] calldata thresholds,
+        uint8 quorumPct,
+        uint32 votingPeriod,
+        uint32 payGap,
+        uint32 roundGap,
+        uint32 grace,
+        uint64 firstPayoutAt
+    ) external {
+        ISafe(address(this)).enableModule(address(module));
+        module.registerRotatingGroup(
+            token, contribution, thresholds, quorumPct, votingPeriod, payGap, roundGap, grace, firstPayoutAt
+        );
+    }
 }

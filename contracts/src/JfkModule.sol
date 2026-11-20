@@ -5,6 +5,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {ISafe} from "./interfaces/ISafe.sol";
+import {RotationLib} from "./RotationLib.sol";
+import {SafeOps} from "./SafeOps.sol";
 
 /**
  * @title JfkModule
@@ -39,7 +41,14 @@ import {ISafe} from "./interfaces/ISafe.sol";
  * contribution from the member (through the member's own capped approval)
  * into the Safe, at most once per the group's payment gap.
  *
- * Still to come before an audit: rotating payouts and cover-a-friend.
+ * Version 3 adds rotating savings (Ajo / Esusu): a group can register as
+ * rotating, and each round the whole pot goes to one member in turn, paid
+ * out on schedule by anyone (Rallied's daily job, or any member). The rules
+ * for missed payments, debts, the order and cycles live in RotationLib,
+ * which runs in this contract's context. A shared-pot group behaves exactly
+ * as in version 2. Anyone may also cover a member's debt (cover-a-friend).
+ *
+ * Still to come before an audit: an independent review of all of the above.
  */
 contract JfkModule is ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -64,7 +73,7 @@ contract JfkModule is ReentrancyGuard {
     /// Safe's linked-list head for owners and modules.
     address internal constant SENTINEL = address(0x1);
 
-    string public constant VERSION = "2";
+    string public constant VERSION = "3";
 
     /// What a helper may do for its member. Combine with bitwise or.
     uint8 public constant POWER_PROPOSE = 1;
@@ -92,7 +101,9 @@ contract JfkModule is ReentrancyGuard {
         CHANGE_CONTRIBUTION,
         CHANGE_RULES,
         CLOSE_GROUP,
-        MIGRATE_MODULE
+        MIGRATE_MODULE,
+        /// Rotating groups: rearrange who collects next. Uses the bar for changing the rules.
+        CHANGE_ORDER
     }
 
     /// Which approval bar a proposal uses. SPEND has two, by size.
@@ -184,6 +195,9 @@ contract JfkModule is ReentrancyGuard {
     /// When each member last paid in, by hand or collected. Spaces out collections.
     mapping(address safe => mapping(address member => uint64)) public lastPaidAt;
 
+    /// Rotating groups only: the order, rounds, debts and cycles (RotationLib).
+    mapping(address safe => RotationLib.State) internal _rotations;
+
     // -----------------------------------------------------------------------
     // Events
     // -----------------------------------------------------------------------
@@ -247,6 +261,9 @@ contract JfkModule is ReentrancyGuard {
     error HelperLacksPower();
     error HumanVotesOnly();
     error TooSoon();
+    error NotForRotatingGroups();
+    error OnlyRotatingGroups();
+    error HelperLocked();
 
     // -----------------------------------------------------------------------
     // Registration
@@ -264,6 +281,37 @@ contract JfkModule is ReentrancyGuard {
         uint32 votingPeriod,
         uint32 payGap
     ) external {
+        _register(token, contribution, thresholds, quorumPct, votingPeriod, payGap);
+    }
+
+    /**
+     * A rotating group: as registerGroup, plus the time between payouts, how
+     * long a payout waits for late payers, and when the first one is due.
+     * The Safe's owners, in their listed order, are the first cycle's order.
+     */
+    function registerRotatingGroup(
+        IERC20 token,
+        uint256 contribution,
+        uint16[RULE_COUNT] calldata thresholds,
+        uint8 quorumPct,
+        uint32 votingPeriod,
+        uint32 payGap,
+        uint32 roundGap,
+        uint32 grace,
+        uint64 firstPayoutAt
+    ) external {
+        _register(token, contribution, thresholds, quorumPct, votingPeriod, payGap);
+        RotationLib.start(_rotations[msg.sender], msg.sender, roundGap, grace, firstPayoutAt);
+    }
+
+    function _register(
+        IERC20 token,
+        uint256 contribution,
+        uint16[RULE_COUNT] calldata thresholds,
+        uint8 quorumPct,
+        uint32 votingPeriod,
+        uint32 payGap
+    ) internal {
         address safe = msg.sender;
         Group storage group = _groups[safe];
         if (address(group.token) != address(0)) revert AlreadyRegistered();
@@ -324,6 +372,8 @@ contract JfkModule is ReentrancyGuard {
     }
 
     function _takeContribution(address safe, Group storage group, address member) internal returns (uint256 amount) {
+        RotationLib.State storage rotation = _rotations[safe];
+        if (rotation.on) RotationLib.checkCanPay(rotation, member);
         amount = group.contribution;
         uint256 before = group.token.balanceOf(safe);
         group.token.safeTransferFrom(member, safe, amount);
@@ -334,6 +384,61 @@ contract JfkModule is ReentrancyGuard {
         paidIn[safe][member] += amount;
         lastPaidAt[safe][member] = uint64(block.timestamp);
         emit Contributed(safe, member, amount);
+        // A rotating group: settles the member's debt first, otherwise counts toward this round.
+        if (rotation.on) RotationLib.credit(rotation, safe, group.token, member, amount);
+    }
+
+    // -----------------------------------------------------------------------
+    // Rotating groups: payouts and debts
+    // -----------------------------------------------------------------------
+
+    /**
+     * Pay the current turn of a rotating group. Anyone may call it: it only
+     * pays when the round is due (see RotationLib), and only ever to the
+     * member whose turn it is, so calling it can never move money anywhere
+     * else. Rallied's daily job calls it; any member can too.
+     */
+    function payTurn(address safe) external nonReentrant {
+        Group storage group = _liveGroup(safe);
+        RotationLib.State storage rotation = _rotations[safe];
+        if (!rotation.on) revert OnlyRotatingGroups();
+        (address[] memory leavers, uint256 nextContribution) =
+            RotationLib.payTurn(rotation, safe, group.token, group.contribution);
+        _afterCycle(safe, group, leavers, nextContribution);
+    }
+
+    /**
+     * Pay off a member's debt for them, in full or in part: a friend
+     * covering, or the member themselves after leaving. It goes straight to
+     * whoever was short. The caller must have approved this module first.
+     */
+    function coverDebt(address safe, address debtor, uint256 amount) external nonReentrant {
+        Group storage group = _groups[safe];
+        if (address(group.token) == address(0)) revert NotRegistered();
+        RotationLib.State storage rotation = _rotations[safe];
+        if (!rotation.on) revert OnlyRotatingGroups();
+        uint256 before = group.token.balanceOf(safe);
+        group.token.safeTransferFrom(msg.sender, safe, amount);
+        if (group.token.balanceOf(safe) - before != amount) revert TransferMismatch();
+        RotationLib.cover(rotation, safe, group.token, debtor, amount);
+    }
+
+    /// A cycle ended: the leavers go, and a contribution voted mid-cycle takes effect.
+    function _afterCycle(address safe, Group storage group, address[] memory leavers, uint256 nextContribution)
+        internal
+    {
+        if (nextContribution != group.contribution) {
+            group.contribution = nextContribution;
+            emit ContributionChanged(safe, nextContribution);
+        }
+        for (uint256 i = 0; i < leavers.length; i++) {
+            // The last member stays: a group always has someone.
+            if (ISafe(safe).getOwners().length == 1) break;
+            paidIn[safe][leavers[i]] = 0;
+            _forgetHelper(safe, leavers[i]);
+            _removeOwner(safe, leavers[i]);
+            emit MemberLeft(safe, leavers[i], 0);
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -439,6 +544,12 @@ contract JfkModule is ReentrancyGuard {
         }
         if (powers == 0 || powers & ~ALL_POWERS != 0) revert InvalidHelper();
         if (expiresAt <= block.timestamp || expiresAt > block.timestamp + MAX_HELPER_LIFETIME) revert InvalidHelper();
+        // After your turn in a rotating group, automatic dues stay on until the
+        // cycle ends: a new helper must keep the collect power and last as long.
+        if (_helperLocked(safe, msg.sender)) {
+            Helper storage current = _helpers[safe][msg.sender];
+            if (powers & POWER_COLLECT == 0 || expiresAt < current.expiresAt) revert HelperLocked();
+        }
 
         _helpers[safe][msg.sender] = Helper({key: key, powers: powers, expiresAt: expiresAt});
         emit HelperSet(safe, msg.sender, key, powers, expiresAt);
@@ -447,6 +558,7 @@ contract JfkModule is ReentrancyGuard {
     /// Take your helper away. It stops working at once.
     function revokeHelper(address safe) external {
         if (_helpers[safe][msg.sender].key == address(0)) revert InvalidHelper();
+        if (_helperLocked(safe, msg.sender)) revert HelperLocked();
         delete _helpers[safe][msg.sender];
         emit HelperRevoked(safe, msg.sender);
     }
@@ -461,6 +573,19 @@ contract JfkModule is ReentrancyGuard {
         if (helper.key == address(0) || helper.key != msg.sender) revert NotHelper();
         if (block.timestamp >= helper.expiresAt) revert HelperExpired();
         if (helper.powers & power == 0) revert HelperLacksPower();
+    }
+
+    /**
+     * A member of a rotating group who has had their turn this cycle, and
+     * whose helper collects their dues: that helper can't be taken away or
+     * weakened until the cycle ends. They agreed to it when they joined, and
+     * they already have everyone's money.
+     */
+    function _helperLocked(address safe, address member) internal view returns (bool) {
+        RotationLib.State storage rotation = _rotations[safe];
+        if (!rotation.on || !rotation.collected[member]) return false;
+        Helper storage helper = _helpers[safe][member];
+        return helper.key != address(0) && helper.powers & POWER_COLLECT != 0 && block.timestamp < helper.expiresAt;
     }
 
     /// Wipe a member's helper when they stop being that member, so it can never come back.
@@ -493,16 +618,28 @@ contract JfkModule is ReentrancyGuard {
         } else if (action == Action.ADD_MEMBER) {
             address member = abi.decode(payload, (address));
             _addMember(safe, member);
+            // Rotating: they join at the back when the next cycle starts.
+            if (_rotations[safe].on) RotationLib.addJoiner(_rotations[safe], member);
         } else if (action == Action.REMOVE_MEMBER) {
             address member = abi.decode(payload, (address));
-            _removeMember(safe, group, member);
+            if (_rotations[safe].on) _removeFromRotation(safe, group, member);
+            else _removeMember(safe, group, member);
         } else if (action == Action.REPLACE_MEMBER) {
             (address oldWallet, address newWallet) = abi.decode(payload, (address, address));
             _replaceMember(safe, oldWallet, newWallet);
+            if (_rotations[safe].on) RotationLib.replace(_rotations[safe], oldWallet, newWallet);
         } else if (action == Action.CHANGE_CONTRIBUTION) {
             uint256 amount = abi.decode(payload, (uint256));
-            group.contribution = amount;
-            emit ContributionChanged(safe, amount);
+            if (_rotations[safe].on) {
+                // Mid-cycle, a new amount would make some turns bigger than others: it waits for the next cycle.
+                _rotations[safe].pendingContribution = amount;
+            } else {
+                group.contribution = amount;
+                emit ContributionChanged(safe, amount);
+            }
+        } else if (action == Action.CHANGE_ORDER) {
+            address[] memory rest = abi.decode(payload, (address[]));
+            RotationLib.setOrder(_rotations[safe], safe, rest);
         } else if (action == Action.CHANGE_RULES) {
             (uint16[RULE_COUNT] memory thresholds, uint8 quorumPct, uint32 votingPeriod, bool humanVotesOnly) =
                 abi.decode(payload, (uint16[9], uint8, uint32, bool)); // 9 == RULE_COUNT: abi.decode needs a literal
@@ -512,8 +649,13 @@ contract JfkModule is ReentrancyGuard {
             group.humanVotesOnly = humanVotesOnly;
             emit RulesChanged(safe);
         } else if (action == Action.CLOSE_GROUP) {
+            // Rotating: whoever paid into the unfinished round gets it back first.
+            if (_rotations[safe].on) {
+                RotationLib.refundRound(_rotations[safe], safe, group.token, group.contribution);
+                _clearPaidIn(safe);
+            }
             _closeGroup(safe, group);
-        } else {
+        } else if (action == Action.MIGRATE_MODULE) {
             address newModule = abi.decode(payload, (address));
             _migrate(safe, group, newModule);
         }
@@ -576,6 +718,11 @@ contract JfkModule is ReentrancyGuard {
         _liveGroup(safe);
         if (!ISafe(safe).isOwner(msg.sender)) revert NotAMember();
 
+        // Rotating: you finish the cycle you're in (paying in and collecting
+        // your turn), then go. Still waiting to join? You go now.
+        RotationLib.State storage rotation = _rotations[safe];
+        if (rotation.on && !RotationLib.scheduleLeave(rotation, safe, msg.sender)) return;
+
         uint256 forfeited = paidIn[safe][msg.sender];
         paidIn[safe][msg.sender] = 0;
         _forgetHelper(safe, msg.sender);
@@ -609,6 +756,51 @@ contract JfkModule is ReentrancyGuard {
     function getGroupSettings(address safe) external view returns (bool humanVotesOnly, uint32 payGap) {
         Group storage g = _groups[safe];
         return (g.humanVotesOnly, g.payGap);
+    }
+
+    /// A rotating group's state: where it is in the cycle, what's in this round, and when the next payout is due.
+    function getRotation(address safe)
+        external
+        view
+        returns (
+            bool on,
+            uint32 cycle,
+            uint32 round,
+            uint32 turn,
+            uint64 nextPayoutAt,
+            uint32 roundGap,
+            uint32 grace,
+            uint256 roundPot,
+            uint256 pendingContribution
+        )
+    {
+        RotationLib.State storage r = _rotations[safe];
+        return (r.on, r.cycle, r.round, r.turn, r.nextPayoutAt, r.roundGap, r.grace, r.roundPot, r.pendingContribution);
+    }
+
+    /// This cycle's order, and who's waiting to join the next one.
+    function getOrder(address safe) external view returns (address[] memory order, address[] memory joining) {
+        return (_rotations[safe].order, _rotations[safe].joining);
+    }
+
+    /// What a member (or past member) owes in a rotating group. Public, so anyone can check it.
+    function debtOf(address safe, address member) external view returns (uint256) {
+        return _rotations[safe].debt[member];
+    }
+
+    /// A member's place this cycle: paid this round, had their turn, leaving at the end.
+    function rotationStatus(address safe, address member)
+        external
+        view
+        returns (bool inOrder, bool paidThisRound, bool collected, bool leaving)
+    {
+        RotationLib.State storage r = _rotations[safe];
+        return (r.inOrder[member], r.paidRound[member] == r.round + 1, r.collected[member], r.leaving[member]);
+    }
+
+    /// Everything still owed to members who were short, in total.
+    function totalShort(address safe) external view returns (uint256) {
+        return RotationLib.totalShort(_rotations[safe]);
     }
 
     function getProposal(address safe, uint256 id) external view returns (Proposal memory) {
@@ -647,7 +839,7 @@ contract JfkModule is ReentrancyGuard {
 
         // Threshold rises with the membership, so the emergency exit always
         // needs every member.
-        _safeCall(safe, safe, abi.encodeCall(ISafe.addOwnerWithThreshold, (member, members + 1)));
+        SafeOps.addOwner(safe, member);
         emit MemberAdded(safe, member);
     }
 
@@ -663,12 +855,43 @@ contract JfkModule is ReentrancyGuard {
         emit MemberRemoved(safe, member, refund);
     }
 
+    /**
+     * Voted out of a rotating group. Someone owing, or still waiting to join,
+     * goes now: no refund (their payments went to other members' turns), and
+     * any debt stays on record, owed to whoever they shorted. Anyone else
+     * finishes the cycle first, then goes.
+     */
+    function _removeFromRotation(address safe, Group storage group, address member) internal {
+        if (!ISafe(safe).isOwner(member)) revert NotAMember();
+        RotationLib.State storage rotation = _rotations[safe];
+        if (!RotationLib.removesNow(rotation, member)) {
+            RotationLib.scheduleLeave(rotation, safe, member);
+            return;
+        }
+        RotationLib.removeNow(rotation, member);
+        paidIn[safe][member] = 0;
+        _forgetHelper(safe, member);
+        _removeOwner(safe, member);
+        emit MemberRemoved(safe, member, 0);
+        // If they were the last still to collect, the next cycle starts.
+        (address[] memory leavers, uint256 nextContribution) =
+            RotationLib.startNextCycleIfDone(rotation, safe, group.contribution);
+        _afterCycle(safe, group, leavers, nextContribution);
+    }
+
+    /// Rotating groups close with an equal split: what was paid in already went out in turns.
+    function _clearPaidIn(address safe) internal {
+        address[] memory owners = ISafe(safe).getOwners();
+        for (uint256 i = 0; i < owners.length; i++) {
+            paidIn[safe][owners[i]] = 0;
+        }
+    }
+
     function _replaceMember(address safe, address oldWallet, address newWallet) internal {
         if (!ISafe(safe).isOwner(oldWallet)) revert NotAMember();
         if (ISafe(safe).isOwner(newWallet)) revert AlreadyAMember();
 
-        address prev = _previousOwner(safe, oldWallet);
-        _safeCall(safe, safe, abi.encodeCall(ISafe.swapOwner, (prev, oldWallet, newWallet)));
+        SafeOps.swapOwner(safe, oldWallet, newWallet);
 
         // The person is the same; only their wallet changed. Their payment
         // history moves with them; their helper doesn't (the old wallet named
@@ -720,11 +943,7 @@ contract JfkModule is ReentrancyGuard {
      */
     function _migrate(address safe, Group storage group, address newModule) internal {
         group.closed = true;
-        if (!ISafe(safe).isModuleEnabled(newModule)) {
-            _safeCall(safe, safe, abi.encodeCall(ISafe.enableModule, (newModule)));
-        }
-        address prev = _previousModule(safe, address(this));
-        _safeCall(safe, safe, abi.encodeCall(ISafe.disableModule, (prev, address(this))));
+        SafeOps.switchModule(safe, address(this), newModule);
         emit ModuleMigrated(safe, newModule);
     }
 
@@ -739,6 +958,8 @@ contract JfkModule is ReentrancyGuard {
         returns (Rule)
     {
         if (action == Action.SPEND) {
+            // In a rotating group the vault holds this round's pot, which belongs to the turn holder.
+            if (_rotations[safe].on) revert NotForRotatingGroups();
             (address recipient, uint256 amount) = abi.decode(payload, (address, uint256));
             if (recipient == address(0) || recipient == safe) revert InvalidAddress();
             if (amount == 0) revert InvalidAmount();
@@ -776,6 +997,11 @@ contract JfkModule is ReentrancyGuard {
         }
         if (action == Action.CLOSE_GROUP) {
             return Rule.CLOSE_GROUP;
+        }
+        if (action == Action.CHANGE_ORDER) {
+            if (!_rotations[safe].on) revert OnlyRotatingGroups();
+            RotationLib.checkOrder(_rotations[safe], abi.decode(payload, (address[])));
+            return Rule.CHANGE_RULES;
         }
         address newModule = abi.decode(payload, (address));
         if (newModule == address(0) || newModule == SENTINEL || newModule == address(this) || newModule == safe) {
@@ -819,54 +1045,13 @@ contract JfkModule is ReentrancyGuard {
     // Internals: talking to the Safe
     // -----------------------------------------------------------------------
 
-    /**
-     * Send tokens from the Safe, and prove it: the call must succeed, the
-     * token must not report failure, and the Safe's balance must drop by
-     * exactly the amount.
-     */
+    /// Every movement of money and every owner change goes through SafeOps, checked the same way.
     function _pay(address safe, IERC20 token, address recipient, uint256 amount) internal {
-        uint256 before = token.balanceOf(safe);
-        (bool success, bytes memory returnData) = ISafe(safe).execTransactionFromModuleReturnData(
-            address(token), 0, abi.encodeCall(IERC20.transfer, (recipient, amount)), ISafe.Operation.Call
-        );
-        if (!success) revert SafeCallFailed();
-        if (returnData.length > 0 && !abi.decode(returnData, (bool))) revert SafeCallFailed();
-        if (before - token.balanceOf(safe) != amount) revert TransferMismatch();
-        emit Paid(safe, recipient, amount);
+        SafeOps.pay(safe, token, recipient, amount);
     }
 
-    /// Remove an owner, keeping the Safe's threshold at every remaining member.
     function _removeOwner(address safe, address owner) internal {
-        uint256 members = ISafe(safe).getOwners().length;
-        if (members == 1) revert LastMember();
-        address prev = _previousOwner(safe, owner);
-        _safeCall(safe, safe, abi.encodeCall(ISafe.removeOwner, (prev, owner, members - 1)));
-    }
-
-    function _safeCall(address safe, address to, bytes memory data) internal {
-        (bool success,) = ISafe(safe).execTransactionFromModuleReturnData(to, 0, data, ISafe.Operation.Call);
-        if (!success) revert SafeCallFailed();
-    }
-
-    /// Safe keeps owners in a linked list; removing one needs its predecessor.
-    function _previousOwner(address safe, address owner) internal view returns (address) {
-        address[] memory owners = ISafe(safe).getOwners();
-        address prev = SENTINEL;
-        for (uint256 i = 0; i < owners.length; i++) {
-            if (owners[i] == owner) return prev;
-            prev = owners[i];
-        }
-        revert NotAMember();
-    }
-
-    function _previousModule(address safe, address module) internal view returns (address) {
-        (address[] memory modules,) = ISafe(safe).getModulesPaginated(SENTINEL, MAX_MEMBERS);
-        address prev = SENTINEL;
-        for (uint256 i = 0; i < modules.length; i++) {
-            if (modules[i] == module) return prev;
-            prev = modules[i];
-        }
-        revert ModuleNotEnabled();
+        SafeOps.removeOwner(safe, owner);
     }
 
     /// Integer division rounded half-up, matching JavaScript's Math.round.
