@@ -597,9 +597,9 @@ function notFound() {
   };
 }
 
-/** "USDC 100" or "NGN 50000.50": exact, with the currency's code. */
+/** "$100.00" or "₦50,000.50": exact, never rounded, written the way Rallied shows it. */
 function money(amount: Money): string {
-  return `${amount.currency} ${amount.format({ compact: true, showSymbol: false })}`;
+  return amount.format();
 }
 
 function percent(permille: number): string {

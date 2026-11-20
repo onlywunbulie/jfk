@@ -40,7 +40,7 @@ function Preview() {
           </p>
           <dl className="mt-2 space-y-2 rounded-3xl bg-raised px-5 py-4 text-sm">
             <Row label="Round">4 of 8</Row>
-            <Row label="Getting paid">Tunde on 1 December, USDC 800</Row>
+            <Row label="Getting paid">Tunde on 1 December, $800.00</Row>
             <Row label="This round">
               7 of 8 paid <span className="text-ink-muted">· Late: Femi</span>
             </Row>
@@ -58,7 +58,7 @@ function Preview() {
             <span className="text-xs text-ink-faint">08:02</span>
           </p>
           <p className="mt-2 inline-block rounded-3xl bg-raised px-5 py-4 text-sm text-ink">
-            Paid your USDC 100 to Detty December. <span className="text-inflow">Done</span>
+            Paid your $100.00 to Detty December. <span className="text-inflow">Done</span>
           </p>
         </div>
       </div>

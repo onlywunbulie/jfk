@@ -50,7 +50,7 @@ type Change = Omit<RuleDraftView, "made">;
 export interface PastChange {
   id: string;
   rule: string;
-  /** "Now USDC 2", when it passed and says what it became. */
+  /** "Now $2.00", when it passed and says what it became. */
   outcome: string | null;
   passed: boolean;
   /** "Passed · 1 of 1 yes" */

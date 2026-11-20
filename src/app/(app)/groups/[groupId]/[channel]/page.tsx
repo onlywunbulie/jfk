@@ -118,9 +118,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
   if (channel.slug === "about") {
     const owner = members.find((member) => member.role === "OWNER");
     const admins = members.filter((member) => member.role === "ADMIN").map((member) => member.displayName);
-    const amount = `${group.currency} ${group.contributionAmount
-      .format({ compact: true, showSymbol: false })
-      .replaceAll(",", "")}`;
+    const amount = group.contributionAmount.format();
     // Until the group is on Base, #about is where it gets started (by whoever started the group).
     const onChain = await getOnChainStatus(group.id, user.id);
 
@@ -180,9 +178,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
   }
 
   if (channel.slug === "rules") {
-    const amount = `${group.currency} ${group.contributionAmount
-      .format({ compact: true, showSymbol: false })
-      .replaceAll(",", "")}`;
+    const amount = group.contributionAmount.format();
     const due =
       group.cadence === "MONTHLY"
         ? `every month, due on the ${ordinal(group.dueDay)}`

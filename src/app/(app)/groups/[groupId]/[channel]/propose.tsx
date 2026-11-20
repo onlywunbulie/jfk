@@ -32,7 +32,7 @@ const LARGE_SPEND_SHARE = 0.2; // JfkModule.LARGE_SPEND_PERMILLE = 200
 export interface SpendDraftView {
   id: string;
   what: string;
-  /** "USDC 400" */
+  /** "$400.00" */
   amountLabel: string;
   /** For the small/large spend rule. */
   amountMajor: number;
@@ -91,8 +91,8 @@ export function ProposeChannel({
         <ul className="mt-2 space-y-1 text-ink-muted">
           {!rotating && (
             <>
-              <li>&ldquo;Propose USDC 400 for the Airbnb deposit, paid to Kemi.&rdquo;</li>
-              <li>&ldquo;Ask the group to pay Musa USDC 150 for the generator. Here&rsquo;s his invoice.&rdquo;</li>
+              <li>&ldquo;Propose $400 for the Airbnb deposit, paid to Kemi.&rdquo;</li>
+              <li>&ldquo;Ask the group to pay Musa $150 for the generator. Here&rsquo;s his invoice.&rdquo;</li>
             </>
           )}
           <li>&ldquo;Propose closing the group and sharing out the pot.&rdquo;</li>

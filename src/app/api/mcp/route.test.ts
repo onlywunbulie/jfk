@@ -157,7 +157,7 @@ describe("/api/mcp", () => {
     const list = await callTool(token, "list_groups");
     const groups = list.data.groups as { group_id: string; name: string; kind: string; each_pays: string }[];
     expect(groups).toHaveLength(1);
-    expect(groups[0]).toMatchObject({ group_id: mine, name: "Detty December", kind: "rotating savings", each_pays: "USDC 100 every month" });
+    expect(groups[0]).toMatchObject({ group_id: mine, name: "Detty December", kind: "rotating savings", each_pays: "$100.00 every month" });
 
     const detail = await callTool(token, "get_group", { group_id: mine });
     expect(detail.isError).toBe(false);
@@ -191,7 +191,7 @@ describe("/api/mcp", () => {
     // It's a real group, in dollars, with the user as its starter.
     const listed = await callTool(token, "list_groups");
     expect(listed.data.groups).toEqual([
-      expect.objectContaining({ group_id: groupId, kind: "rotating savings", your_role: "owner", each_pays: "USDC 100 every month" }),
+      expect.objectContaining({ group_id: groupId, kind: "rotating savings", your_role: "owner", each_pays: "$100.00 every month" }),
     ]);
 
     const invite = await callTool(token, "invite_link", { group_id: groupId, uses: 5 });
@@ -213,7 +213,7 @@ describe("/api/mcp", () => {
     });
     expect(created.isError).toBe(false);
     const groupId = created.data.group_id as string;
-    expect((await callTool(token, "list_groups")).data.groups).toEqual([expect.objectContaining({ each_pays: "USDC 10 every 2 weeks" })]);
+    expect((await callTool(token, "list_groups")).data.groups).toEqual([expect.objectContaining({ each_pays: "$10.00 every 2 weeks" })]);
     expect((await callTool(token, "get_group", { group_id: groupId })).data).toMatchObject({ how_often: expect.stringContaining("every 2 weeks") });
 
     // A weekday is 1 to 7 for anything paid by the week.

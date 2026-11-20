@@ -25,7 +25,7 @@ interface Turn {
   owes?: number;
 }
 
-const ORDER = { method: "Random, drawn by Rallied" as const, amount: "USDC 800" };
+const ORDER = { method: "Random, drawn by Rallied" as const, amount: "$800.00" };
 
 const TURNS: Turn[] = [
   { round: 1, name: "Ade", date: "1 September", status: "paid" },

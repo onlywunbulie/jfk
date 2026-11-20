@@ -121,7 +121,7 @@ export async function prepareDues(userId: string, groupId: string): Promise<Prep
   if (balance < contribution) {
     return {
       ok: false,
-      reason: `Your wallet has ${usdc(balance)} USDC and this needs ${usdc(contribution)}. On the test network, get free test USDC at faucet.circle.com (Base Sepolia), then pay.`,
+      reason: `Your wallet has ${usdc(balance)} and this needs ${usdc(contribution)}. On the test network, get free test USDC at faucet.circle.com (Base Sepolia), then pay.`,
     };
   }
 

@@ -129,7 +129,7 @@ function findMember(members: MemberView[], name: string): { ok: true; member: Me
 }
 
 function money(amount: Money): string {
-  return `${amount.currency} ${amount.format({ compact: true, showSymbol: false })}`;
+  return amount.format();
 }
 
 async function save(userId: string, groupId: string, madeBy: string, kind: AgentDraft["kind"], details: object): Promise<Made> {

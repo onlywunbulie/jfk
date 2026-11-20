@@ -47,12 +47,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       canEdit: group.role === "OWNER" || group.role === "ADMIN",
       memberCount: group.memberCount,
       kind: group.type,
-      // "USDC 15000": the currency's code, then the amount, as the wireframe has it.
-      balance:
-        onBase.get(group.id)?.vault ??
-        `${group.balance.total.currency} ${group.balance.total
-          .format({ compact: true, showSymbol: false })
-          .replaceAll(",", "")}`,
+      // "$15,000.00": money is always written with its symbol, the same as the vault on Base reads.
+      balance: onBase.get(group.id)?.vault ?? group.balance.total.format(),
       waiting: onBase.get(group.id)?.votesWaiting ?? waiting.get(group.id) ?? 0,
       // What's waiting for this user, by channel: their AI's drafts, and votes they haven't cast.
       needsYou: {

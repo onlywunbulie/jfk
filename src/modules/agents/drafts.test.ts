@@ -91,8 +91,8 @@ describe("drafting a rule change", () => {
     const groupId = await groupWith(amaka, "TREASURY");
     const result = await draftRuleChange({ ...base(amaka, groupId), rule: "what_everyone_pays", value: "150" });
     expect(result.ok && result.draft.details).toMatchObject({
-      before: "USDC 100 a month",
-      after: "USDC 150 a month",
+      before: "$100.00 a month",
+      after: "$150.00 a month",
       starts: "From the next round",
       money: true,
     });

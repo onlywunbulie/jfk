@@ -23,7 +23,7 @@ export interface ShellGroup {
   memberCount: number;
   /** Shared pot or rotating savings: decides which channels it has. */
   kind: GroupKind;
-  /** Already formatted as the sidebar shows it, e.g. "USDC 15000". */
+  /** Already formatted as the sidebar shows it, e.g. "$15,000.00". */
   balance: string;
   /** Open votes this person hasn't cast yet. */
   waiting: number;

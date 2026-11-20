@@ -113,7 +113,7 @@ export type PreparedAutopay =
       ok: true;
       calls: { to: Address; data: Hex }[];
       wallet: Address;
-      /** For the confirm page: "USDC 1 every month, until 18 November 2027". */
+      /** For the confirm page: "$1.00 every month, until 18 November 2027". */
       summary: { amount: string; every: string; until: string; groupName: string; approved: string };
     }
   | { ok: false; reason: string };

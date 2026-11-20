@@ -28,7 +28,7 @@ export function spendDraftView(draft: AgentDraft): SpendDraftView {
   return {
     id: draft.id,
     what: details.what,
-    amountLabel: `${amount.currency} ${amount.format({ compact: true, showSymbol: false })}`,
+    amountLabel: amount.format(),
     amountMajor: Number(amount.toDecimalString()),
     paidTo:
       details.paidTo.kind === "member"
