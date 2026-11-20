@@ -57,7 +57,9 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
   if (!channelBelongs(channel, group.type)) notFound();
   const rotating = group.type === "ROTATING";
 
-  if (channel.slug === "payout-order") return <PayoutOrder base={`/groups/${group.id}`} />;
+  if (channel.slug === "payout-order") {
+    return <PayoutOrder group={group} members={members} viewerId={user.id} />;
+  }
 
   if (channel.slug === "verify") {
     // Real: whether the user's AI is connected and allowed in this group.

@@ -818,6 +818,8 @@ export async function listMembers(
 export interface GroupDetail extends GroupSummary {
   description: string | null;
   createdAt: Date;
+  /** When its vault was created on Base; null before. Rotating groups count turns from here. */
+  startedOnChainAt: Date | null;
   membersCanPropose: boolean;
   quorumPct: number;
   /** How long a vote stays open, in days. On Base the contract holds it; Rallied's copy follows. */
@@ -846,6 +848,7 @@ export async function getGroupDetail(
       avatarUrl: groups.avatarUrl,
       bannerUrl: groups.bannerUrl,
       createdAt: groups.createdAt,
+      startedOnChainAt: groups.startedOnChainAt,
       contributionAmount: groupSettings.contributionAmount,
       cadence: groupSettings.cadence,
       intervalWeeks: groupSettings.intervalWeeks,
