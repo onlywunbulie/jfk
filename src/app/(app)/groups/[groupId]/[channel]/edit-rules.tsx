@@ -105,6 +105,13 @@ export function EditRules({
           </p>
         )}
 
+        {/* Empty history: centred across the whole channel, not inside the narrow list column. */}
+        {tab === "history" && history.length === 0 && (
+          <EmptyState illustration="no-rule-changes" size="sm" title="No rule changes yet" className="mt-8">
+            Changes show here once their vote on Base closes.
+          </EmptyState>
+        )}
+
         <div className="mt-8 max-w-xl space-y-4">
           {tab === "waiting" &&
             drafts.map((draft) => (
@@ -135,11 +142,7 @@ export function EditRules({
             ))}
 
           {tab === "history" && (
-            history.length === 0 ? (
-              <EmptyState illustration="no-rule-changes" size="sm" title="No rule changes yet">
-                Changes show here once their vote on Base closes.
-              </EmptyState>
-            ) : (
+            history.length === 0 ? null : (
               <ul className="divide-y divide-border">
                 {history.map((past) => (
                   <li key={past.id} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 py-3 text-sm">

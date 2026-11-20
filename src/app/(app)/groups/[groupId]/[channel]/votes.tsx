@@ -53,21 +53,24 @@ function VoteList({ votes, safe, base }: { votes: ChainVote[]; safe: string; bas
           Every decision the group is making, straight from the group&rsquo;s vault on Base. Once a vote passes, Rallied carries it out.
         </ChannelIntro>
 
-        <div className="mt-8 max-w-xl space-y-4">
-          {shown.length === 0 &&
-            (tab === "closed" ? (
-              <EmptyState illustration="no-votes" size="sm" title="Nothing decided yet">
-                Votes land here once they pass or close.
-              </EmptyState>
-            ) : (
-              <EmptyState illustration="no-votes" size="sm" title="Nothing to vote on">
-                Ask your AI to propose something. Once you send it, it shows up here for everyone to decide.
-              </EmptyState>
+        {/* Empty: centred across the whole channel, not inside the narrow list column. */}
+        {shown.length === 0 ? (
+          tab === "closed" ? (
+            <EmptyState illustration="no-votes" size="sm" title="Nothing decided yet" className="mt-8">
+              Votes land here once they pass or close.
+            </EmptyState>
+          ) : (
+            <EmptyState illustration="no-votes" size="sm" title="Nothing to vote on" className="mt-8">
+              Ask your AI to propose something. Once you send it, it shows up here for everyone to decide.
+            </EmptyState>
+          )
+        ) : (
+          <div className="mt-8 max-w-xl space-y-4">
+            {shown.map((vote) => (
+              <VoteCard key={vote.id} vote={vote} groupId={base.split("/").pop() ?? ""} />
             ))}
-          {shown.map((vote) => (
-            <VoteCard key={vote.id} vote={vote} groupId={base.split("/").pop() ?? ""} />
-          ))}
-        </div>
+          </div>
+        )}
 
         <p className="mt-8 text-sm text-ink-faint">
           Every vote is public on{" "}
