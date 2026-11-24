@@ -172,7 +172,12 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
         )}
         {group.safeAddress && (
           <div className="mt-6 max-w-xl">
-            <Dues dues={await readDues(group.id, user.id)} groupId={group.id} autopay={await autopayStatus(user.id, group.id)} />
+            <Dues
+              dues={await readDues(group.id, user.id)}
+              groupId={group.id}
+              autopay={await autopayStatus(user.id, group.id)}
+              required={rotating}
+            />
           </div>
         )}
       </div>

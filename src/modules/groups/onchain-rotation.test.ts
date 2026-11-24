@@ -33,14 +33,17 @@ vi.mock("@/lib/chain/client", () => ({
       if (functionName === "allowance") return 0n;
       return [true, 2, 5, 1, chain.nextPayoutAt, 27 * 86400, 7 * 86400, 100_000_000n, 0n];
     },
-    // rotationStatus then debtOf, for each of Ade, Bisi, Chidi.
+    // rotationStatus, debtOf and getHelper, for each of Ade, Bisi, Chidi. Rallied's key collects for Ade only.
     multicall: async () => [
       [true, true, true, false],
       0n,
+      { key: "0x2222222222222222222222222222222222222222", powers: 4, expiresAt: 9_999_999_999n },
       [true, false, false, true],
       100_000_000n,
+      { key: "0x0000000000000000000000000000000000000000", powers: 0, expiresAt: 0n },
       [false, false, false, false],
       0n,
+      { key: "0x0000000000000000000000000000000000000000", powers: 0, expiresAt: 0n },
     ],
     simulateContract: async () => {
       if (!chain.wouldPay) throw new Error("NotDueYet");
@@ -162,9 +165,9 @@ describe("reading a rotation from Base", () => {
     const read = await readRotation(SAFE, members);
     if (!read.ok) throw new Error("expected a rotation");
     expect(read).toMatchObject({ cycle: 2, turn: 1, contribution: 100_000_000n, roundPot: 100_000_000n });
-    expect(read.order.map((seat) => [seat.name, seat.paidThisRound, seat.collected, seat.leaving, seat.debt])).toEqual([
-      ["Ade", true, true, false, 0n],
-      ["Bisi", false, false, true, 100_000_000n],
+    expect(read.order.map((seat) => [seat.name, seat.paidThisRound, seat.collected, seat.leaving, seat.debt, seat.autoDues])).toEqual([
+      ["Ade", true, true, false, 0n, true],
+      ["Bisi", false, false, true, 100_000_000n, false],
     ]);
     expect(read.lastPayout).toMatchObject({ name: "Ade", userId: "u-ade", round: 4, paid: 400_000_000n });
     // Someone not in Rallied's list is shown by their wallet, never guessed.

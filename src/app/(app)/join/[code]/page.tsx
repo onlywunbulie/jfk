@@ -68,7 +68,7 @@ export default async function JoinPage({
         <dl className="space-y-3 text-sm">
           <Row
             label="Type"
-            value={preview.groupType === "ROTATING" ? "Rotating (Ajo)" : "Treasury"}
+            value={preview.groupType === "ROTATING" ? "Take turns (Ajo)" : "Save together"}
           />
           <Row
             label="Contribution"
@@ -82,10 +82,11 @@ export default async function JoinPage({
       </Card>
 
       <p className="text-center text-sm text-ink-muted">
-        Joining commits you to contributing{" "}
-        {preview.contributionAmount.format({ compact: true })}{" "}
-        every {everyText(preview.cadence, preview.intervalWeeks)}. You can
-        leave at any time.
+        Joining commits you to paying {preview.contributionAmount.format({ compact: true })} every{" "}
+        {everyText(preview.cadence, preview.intervalWeeks)}.{" "}
+        {preview.groupType === "ROTATING"
+          ? "Automatic dues are required, so every turn is paid in full. You can leave once a cycle ends."
+          : "You can leave at any time."}
       </p>
 
       {errorMessage && (

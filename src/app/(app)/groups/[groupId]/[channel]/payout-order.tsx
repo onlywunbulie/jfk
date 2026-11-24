@@ -53,6 +53,8 @@ function ChainOrder({
   const next = seats[chain.turn];
   const paid = seats.filter((seat) => seat.paidThisRound).length;
   const owing = [...seats, ...chain.joining].filter((seat) => seat.debt > 0n);
+  // Required in a rotating group: shown to everyone, so the group can see who still has to turn them on.
+  const withoutAutoDues = seats.filter((seat) => !seat.autoDues);
   const nameOf = (seat: RotationSeat) =>
     seat.userId === viewerId ? "You" : isWalletName(seat.name) || seat.name.startsWith("0x") ? shortAddress(seat.wallet) : seat.name;
 
@@ -90,6 +92,16 @@ function ChainOrder({
           {paid} of {seats.length} paid in · {usd(chain.roundPot)} so far
           {dueNow && paid < seats.length && (
             <span className="text-ink-muted"> · waiting a few days for late payers, then it pays out what&rsquo;s in</span>
+          )}
+        </Detail>
+        <Detail label="Automatic dues">
+          {withoutAutoDues.length === 0 ? (
+            <span className="text-inflow">On for everyone</span>
+          ) : (
+            <>
+              {seats.length - withoutAutoDues.length} of {seats.length} on
+              <span className="text-pending"> · still to turn on: {withoutAutoDues.map(nameOf).join(", ")}</span>
+            </>
           )}
         </Detail>
         {owing.length > 0 && (
@@ -147,6 +159,7 @@ function ChainOrder({
                 <span className="block text-xs text-ink-faint">
                   {seat.collected ? "Collected this cycle" : date ? DAY.format(date) : ""}
                   {seat.leaving ? " · leaves when this cycle ends" : ""}
+                  {!seat.autoDues && <span className="text-pending"> · automatic dues off</span>}
                 </span>
               </span>
               <span className="shrink-0 text-xs tabular-nums">
@@ -167,8 +180,9 @@ function ChainOrder({
         <p className="mt-6 max-w-xl text-sm text-ink-muted">Joining next cycle, at the back: {chain.joining.map(nameOf).join(", ")}.</p>
       )}
       <p className="mt-6 max-w-xl text-xs leading-relaxed text-ink-faint">
-        Miss a round and you owe it: your next payment goes straight to whoever was short, and if you haven&rsquo;t collected yet
-        you move to the back. After your turn, automatic dues stay on until the cycle ends.
+        Automatic dues are required here, so every turn is paid in full. Miss a round and you owe it: your next payment goes
+        straight to whoever was short, and if you haven&rsquo;t collected yet you move to the back. After your turn, automatic dues
+        stay on until the cycle ends.
       </p>
     </>
   );

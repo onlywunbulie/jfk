@@ -6,7 +6,7 @@ import { Money } from "@/lib/money";
 import { getGroupDetail, listMembers } from "./service";
 import { db } from "@/lib/db";
 import { groups } from "@/lib/db/schema";
-import { erc20Abi, jfkModuleAbi, jfkRotationAbi } from "@/lib/chain/abis";
+import { HELPER_POWER, erc20Abi, jfkHelperAbi, jfkModuleAbi, jfkRotationAbi } from "@/lib/chain/abis";
 import { publicClient } from "@/lib/chain/client";
 import { moduleFor } from "@/lib/chain/module";
 import { relayer } from "@/lib/chain/relayer";
@@ -113,6 +113,8 @@ export interface RotationSeat {
   leaving: boolean;
   /** What they owe, in USDC base units. */
   debt: bigint;
+  /** Rallied's key is their live helper with the collect power: their dues are paid automatically. */
+  autoDues: boolean;
 }
 
 export type ChainRotation =
@@ -210,11 +212,15 @@ export async function readRotation(
       contracts: everyone.flatMap((wallet) => [
         { ...jfk, functionName: "rotationStatus", args: [safe, wallet] } as const,
         { ...jfk, functionName: "debtOf", args: [safe, wallet] } as const,
+        { address: contract.address, abi: jfkHelperAbi, functionName: "getHelper", args: [safe, wallet] } as const,
       ]),
     });
+    const ralliedKey = relayer()?.account.address.toLowerCase() ?? null;
+    const now = BigInt(Math.floor(Date.now() / 1000));
     const byWallet = new Map(members.filter((m) => m.walletAddress).map((m) => [(m.walletAddress as string).toLowerCase(), m]));
     const seat = (wallet: Address, i: number): RotationSeat => {
-      const [, paidThisRound, collected, leaving] = reads[i * 2] as readonly [boolean, boolean, boolean, boolean];
+      const [, paidThisRound, collected, leaving] = reads[i * 3] as readonly [boolean, boolean, boolean, boolean];
+      const helper = reads[i * 3 + 2] as { key: string; powers: number; expiresAt: bigint };
       const member = byWallet.get(wallet.toLowerCase());
       return {
         wallet,
@@ -223,7 +229,9 @@ export async function readRotation(
         paidThisRound,
         collected,
         leaving,
-        debt: reads[i * 2 + 1] as bigint,
+        debt: reads[i * 3 + 1] as bigint,
+        autoDues:
+          ralliedKey !== null && helper.key.toLowerCase() === ralliedKey && (helper.powers & HELPER_POWER.COLLECT) !== 0 && helper.expiresAt > now,
       };
     };
     const lastPayout = await lastPayoutFor(contract.address, safe, (wallet) => {

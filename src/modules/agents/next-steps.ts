@@ -50,7 +50,11 @@ export async function nextForGroup(userId: string, group: GroupLike, first: stri
 
   const unpaid = dues.ok && !dues.you.paidThisPeriod;
   if (unpaid) steps.push(`Pay my ${g} dues now`);
-  if (!autopay?.on) steps.push(`Pay my ${g} dues automatically`);
+  // Required in a rotating group, so it goes first there.
+  if (!autopay?.on) {
+    if (group.type === "ROTATING") steps.unshift(`Turn on automatic dues in ${g} (required)`);
+    else steps.push(`Pay my ${g} dues automatically`);
+  }
 
   // When nothing needs the user, the most useful things to do in the group.
   if (group.type === "TREASURY") steps.push(`Propose a spend from ${g}`);

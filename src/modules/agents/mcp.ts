@@ -44,6 +44,7 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         "the user sends it to a vote themselves in Rallied. " +
         "The only money you can move is the user's own dues, into their own group's vault, and only once they've allowed it with set_up_auto_pay. " +
         "When a group is on Base and the user hasn't turned on automatic dues there (get_group shows your_dues.automatic), offer it once, briefly, with the set-up link. " +
+        "In a rotating group they're required, not optional: until they're on, remind the user each time the group comes up, with set_up_auto_pay. " +
         "When the user started a group that isn't on Base yet (vault_on_base is empty), offer once to start it with start_on_base, mentioning that anyone joining afterwards needs a vote. " +
         "You can't spend, send money anywhere else, or vote. " +
         "How to reply: keep it short (one or two lines on what happened, with any link), then offer the result's suggested_next as a numbered list, " +
@@ -121,7 +122,11 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         your_dues: dues?.ok
           ? {
               this_period: dues.you.paidThisPeriod ?? "not paid yet",
-              automatic: autopay?.on ? `on, until ${autopay.until}` : "off (set_up_auto_pay turns it on)",
+              automatic: autopay?.on
+                ? `on, until ${autopay.until}`
+                : rotating
+                  ? "off, and required in a rotating group: set it up now with set_up_auto_pay"
+                  : "off (set_up_auto_pay turns it on)",
               ...(autopay?.on && autopay.problem ? { last_problem: autopay.problem } : {}),
             }
           : "the group isn't on Base yet",
@@ -147,6 +152,7 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
                   name: nameOfSeat(seat),
                   collected_this_cycle: seat.collected,
                   paid_this_round: seat.paidThisRound,
+                  automatic_dues: seat.autoDues,
                   ...(seat.leaving ? { leaves_when_the_cycle_ends: true } : {}),
                 })),
                 ...(onRotation.joining.length > 0 ? { joining_next_cycle: onRotation.joining.map(nameOfSeat) } : {}),
@@ -720,6 +726,13 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
     async ({ group_id }) => {
       if (!canDraft) return noDraftScope;
       if (!(await aiAllowedInGroup(userId, group_id))) return notFound();
+      const group = await getGroupDetail(group_id, userId);
+      if (group?.type === "ROTATING") {
+        return refusal(
+          "Automatic dues are required in a rotating group, so every turn is paid in full; they can't be stopped while you're in it. " +
+            "To stop paying, leave the group: you finish this cycle (paying in and collecting your turn), then go.",
+        );
+      }
       const stopped = await stopAutopay(userId, group_id);
       if (!stopped.ok) return refusal(stopped.reason);
       return json({

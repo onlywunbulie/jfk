@@ -17,7 +17,22 @@ import { prepareDuesAction } from "@/app/(app)/dues-actions";
  * the user's own Pay button. Paying sends from the user's wallet straight
  * into the group's vault; Rallied never holds it.
  */
-export function Dues({ dues, groupId, autopay }: { dues: DuesData; groupId: string; autopay: AutopayStatus | null }) {
+/**
+ * In a rotating group, automatic dues are required: every turn's pot depends
+ * on everyone paying on the day, so they aren't offered as optional and
+ * there's no stop button here.
+ */
+export function Dues({
+  dues,
+  groupId,
+  autopay,
+  required = false,
+}: {
+  dues: DuesData;
+  groupId: string;
+  autopay: AutopayStatus | null;
+  required?: boolean;
+}) {
   const router = useRouter();
   const sendToBase = useSendToBase();
   const [busy, setBusy] = useState<string | null>(null);
@@ -26,7 +41,11 @@ export function Dues({ dues, groupId, autopay }: { dues: DuesData; groupId: stri
 
   if (!dues.ok) {
     if (dues.reason !== "unreachable") return null;
-    return <p className="text-sm text-ink-muted">Couldn&rsquo;t reach Base for dues just now. Refresh in a moment.</p>;
+    return (
+      <p className="text-sm text-ink-muted">
+        Couldn&rsquo;t reach Base for dues just now. Refresh in a moment.
+      </p>
+    );
   }
 
   async function pay() {
@@ -42,7 +61,13 @@ export function Dues({ dues, groupId, autopay }: { dues: DuesData; groupId: stri
         calls: prepared.calls,
         wallet: prepared.wallet,
         onStage: (stage, wallet) =>
-          setBusy(prepared.calls.length > 1 && wallet === "test" && stage === "confirm" ? "Confirm in your wallet (two steps: allow, then pay)…" : SEND_STAGE_TEXT[wallet][stage]),
+          setBusy(
+            prepared.calls.length > 1 &&
+              wallet === "test" &&
+              stage === "confirm"
+              ? "Confirm in your wallet (two steps: allow, then pay)…"
+              : SEND_STAGE_TEXT[wallet][stage],
+          ),
       });
       if (!sent.ok) {
         setError(sent.error);
@@ -70,7 +95,10 @@ export function Dues({ dues, groupId, autopay }: { dues: DuesData; groupId: stri
   }
 
   return (
-    <section aria-labelledby="dues-title" className="rounded-[var(--radius-card)] border border-border bg-surface p-5">
+    <section
+      aria-labelledby="dues-title"
+      className="rounded-[var(--radius-card)] border border-border bg-surface p-5"
+    >
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h3 id="dues-title" className="text-lg font-semibold text-ink">
           Dues
@@ -79,17 +107,31 @@ export function Dues({ dues, groupId, autopay }: { dues: DuesData; groupId: stri
           Vault holds <span className="text-ink">{dues.vault}</span>
         </p>
       </div>
-      <p className="mt-1 text-sm text-ink-muted tabular-nums">{dues.contribution} each, this period</p>
+      <p className="mt-1 text-sm text-ink-muted tabular-nums">
+        {dues.contribution} each, this period
+      </p>
 
       <ul className="mt-4 divide-y divide-border text-sm">
         {dues.members.map((member) => {
           const status = member.isYou ? youPaid : member.paidThisPeriod;
           return (
-            <li key={member.name} className="flex items-baseline justify-between gap-4 py-2">
+            <li
+              key={member.name}
+              className="flex items-baseline justify-between gap-4 py-2"
+            >
               <span className="text-ink">{member.name}</span>
               <span className="flex items-baseline gap-3 tabular-nums">
-                <span className="text-xs text-ink-faint">{member.paidIn} in total</span>
-                <span className={cn("text-xs", status ? "text-inflow" : "text-pending")}>{status ?? "Not paid yet"}</span>
+                <span className="text-xs text-ink-faint">
+                  {member.paidIn} in total
+                </span>
+                <span
+                  className={cn(
+                    "text-xs",
+                    status ? "text-inflow" : "text-pending",
+                  )}
+                >
+                  {status ?? "Not paid yet"}
+                </span>
               </span>
             </li>
           );
@@ -113,18 +155,42 @@ export function Dues({ dues, groupId, autopay }: { dues: DuesData; groupId: stri
         {autopay?.on ? (
           <>
             <p className="text-ink-muted">
-              Automatic: <span className="text-inflow">on</span>, until {autopay.until}. Rallied pays on each due date.
+              Automatic: <span className="text-inflow">on</span>, until{" "}
+              {autopay.until}. Rallied pays on each due date.
             </p>
-            {autopay.problem && <p className="mt-1 text-xs text-pending">{autopay.problem}</p>}
-            <button
-              type="button"
-              disabled={busy !== null}
-              onClick={stop}
-              className="mt-2 text-xs text-ink-muted underline underline-offset-4 hover:text-ink disabled:opacity-50"
-            >
-              Stop automatic dues
-            </button>
+            {autopay.problem && (
+              <p className="mt-1 text-xs text-pending">{autopay.problem}</p>
+            )}
+            {required ? (
+              <p className="mt-1 text-xs text-ink-faint">
+                Required in a rotating group, so everyone&rsquo;s turn is paid in
+                full.
+              </p>
+            ) : (
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={stop}
+                className="mt-2 text-xs text-ink-muted underline underline-offset-4 hover:text-ink disabled:opacity-50"
+              >
+                Stop automatic dues
+              </button>
+            )}
           </>
+        ) : required ? (
+          <div className="rounded-[var(--radius-control)] border border-pending/40 bg-raised p-3">
+            <p className="font-medium text-ink">Turn on automatic dues</p>
+            <p className="mt-1 text-xs text-ink-muted">
+              Required in a rotating group: Rallied pays your dues on each due
+              date, so every turn is paid in full. One confirm in your wallet.
+            </p>
+            <Link
+              href={`/auto-pay/${groupId}` as Route}
+              className="press mt-3 inline-flex h-9 items-center rounded-[var(--radius-control)] bg-accent px-3.5 text-sm font-medium text-accent-ink"
+            >
+              Turn it on
+            </Link>
+          </div>
         ) : (
           <p className="text-ink-muted">
             <Link
@@ -133,7 +199,9 @@ export function Dues({ dues, groupId, autopay }: { dues: DuesData; groupId: stri
             >
               Pay automatically
             </Link>{" "}
-            <span className="text-xs text-ink-faint">· one confirm, then Rallied (or your AI) pays on each due date</span>
+            <span className="text-xs text-ink-faint">
+              · one confirm, then Rallied (or your AI) pays on each due date
+            </span>
           </p>
         )}
       </div>
