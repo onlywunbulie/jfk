@@ -139,3 +139,45 @@ describe("a group's money history from Base", () => {
     expect(await readHistory(groupId, amaka)).toEqual({ ok: false, reason: "not_on_base" });
   });
 });
+
+describe("a rotating group's history (contract v3)", () => {
+  /** A rotation event as the history API returns it. */
+  async function rotationLog(tx: number, index: number, name: "TurnPaid" | "DebtRepaid", args: Record<string, unknown>, data: Hex) {
+    const { jfkRotationAbi } = await import("@/lib/chain/abis");
+    const topics = encodeEventTopics({ abi: jfkRotationAbi, eventName: name, args } as never) as Hex[];
+    return {
+      data,
+      topics: [...topics, ...Array(4 - topics.length).fill(null)],
+      timeStamp: numberToHex(1_763_388_000 + tx * 60),
+      transactionHash: `0x${tx.toString(16).padStart(64, "0")}`,
+      logIndex: numberToHex(index),
+    };
+  }
+
+  it("says whose turn a payout was", async () => {
+    const { amaka, groupId } = await setup();
+    logs = [
+      log(7, 0, "Paid", { safe: SAFE, recipient: KEMI }, amount(4_000_000n)),
+      await rotationLog(7, 1, "TurnPaid", { safe: SAFE, holder: KEMI }, encodeAbiParameters([{ type: "uint32" }, { type: "uint256" }, { type: "uint256" }], [3, 4_000_000n, 0n])),
+      log(8, 0, "Paid", { safe: SAFE, recipient: AMAKA }, amount(4_000_000n)),
+      await rotationLog(8, 1, "TurnPaid", { safe: SAFE, holder: AMAKA }, encodeAbiParameters([{ type: "uint32" }, { type: "uint256" }, { type: "uint256" }], [4, 4_000_000n, 0n])),
+    ];
+    const history = await readHistory(groupId, amaka);
+    if (!history.ok) throw new Error(history.reason);
+    expect(history.entries.map((e) => e.what)).toEqual(["Kemi's turn, round 3", "Your turn, round 4"]);
+  });
+
+  it("says who repaid whom, apart from the turn paid in the same transaction", async () => {
+    const { amaka, groupId } = await setup();
+    // Amaka's turn: her $2 debt to Kemi comes out of her pot first, then she gets the rest.
+    logs = [
+      log(9, 0, "Paid", { safe: SAFE, recipient: KEMI }, amount(2_000_000n)),
+      await rotationLog(9, 1, "DebtRepaid", { safe: SAFE, debtor: AMAKA, creditor: KEMI }, amount(2_000_000n)),
+      log(9, 2, "Paid", { safe: SAFE, recipient: AMAKA }, amount(2_000_000n)),
+      await rotationLog(9, 3, "TurnPaid", { safe: SAFE, holder: AMAKA }, encodeAbiParameters([{ type: "uint32" }, { type: "uint256" }, { type: "uint256" }], [2, 2_000_000n, 0n])),
+    ];
+    const history = await readHistory(groupId, amaka);
+    if (!history.ok) throw new Error(history.reason);
+    expect(history.entries.map((e) => e.what)).toEqual(["You repaid Kemi", "Your turn, round 2"]);
+  });
+});

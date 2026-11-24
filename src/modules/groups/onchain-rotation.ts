@@ -1,6 +1,7 @@
 import "server-only";
 import { and, eq, isNotNull } from "drizzle-orm";
-import { getAddress, type Address, type Hex } from "viem";
+import { decodeEventLog, encodeEventTopics, getAddress, pad, type Address, type Hex } from "viem";
+import { HISTORY_API_URL } from "@/lib/chain/addresses";
 import { db } from "@/lib/db";
 import { groups } from "@/lib/db/schema";
 import { jfkModuleAbi, jfkRotationAbi } from "@/lib/chain/abis";
@@ -124,8 +125,61 @@ export type ChainRotation =
       roundPot: bigint;
       order: RotationSeat[];
       joining: RotationSeat[];
+      /** The most recent turn paid out, if any: stays visible after a cycle rolls over. */
+      lastPayout: LastPayout | null;
     }
   | { ok: false; reason: "not_on_base" | "not_rotating" | "unreachable" };
+
+export interface LastPayout {
+  wallet: Address;
+  name: string;
+  userId: string | null;
+  round: number;
+  paid: bigint;
+  at: Date;
+}
+
+/**
+ * The latest TurnPaid for this vault, from the history API (Base's own node
+ * only searches a few hundred blocks back). Null if none, or if it can't be read:
+ * it's a nicety, never a reason for the screen to fail.
+ */
+async function lastPayoutFor(
+  module: Address,
+  safe: Address,
+  nameOf: (wallet: Address) => { name: string; userId: string | null },
+): Promise<LastPayout | null> {
+  try {
+    const [topic0] = encodeEventTopics({ abi: jfkRotationAbi, eventName: "TurnPaid" });
+    const url = new URL(HISTORY_API_URL);
+    url.search = new URLSearchParams({
+      module: "logs",
+      action: "getLogs",
+      address: module,
+      topic0: topic0 as string,
+      topic1: pad(safe),
+      topic0_1_opr: "and",
+      fromBlock: "0",
+      toBlock: "latest",
+    }).toString();
+    const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(8_000) });
+    const body = (await response.json()) as { result?: { data: Hex; topics: (Hex | null)[]; timeStamp: Hex }[] | string };
+    const logs = Array.isArray(body.result) ? body.result : [];
+    const latest = logs.at(-1);
+    if (!latest) return null;
+    const event = decodeEventLog({ abi: jfkRotationAbi, data: latest.data, topics: latest.topics.filter(Boolean) as [Hex, ...Hex[]] });
+    if (event.eventName !== "TurnPaid") return null;
+    return {
+      wallet: event.args.holder,
+      ...nameOf(event.args.holder),
+      round: Number(event.args.round),
+      paid: event.args.paid,
+      at: new Date(Number(BigInt(latest.timeStamp)) * 1000),
+    };
+  } catch {
+    return null;
+  }
+}
 
 /** A rotating group's state as Base has it: the order, this round, and who owes what. */
 export async function readRotation(
@@ -170,8 +224,13 @@ export async function readRotation(
         debt: reads[i * 2 + 1] as bigint,
       };
     };
+    const lastPayout = await lastPayoutFor(contract.address, safe, (wallet) => {
+      const member = byWallet.get(wallet.toLowerCase());
+      return { name: member?.displayName ?? wallet, userId: member?.userId ?? null };
+    });
     return {
       ok: true,
+      lastPayout,
       cycle: Number(cycle),
       turn: Number(turn),
       nextPayoutAt: new Date(Number(nextPayoutAt) * 1000),

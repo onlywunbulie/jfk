@@ -56,6 +56,25 @@ vi.mock("@/lib/chain/relayer", () => ({
   }),
 }));
 
+// The history API, for the last payout: one TurnPaid, to Ade, round 4, $400.
+const { encodeAbiParameters, encodeEventTopics, numberToHex } = await import("viem");
+const { jfkRotationAbi } = await import("@/lib/chain/abis");
+vi.stubGlobal(
+  "fetch",
+  vi.fn(async () =>
+    Response.json({
+      message: "OK",
+      result: [
+        {
+          data: encodeAbiParameters([{ type: "uint32" }, { type: "uint256" }, { type: "uint256" }], [4, 400_000_000n, 0n]),
+          topics: encodeEventTopics({ abi: jfkRotationAbi, eventName: "TurnPaid", args: { safe: SAFE, holder: ADE } } as never),
+          timeStamp: numberToHex(1_795_564_800),
+        },
+      ],
+    }),
+  ),
+);
+
 const { runTurnPayouts, readRotation } = await import("@/modules/groups/onchain-rotation");
 const { createGroup } = await import("@/modules/groups/service");
 const { users, groups, auditLogs } = await import("@/lib/db/schema");
@@ -142,6 +161,7 @@ describe("reading a rotation from Base", () => {
       ["Ade", true, true, false, 0n],
       ["Bisi", false, false, true, 100_000_000n],
     ]);
+    expect(read.lastPayout).toMatchObject({ name: "Ade", userId: "u-ade", round: 4, paid: 400_000_000n });
     // Someone not in Rallied's list is shown by their wallet, never guessed.
     expect(read.joining).toEqual([expect.objectContaining({ wallet: CHIDI, userId: null, name: CHIDI })]);
   });

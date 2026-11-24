@@ -97,6 +97,20 @@ function ChainOrder({
             <span className="text-danger">{owing.map((seat) => `${nameOf(seat)} ${usd(seat.debt)}`).join(" · ")}</span>
           </Detail>
         )}
+        {chain.lastPayout && (
+          <Detail label="Last payout">
+            <span className="tabular-nums">{usd(chain.lastPayout.paid)}</span> to{" "}
+            {chain.lastPayout.userId === viewerId
+              ? "you"
+              : isWalletName(chain.lastPayout.name) || chain.lastPayout.name.startsWith("0x")
+                ? shortAddress(chain.lastPayout.wallet)
+                : chain.lastPayout.name}
+            <span className="text-ink-muted">
+              {" "}
+              · round {chain.lastPayout.round}, {DAY.format(chain.lastPayout.at)}
+            </span>
+          </Detail>
+        )}
         <Detail label="Cycle">{chain.cycle}</Detail>
       </RallMessage>
 

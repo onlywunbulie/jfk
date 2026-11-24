@@ -1,7 +1,7 @@
 import "server-only";
 import { decodeEventLog, getAddress, pad, type Hex } from "viem";
 import { HISTORY_API_URL, shortAddress } from "@/lib/chain/addresses";
-import { jfkModuleAbi, jfkMoneyEventsAbi } from "@/lib/chain/abis";
+import { jfkModuleAbi, jfkMoneyEventsAbi, jfkRotationAbi } from "@/lib/chain/abis";
 import { publicClient } from "@/lib/chain/client";
 import { moduleFor } from "@/lib/chain/module";
 import { Money } from "@/lib/money";
@@ -42,6 +42,12 @@ interface RawLog {
 const LAGOS = "Africa/Lagos";
 const DAY = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: LAGOS });
 const TIME = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: LAGOS });
+/** The money events, plus rotation's: whose turn a payout was, and debts repaid. */
+const HISTORY_EVENTS = [
+  ...jfkMoneyEventsAbi,
+  ...jfkRotationAbi.filter((item) => item.type === "event" && (item.name === "TurnPaid" || item.name === "DebtRepaid")),
+];
+
 const usdc = (minor: bigint) => Money.fromMinor(minor, "USDC").format();
 
 export async function readHistory(groupId: string, userId: string): Promise<History> {
@@ -79,15 +85,24 @@ export async function readHistory(groupId: string, userId: string): Promise<Hist
 
   // What each transaction did besides paying, so a payment out can say why:
   // a voted spend, a refund to a removed member, or a share when the group closed.
+  // Rotating groups (v3) also say whose turn a payment was, or whose debt it repaid.
   const executedIn = new Map<string, bigint>();
   const removedIn = new Set<string>();
   const closedIn = new Set<string>();
+  const turnIn = new Map<string, { round: number; holder: string }>();
+  const repaidIn = new Map<string, { debtor: string; creditor: string; amount: bigint }[]>();
   const decoded = logs.flatMap((log) => {
     try {
-      const event = decodeEventLog({ abi: jfkMoneyEventsAbi, data: log.data, topics: log.topics.filter(Boolean) as [Hex, ...Hex[]] });
+      const event = decodeEventLog({ abi: HISTORY_EVENTS, data: log.data, topics: log.topics.filter(Boolean) as [Hex, ...Hex[]] });
       if (event.eventName === "ProposalExecuted") executedIn.set(log.transactionHash, event.args.id);
       if (event.eventName === "MemberRemoved") removedIn.add(log.transactionHash);
       if (event.eventName === "GroupClosed") closedIn.add(log.transactionHash);
+      if (event.eventName === "TurnPaid") turnIn.set(log.transactionHash, { round: Number(event.args.round), holder: event.args.holder.toLowerCase() });
+      if (event.eventName === "DebtRepaid") {
+        const list = repaidIn.get(log.transactionHash) ?? [];
+        list.push({ debtor: event.args.debtor.toLowerCase(), creditor: event.args.creditor.toLowerCase(), amount: event.args.amount });
+        repaidIn.set(log.transactionHash, list);
+      }
       return [{ log, event }];
     } catch {
       return []; // Votes, proposals and settings: not money.
@@ -126,11 +141,25 @@ export async function readHistory(groupId: string, userId: string): Promise<Hist
     } else if (event.eventName === "Paid") {
       // Every payment out is one Paid event; the others in its transaction say why.
       const who = nameOf(event.args.recipient);
-      const what = closedIn.has(log.transactionHash)
-        ? `${who === "You" ? "Your" : `${who}'s`} share, group closed`
-        : removedIn.has(log.transactionHash)
-          ? `Refund to ${who}, removed by vote`
-          : `Paid to ${who}`;
+      const recipient = event.args.recipient.toLowerCase();
+      // A debt repaid: the same amount, to the same person, in the same transaction. Each repayment matches one payment.
+      const repayments = repaidIn.get(log.transactionHash) ?? [];
+      const repaid = repayments.findIndex((r) => r.creditor === recipient && r.amount === event.args.amount);
+      const turn = turnIn.get(log.transactionHash);
+      let what: string;
+      if (closedIn.has(log.transactionHash)) {
+        what = `${who === "You" ? "Your" : `${who}'s`} share, group closed`;
+      } else if (removedIn.has(log.transactionHash)) {
+        what = `Refund to ${who}, removed by vote`;
+      } else if (repaid !== -1) {
+        const [{ debtor }] = repayments.splice(repaid, 1);
+        const from = nameOf(debtor);
+        what = `${from} repaid ${who === "You" ? "you" : who}`;
+      } else if (turn && turn.holder === recipient) {
+        what = `${who === "You" ? "Your" : `${who}'s`} turn, round ${turn.round}`;
+      } else {
+        what = `Paid to ${who}`;
+      }
       entries.push({ ...base, what, amount: usdc(event.args.amount), inflow: false, mine: isMe(event.args.recipient), approved });
     }
   }
