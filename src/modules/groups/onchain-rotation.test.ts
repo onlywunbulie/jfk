@@ -8,6 +8,9 @@ vi.mock("server-only", () => ({}));
 const SAFE = "0x1111111111111111111111111111111111111111";
 const V3 = "0x48bB48799153c1a420B8476EaC663C396E291655";
 const TX = "0xabc";
+const ADE = "0xA000000000000000000000000000000000000001";
+const BISI = "0xb000000000000000000000000000000000000002";
+const CHIDI = "0xC000000000000000000000000000000000000003";
 
 /** What the fake chain says: which contract runs the vault, when the next payout is due, and whether the contract would pay now. */
 const chain = {
@@ -22,7 +25,20 @@ vi.mock("@/lib/chain/module", () => ({
 }));
 vi.mock("@/lib/chain/client", () => ({
   publicClient: () => ({
-    readContract: async () => [true, 1, 0, 0, chain.nextPayoutAt, 27 * 86400, 7 * 86400, 0n, 0n],
+    readContract: async ({ functionName }: { functionName: string }) => {
+      if (functionName === "getOrder") return [[ADE, BISI], [CHIDI]];
+      if (functionName === "getGroup") return ["0x0", 100_000_000n, 3 * 86400, 60, false, [], 0n];
+      return [true, 2, 5, 1, chain.nextPayoutAt, 27 * 86400, 7 * 86400, 100_000_000n, 0n];
+    },
+    // rotationStatus then debtOf, for each of Ade, Bisi, Chidi.
+    multicall: async () => [
+      [true, true, true, false],
+      0n,
+      [true, false, false, true],
+      100_000_000n,
+      [false, false, false, false],
+      0n,
+    ],
     simulateContract: async () => {
       if (!chain.wouldPay) throw new Error("NotDueYet");
       return {};
@@ -40,7 +56,7 @@ vi.mock("@/lib/chain/relayer", () => ({
   }),
 }));
 
-const { runTurnPayouts } = await import("@/modules/groups/onchain-rotation");
+const { runTurnPayouts, readRotation } = await import("@/modules/groups/onchain-rotation");
 const { createGroup } = await import("@/modules/groups/service");
 const { users, groups, auditLogs } = await import("@/lib/db/schema");
 const { Money } = await import("@/lib/money");
@@ -110,5 +126,29 @@ describe("paying out rotating groups' turns", () => {
     const groupId = await rotatingGroupOnBase();
     await t.db.update(groups).set({ safeAddress: null }).where(eq(groups.id, groupId));
     expect(await runTurnPayouts(NOW)).toMatchObject({ tried: 0, paid: 0 });
+  });
+});
+
+describe("reading a rotation from Base", () => {
+  it("names each seat, with what they've paid, collected and owe", async () => {
+    const members = [
+      { userId: "u-ade", displayName: "Ade", walletAddress: ADE.toLowerCase() },
+      { userId: "u-bisi", displayName: "Bisi", walletAddress: BISI.toLowerCase() },
+    ];
+    const read = await readRotation(SAFE, members);
+    if (!read.ok) throw new Error("expected a rotation");
+    expect(read).toMatchObject({ cycle: 2, turn: 1, contribution: 100_000_000n, roundPot: 100_000_000n });
+    expect(read.order.map((seat) => [seat.name, seat.paidThisRound, seat.collected, seat.leaving, seat.debt])).toEqual([
+      ["Ade", true, true, false, 0n],
+      ["Bisi", false, false, true, 100_000_000n],
+    ]);
+    // Someone not in Rallied's list is shown by their wallet, never guessed.
+    expect(read.joining).toEqual([expect.objectContaining({ wallet: CHIDI, userId: null, name: CHIDI })]);
+  });
+
+  it("isn't a rotation before Base, or on contract v2", async () => {
+    expect(await readRotation(null, [])).toEqual({ ok: false, reason: "not_on_base" });
+    chain.version = 2;
+    expect(await readRotation(SAFE, [])).toEqual({ ok: false, reason: "not_rotating" });
   });
 });

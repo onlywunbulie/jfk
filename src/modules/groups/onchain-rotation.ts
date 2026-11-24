@@ -3,7 +3,7 @@ import { and, eq, isNotNull } from "drizzle-orm";
 import { getAddress, type Address, type Hex } from "viem";
 import { db } from "@/lib/db";
 import { groups } from "@/lib/db/schema";
-import { jfkRotationAbi } from "@/lib/chain/abis";
+import { jfkModuleAbi, jfkRotationAbi } from "@/lib/chain/abis";
 import { publicClient } from "@/lib/chain/client";
 import { moduleFor } from "@/lib/chain/module";
 import { relayer } from "@/lib/chain/relayer";
@@ -94,5 +94,94 @@ async function payTurnFor(safe: Address, groupId: string, now: Date): Promise<Tu
   } catch (cause) {
     console.error("[rotation] paying a turn failed", cause);
     return "failed";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Reading a rotation, for #payout order
+// ---------------------------------------------------------------------------
+
+export interface RotationSeat {
+  wallet: Address;
+  userId: string | null;
+  name: string;
+  paidThisRound: boolean;
+  collected: boolean;
+  leaving: boolean;
+  /** What they owe, in USDC base units. */
+  debt: bigint;
+}
+
+export type ChainRotation =
+  | {
+      ok: true;
+      cycle: number;
+      /** Which seat collects next (an index into `order`). */
+      turn: number;
+      /** The earliest the next payout can happen, if everyone has paid. */
+      nextPayoutAt: Date;
+      contribution: bigint;
+      roundPot: bigint;
+      order: RotationSeat[];
+      joining: RotationSeat[];
+    }
+  | { ok: false; reason: "not_on_base" | "not_rotating" | "unreachable" };
+
+/** A rotating group's state as Base has it: the order, this round, and who owes what. */
+export async function readRotation(
+  safeAddress: string | null,
+  members: { userId: string; displayName: string; walletAddress: string | null }[],
+): Promise<ChainRotation> {
+  if (!safeAddress) return { ok: false, reason: "not_on_base" };
+  const safe = getAddress(safeAddress);
+  const client = publicClient();
+  try {
+    const contract = await moduleFor(safe);
+    if (!contract || contract.version !== 3) return { ok: false, reason: "not_rotating" };
+    const jfk = { address: contract.address, abi: jfkRotationAbi } as const;
+    const [rotation, orders, group] = await Promise.all([
+      client.readContract({ ...jfk, functionName: "getRotation", args: [safe] }),
+      client.readContract({ ...jfk, functionName: "getOrder", args: [safe] }),
+      client.readContract({ address: contract.address, abi: jfkModuleAbi, functionName: "getGroup", args: [safe] }),
+    ]);
+    const [on, cycle, , turn, nextPayoutAt, , , roundPot] = rotation;
+    if (!on) return { ok: false, reason: "not_rotating" };
+    const [order, joining] = orders;
+
+    const everyone = [...order, ...joining];
+    const reads = await client.multicall({
+      allowFailure: false,
+      contracts: everyone.flatMap((wallet) => [
+        { ...jfk, functionName: "rotationStatus", args: [safe, wallet] } as const,
+        { ...jfk, functionName: "debtOf", args: [safe, wallet] } as const,
+      ]),
+    });
+    const byWallet = new Map(members.filter((m) => m.walletAddress).map((m) => [(m.walletAddress as string).toLowerCase(), m]));
+    const seat = (wallet: Address, i: number): RotationSeat => {
+      const [, paidThisRound, collected, leaving] = reads[i * 2] as readonly [boolean, boolean, boolean, boolean];
+      const member = byWallet.get(wallet.toLowerCase());
+      return {
+        wallet,
+        userId: member?.userId ?? null,
+        name: member?.displayName ?? wallet,
+        paidThisRound,
+        collected,
+        leaving,
+        debt: reads[i * 2 + 1] as bigint,
+      };
+    };
+    return {
+      ok: true,
+      cycle: Number(cycle),
+      turn: Number(turn),
+      nextPayoutAt: new Date(Number(nextPayoutAt) * 1000),
+      contribution: group[1],
+      roundPot,
+      order: order.map((wallet, i) => seat(wallet, i)),
+      joining: joining.map((wallet, i) => seat(wallet, order.length + i)),
+    };
+  } catch (cause) {
+    console.error("[rotation] couldn't read Base", cause);
+    return { ok: false, reason: "unreachable" };
   }
 }
