@@ -10,6 +10,7 @@ import { readDues } from "@/modules/groups/onchain-dues";
 import { autopayStatus, collectDues, stopAutopay } from "@/modules/groups/onchain-autopay";
 import { readChainVotes } from "@/modules/groups/onchain-votes";
 import { prepareCoverDebt, readRotation } from "@/modules/groups/onchain-rotation";
+import { setGroupImageFromLink } from "@/modules/groups/images";
 import { nextAcrossGroups, nextForGroup } from "./next-steps";
 import { EXPLORER_URL } from "@/lib/chain/addresses";
 import { HOW_OFTEN, everyText } from "@/lib/schedule-text";
@@ -379,6 +380,35 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
   );
 
   server.registerTool(
+    "set_group_image",
+    {
+      title: "Set a group's picture or banner",
+      description:
+        "Set a group's picture (square; the side rail) or banner (wide; the top of its sidebar) from an https link to a PNG, JPG or WebP image online, up to 10 MB. " +
+        "Rallied downloads it, crops it to shape and saves a fresh copy. Only the group's owner and admins can. " +
+        "A photo the user attached in this chat has no link you can pass: give them the group's add_picture_and_banner link instead (from create_group), " +
+        `or ${grant.origin}/groups/<group_id>/about?group-profile=1.`,
+      inputSchema: {
+        group_id: z.string().min(1).max(64),
+        kind: z.enum(["picture", "banner"]),
+        image_url: z.string().url().max(2048).describe("An https link to the image itself"),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    async ({ group_id, kind, image_url }) => {
+      if (!canDraft) return noDraftScope;
+      if (!(await aiAllowedInGroup(userId, group_id))) return notFound();
+      const result = await setGroupImageFromLink(userId, group_id, kind === "picture" ? "avatar" : "banner", image_url);
+      if (!result.ok) return refusal(result.reason);
+      return json({
+        set: kind,
+        see_it: `${grant.origin}/groups/${group_id}/about?group-profile=1`,
+        suggested_next: await suggest(group_id),
+      });
+    },
+  );
+
+  server.registerTool(
     "delete_group",
     {
       title: "Delete a group that isn't on Base",
@@ -419,7 +449,10 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         "Before creating, ask the user how often everyone pays: every week, every 2 weeks, every 3 weeks or every month " +
         "(every 2 or 3 months isn't available yet; it comes with Rallied's next contract). " +
         "Confirm the name, kind, amount, how often and due day with the user first. " +
-        "Once it's created, say in one line that they can add a group picture and banner at add_picture_and_banner (you can't upload images yourself), then offer the suggested next steps.",
+        "Also ask whether they have a group picture (square; shows beside the group in the side rail) and a banner (wide; across the top of the group's sidebar). " +
+        "Once it's created: for an image that's online, pass its https link to set_group_image. " +
+        "For a photo they attached in this chat, you can't send the file itself, so give them add_picture_and_banner, where they upload it in one step. " +
+        "Then offer the suggested next steps.",
       inputSchema: {
         name: z.string().min(1).max(60).describe("The group's name, e.g. 'Detty December'"),
         kind: z.enum(["shared_pot", "rotating_savings"]),

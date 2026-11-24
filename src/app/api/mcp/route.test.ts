@@ -129,6 +129,7 @@ describe("/api/mcp", () => {
       "draft_spend",
       "invite_link",
       "pay_dues",
+      "set_group_image",
       "set_up_auto_pay",
       "start_on_base",
       "stop_auto_pay",
