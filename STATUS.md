@@ -46,10 +46,9 @@ _Last updated: 2026-11-24._
 ## Next up
 
 1. **Notifications from both Rallied and Claude** (agreed in principle, not
-   started): one live "what needs me" check across the user's groups; a Claude
-   tool (`whats_new`) for a scheduled Claude task to call each morning; and
-   Rallied's own daily email (Resend; the live site needs `RESEND_API_KEY` in
-   Vercel). The user hasn't yet confirmed daily digest vs per-event emails.
+   started): one live "what needs me" check across the user's groups, shown in
+   Rallied; and a Claude tool (`whats_new`) for a scheduled Claude task to call
+   each morning. **No email notifications** — the user doesn't want them.
 2. Rotating groups in the rest of the app: #about, the sidebar and Claude's
    summary still read partly like a shared pot.
 3. Warning when someone invited owes money in another Rallied group (agreed).
