@@ -1,10 +1,12 @@
 import "server-only";
 import { and, eq, isNotNull } from "drizzle-orm";
-import { decodeEventLog, encodeEventTopics, getAddress, pad, type Address, type Hex } from "viem";
-import { HISTORY_API_URL } from "@/lib/chain/addresses";
+import { decodeEventLog, encodeEventTopics, encodeFunctionData, getAddress, pad, type Address, type Hex } from "viem";
+import { CONTRACTS, HISTORY_API_URL } from "@/lib/chain/addresses";
+import { Money } from "@/lib/money";
+import { getGroupDetail, listMembers } from "./service";
 import { db } from "@/lib/db";
 import { groups } from "@/lib/db/schema";
-import { jfkModuleAbi, jfkRotationAbi } from "@/lib/chain/abis";
+import { erc20Abi, jfkModuleAbi, jfkRotationAbi } from "@/lib/chain/abis";
 import { publicClient } from "@/lib/chain/client";
 import { moduleFor } from "@/lib/chain/module";
 import { relayer } from "@/lib/chain/relayer";
@@ -243,4 +245,70 @@ export async function readRotation(
     console.error("[rotation] couldn't read Base", cause);
     return { ok: false, reason: "unreachable" };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Covering someone's debt
+// ---------------------------------------------------------------------------
+
+export type PreparedCover =
+  | {
+      ok: true;
+      calls: { to: Address; data: Hex }[];
+      wallet: Address;
+      /** "$100.00" */
+      amount: string;
+      debtorName: string;
+      groupName: string;
+      self: boolean;
+    }
+  | { ok: false; reason: string };
+
+/**
+ * Pay off a member's debt in a rotating group from the user's own wallet:
+ * the whole amount they owe on Base, straight on to whoever they shorted.
+ * The user confirms in their wallet; nothing moves without that.
+ */
+export async function prepareCoverDebt(userId: string, groupId: string, memberId: string): Promise<PreparedCover> {
+  const [group, members] = await Promise.all([getGroupDetail(groupId, userId), listMembers(groupId, userId)]);
+  if (!group || !members) return { ok: false, reason: "You're not in that group." };
+  const me = members.find((m) => m.userId === userId);
+  if (!me?.walletAddress) return { ok: false, reason: "Your account has no wallet. Sign in with your wallet first." };
+  const debtor = members.find((m) => m.memberId === memberId);
+  if (!debtor?.walletAddress) return { ok: false, reason: "That person isn't in this group, or has no wallet on Base." };
+
+  const chain = await readRotation(group.safeAddress, members);
+  if (!chain.ok) {
+    return {
+      ok: false,
+      reason: chain.reason === "unreachable" ? "Couldn't reach Base just now. Try again in a moment." : "This group has no debts on Base to cover.",
+    };
+  }
+  const seat = [...chain.order, ...chain.joining].find((s) => s.wallet.toLowerCase() === debtor.walletAddress!.toLowerCase());
+  const debt = seat?.debt ?? 0n;
+  if (debt === 0n) return { ok: false, reason: `${debtor.displayName} doesn't owe anything in ${group.name}.` };
+
+  const safe = getAddress(group.safeAddress as string);
+  const payer = getAddress(me.walletAddress);
+  const contract = await moduleFor(safe);
+  if (!contract) return { ok: false, reason: "This group has no debts on Base to cover." };
+  const client = publicClient();
+  const [balance, allowance] = await Promise.all([
+    client.readContract({ address: CONTRACTS.usdc, abi: erc20Abi, functionName: "balanceOf", args: [payer] }),
+    client.readContract({ address: CONTRACTS.usdc, abi: erc20Abi, functionName: "allowance", args: [payer, contract.address] }),
+  ]);
+  const amount = Money.fromMinor(debt, "USDC").format();
+  if (balance < debt) {
+    return { ok: false, reason: `Your wallet has ${Money.fromMinor(balance, "USDC").format()} and covering this takes ${amount}.` };
+  }
+
+  const calls: { to: Address; data: Hex }[] = [];
+  if (allowance < debt) {
+    calls.push({ to: CONTRACTS.usdc, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [contract.address, debt] }) });
+  }
+  calls.push({
+    to: contract.address,
+    data: encodeFunctionData({ abi: jfkRotationAbi, functionName: "coverDebt", args: [safe, getAddress(debtor.walletAddress), debt] }),
+  });
+  return { ok: true, calls, wallet: payer, amount, debtorName: debtor.displayName, groupName: group.name, self: debtor.userId === userId };
 }

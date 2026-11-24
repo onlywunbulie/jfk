@@ -120,6 +120,7 @@ describe("/api/mcp", () => {
     const drafting = body.result.tools.filter((tool) => !tool.annotations?.readOnlyHint).map((tool) => tool.name).sort();
     expect(readOnly).toEqual(["get_group", "list_groups", "list_proposals"]);
     expect(drafting).toEqual([
+      "cover_debt",
       "create_group",
       "delete_group",
       "draft_group_change",

@@ -9,6 +9,7 @@ import { startGroupOnChain } from "@/modules/groups/onchain";
 import { readDues } from "@/modules/groups/onchain-dues";
 import { autopayStatus, collectDues, stopAutopay } from "@/modules/groups/onchain-autopay";
 import { readChainVotes } from "@/modules/groups/onchain-votes";
+import { prepareCoverDebt, readRotation } from "@/modules/groups/onchain-rotation";
 import { nextAcrossGroups, nextForGroup } from "./next-steps";
 import { EXPLORER_URL } from "@/lib/chain/addresses";
 import { HOW_OFTEN, everyText } from "@/lib/schedule-text";
@@ -100,6 +101,10 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
       const [dues, autopay] = group.safeAddress
         ? await Promise.all([readDues(group_id, userId), autopayStatus(userId, group_id)])
         : [null, null];
+      // A rotating group on contract v3: the order, this round and who owes what, from Base.
+      const rotation = rotating ? await readRotation(group.safeAddress, members) : null;
+      const onRotation = rotation?.ok ? rotation : null;
+      const nameOfSeat = (seat: { userId: string | null; name: string }) => (seat.userId === userId ? "you" : seat.name);
 
       return json({
         suggested_next: await nextForGroup(userId, group),
@@ -127,6 +132,29 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
           name: member.displayName,
           role: member.role === "OWNER" ? "started the group" : member.role.toLowerCase(),
         })),
+        ...(onRotation
+          ? {
+              payout_order: {
+                cycle: onRotation.cycle,
+                each_turn: money(group.contributionAmount.times(onRotation.order.length)),
+                next_to_collect: onRotation.order[onRotation.turn] ? nameOfSeat(onRotation.order[onRotation.turn]) : null,
+                // Everyone still to collect, in order: what draft_group_change(change_order) rearranges.
+                still_to_collect: onRotation.order.slice(onRotation.turn).map(nameOfSeat),
+                turns: onRotation.order.map((seat, i) => ({
+                  turn: i + 1,
+                  name: nameOfSeat(seat),
+                  collected_this_cycle: seat.collected,
+                  paid_this_round: seat.paidThisRound,
+                  ...(seat.leaving ? { leaves_when_the_cycle_ends: true } : {}),
+                })),
+                ...(onRotation.joining.length > 0 ? { joining_next_cycle: onRotation.joining.map(nameOfSeat) } : {}),
+                payouts: "automatic, on each due date",
+              },
+              owing: [...onRotation.order, ...onRotation.joining]
+                .filter((seat) => seat.debt > 0n)
+                .map((seat) => ({ name: nameOfSeat(seat), owes: Money.fromMinor(seat.debt, "USDC").format() })),
+            }
+          : {}),
         rules: {
           a_vote_counts_when_this_share_votes: `${group.quorumPct}%`,
           share_that_must_agree: {
@@ -138,10 +166,22 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
             changing_the_rules: percent(changeRules),
             closing_the_group: percent(close),
             adding_or_removing_an_admin: percent(saved.REMOVE_ADMIN ?? DEFAULT_GOVERNANCE.REMOVE_ADMIN),
+            ...(onRotation ? { changing_the_payout_order: percent(changeRules) } : {}),
           },
-          leaving: "a member who leaves gives up what they paid in",
-          voted_out: "a member voted out gets back what they paid in",
-          closing: "the pot is split by how much each person paid in",
+          ...(onRotation
+            ? {
+                missing_a_round: "you owe it; your next payment goes straight to whoever was short, and if you haven't collected yet you move to the back",
+                after_your_turn: "automatic dues stay on until the cycle ends",
+                leaving: "a member who leaves finishes the cycle (paying in and collecting their turn), then goes",
+                voted_out: "someone owing goes at once and their debt stays on record; anyone else finishes the cycle first",
+                closing: "this round's payments go back to whoever paid them; anything else is split equally",
+                anyone_can_cover_a_debt: "cover_debt gives the link",
+              }
+            : {
+                leaving: "a member who leaves gives up what they paid in",
+                voted_out: "a member voted out gets back what they paid in",
+                closing: "the pot is split by how much each person paid in",
+              }),
         },
       });
     },
@@ -519,6 +559,41 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         ...(status.on ? { already_on_until: status.until, note: "Confirming again renews it for a year." } : {}),
         how: "One tap and one wallet confirm at the link. After that, dues are paid on each due date, or when asked.",
         suggested_next: ["I've confirmed it", ...(await suggest(group_id)).filter((step) => !/automatically/.test(step))].slice(0, 3),
+      });
+    },
+  );
+
+  server.registerTool(
+    "cover_debt",
+    {
+      title: "Cover a debt in a rotating group",
+      description:
+        "Pay off what a member owes in a rotating group (get_group shows who owes what), from the user's own wallet: " +
+        "the whole amount goes straight to whoever they shorted. It can be the user's own debt, or a friend's. " +
+        "This only returns a link: the user sees the exact amount there and confirms in their wallet. Confirm who and how much with the user first.",
+      inputSchema: {
+        group_id: z.string().min(1).max(64),
+        member: z.string().min(1).max(60).describe("The name of the member whose debt to cover, as get_group lists it, or 'me'"),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async ({ group_id, member }) => {
+      if (!canDraft) return noDraftScope;
+      if (!(await aiAllowedInGroup(userId, group_id))) return notFound();
+      const members = await listMembers(group_id, userId);
+      if (!members) return notFound();
+      const wanted = member.trim().toLowerCase();
+      const matches = members.filter((m) => (wanted === "me" ? m.userId === userId : m.displayName.trim().toLowerCase() === wanted));
+      if (matches.length === 0) return refusal(`No member called ${member.trim()} in this group.`);
+      if (matches.length > 1) return refusal(`Two members are called ${member.trim()}, so a name alone can't pick one.`);
+      const prepared = await prepareCoverDebt(userId, group_id, matches[0].memberId);
+      if (!prepared.ok) return refusal(prepared.reason);
+      return json({
+        confirm_here: `${grant.origin}/cover-debt/${group_id}/${matches[0].memberId}`,
+        amount: prepared.amount,
+        covers: prepared.self ? "your own debt" : `${prepared.debtorName}'s debt`,
+        how: "One tap and one wallet confirm at the link. It goes straight to whoever was short.",
+        suggested_next: ["I've confirmed it", ...(await suggest(group_id))].slice(0, 3),
       });
     },
   );

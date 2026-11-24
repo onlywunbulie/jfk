@@ -18,6 +18,7 @@ const chain = {
   nextPayoutAt: 0n,
   wouldPay: true,
   sent: [] as unknown[],
+  walletBalance: 500_000_000n,
 };
 
 vi.mock("@/lib/chain/module", () => ({
@@ -28,6 +29,8 @@ vi.mock("@/lib/chain/client", () => ({
     readContract: async ({ functionName }: { functionName: string }) => {
       if (functionName === "getOrder") return [[ADE, BISI], [CHIDI]];
       if (functionName === "getGroup") return ["0x0", 100_000_000n, 3 * 86400, 60, false, [], 0n];
+      if (functionName === "balanceOf") return chain.walletBalance;
+      if (functionName === "allowance") return 0n;
       return [true, 2, 5, 1, chain.nextPayoutAt, 27 * 86400, 7 * 86400, 100_000_000n, 0n];
     },
     // rotationStatus then debtOf, for each of Ade, Bisi, Chidi.
@@ -75,9 +78,11 @@ vi.stubGlobal(
   ),
 );
 
-const { runTurnPayouts, readRotation } = await import("@/modules/groups/onchain-rotation");
+const { runTurnPayouts, readRotation, prepareCoverDebt } = await import("@/modules/groups/onchain-rotation");
 const { createGroup } = await import("@/modules/groups/service");
-const { users, groups, auditLogs } = await import("@/lib/db/schema");
+const { users, groups, groupMembers, auditLogs } = await import("@/lib/db/schema");
+const { decodeFunctionData, getAddress } = await import("viem");
+const { erc20Abi } = await import("@/lib/chain/abis");
 const { Money } = await import("@/lib/money");
 const { eq } = await import("drizzle-orm");
 
@@ -86,7 +91,7 @@ const seconds = (date: Date) => BigInt(Math.floor(date.getTime() / 1000));
 
 beforeEach(async () => {
   await t.reset();
-  Object.assign(chain, { version: 3, nextPayoutAt: seconds(NOW) - 60n, wouldPay: true, sent: [] });
+  Object.assign(chain, { version: 3, nextPayoutAt: seconds(NOW) - 60n, wouldPay: true, sent: [], walletBalance: 500_000_000n });
 });
 
 afterAll(async () => {
@@ -170,5 +175,44 @@ describe("reading a rotation from Base", () => {
     expect(await readRotation(null, [])).toEqual({ ok: false, reason: "not_on_base" });
     chain.version = 2;
     expect(await readRotation(SAFE, [])).toEqual({ ok: false, reason: "not_rotating" });
+  });
+});
+
+describe("covering a debt", () => {
+  /** Ade (the user) and Bisi in a rotating group on Base; Base says Bisi owes $100. */
+  async function adeAndBisi() {
+    const [ade] = await t.db.insert(users).values({ displayName: "Ade", walletAddress: ADE.toLowerCase() }).returning();
+    const [bisi] = await t.db.insert(users).values({ displayName: "Bisi", walletAddress: BISI.toLowerCase() }).returning();
+    const { groupId } = await createGroup(ade.id, {
+      name: "Ajo",
+      type: "ROTATING",
+      contributionAmount: Money.fromMajor(100, "USDC"),
+      cadence: "MONTHLY",
+      dueDay: 1,
+    });
+    await t.db.update(groups).set({ safeAddress: SAFE, currency: "USDC" }).where(eq(groups.id, groupId));
+    const [member] = await t.db.insert(groupMembers).values({ groupId, userId: bisi.id, role: "MEMBER", status: "ACTIVE" }).returning();
+    const [adeMember] = await t.db.select().from(groupMembers).where(eq(groupMembers.userId, ade.id));
+    return { ade: ade.id, groupId, bisiMember: member.id, adeMember: adeMember.id };
+  }
+
+  it("asks the wallet to approve exactly the debt, then cover it for Bisi", async () => {
+    const { ade, groupId, bisiMember } = await adeAndBisi();
+    const prepared = await prepareCoverDebt(ade, groupId, bisiMember);
+    if (!prepared.ok) throw new Error(prepared.reason);
+    expect(prepared).toMatchObject({ amount: "$100.00", debtorName: "Bisi", self: false });
+    const [approve, cover] = prepared.calls.map((call) => decodeFunctionData({ abi: [...erc20Abi, ...jfkRotationAbi], data: call.data }));
+    expect(approve).toMatchObject({ functionName: "approve", args: [V3, 100_000_000n] });
+    expect(cover).toMatchObject({ functionName: "coverDebt", args: [getAddress(SAFE), getAddress(BISI), 100_000_000n] });
+  });
+
+  it("refuses when they owe nothing, or the wallet is short", async () => {
+    const { ade, groupId, bisiMember, adeMember } = await adeAndBisi();
+    expect(await prepareCoverDebt(ade, groupId, adeMember)).toEqual({ ok: false, reason: "Ade doesn't owe anything in Ajo." });
+    chain.walletBalance = 40_000_000n;
+    expect(await prepareCoverDebt(ade, groupId, bisiMember)).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining("Your wallet has $40.00"),
+    });
   });
 });
