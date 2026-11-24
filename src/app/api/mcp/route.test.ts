@@ -120,6 +120,7 @@ describe("/api/mcp", () => {
     const drafting = body.result.tools.filter((tool) => !tool.annotations?.readOnlyHint).map((tool) => tool.name).sort();
     expect(readOnly).toEqual(["get_group", "list_groups", "list_proposals"]);
     expect(drafting).toEqual([
+      "allow_ai_votes",
       "cover_debt",
       "create_group",
       "delete_group",
@@ -134,6 +135,7 @@ describe("/api/mcp", () => {
       "start_on_base",
       "stop_auto_pay",
       "upload_group_image",
+      "vote",
     ]);
   });
 

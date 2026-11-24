@@ -140,6 +140,25 @@ describe("setting up automatic dues", () => {
     expect(prepared.summary).toMatchObject({ every: "month", groupName: "OTF" });
   });
 
+  it("keeps voting through the AI when it was already allowed, adding collect to it", async () => {
+    const { amaka, groupId } = await setup();
+    chain.helper = { key: RALLIED_KEY, powers: 2, expiresAt: NOW() + 30n * DAY };
+    const prepared = await prepareAutopay(amaka, groupId);
+    if (!prepared.ok) throw new Error(prepared.reason);
+    const set = decodeFunctionData({ abi: jfkHelperAbi, data: prepared.calls[0].data });
+    expect((set.args as [string, string, number, bigint])[2]).toBe(4 | 2);
+  });
+
+  it("removing automatic dues keeps voting through the AI", async () => {
+    const { amaka, groupId } = await setup();
+    chain.helper = { key: RALLIED_KEY, powers: 6, expiresAt: NOW() + 30n * DAY };
+    const removal = await prepareRemoval(amaka, groupId);
+    if (!removal.ok) throw new Error(removal.reason);
+    const keep = decodeFunctionData({ abi: jfkHelperAbi, data: removal.calls[0].data });
+    expect(keep.functionName).toBe("setHelper");
+    expect((keep.args as [string, string, number, bigint])[2]).toBe(2);
+  });
+
   it("is only remembered once Base shows Rallied as the helper", async () => {
     const { amaka, groupId } = await setup();
     expect(await confirmAutopay(amaka, groupId, TX)).toMatchObject({ ok: false });

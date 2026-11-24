@@ -13,6 +13,7 @@ import { VerifyAi } from "./verify-ai";
 import { listWaitingDrafts } from "@/modules/agents/drafts";
 import { roleDraftView, ruleDraftView, spendDraftView, decisionDraftView } from "./draft-views";
 import { aiAllowedInGroup, getAiConnection } from "@/modules/agents/connection";
+import { aiVoteStatus } from "@/modules/groups/onchain-ai-votes";
 import { DEFAULT_GOVERNANCE, type GovernedAction, type GroupType } from "@/lib/db/schema/groups";
 import { contractThresholds } from "@/modules/groups/onchain-setup";
 import { ChannelIntro, DateDivider, Detail, RallMessage, VaultFootnote, longDate } from "./parts";
@@ -64,7 +65,11 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
   if (channel.slug === "verify") {
     // Real: whether the user's AI is connected and allowed in this group.
     // Still a sample: limits, which come with the contract work.
-    const [connection, allowedHere] = await Promise.all([getAiConnection(user.id), aiAllowedInGroup(user.id, group.id)]);
+    const [connection, allowedHere, aiVotes] = await Promise.all([
+      getAiConnection(user.id),
+      aiAllowedInGroup(user.id, group.id),
+      group.safeAddress ? aiVoteStatus(user.id, group.id).catch(() => null) : Promise.resolve(null),
+    ]);
     const aiName = connection ? (/chatgpt|openai/i.test(connection.appName) ? "ChatGPT" : /grok/i.test(connection.appName) ? "Grok" : "Claude") : null;
     return (
       <div className="flex min-h-full flex-col justify-end">
@@ -111,7 +116,26 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
           {connection && (
             <Detail label="It can">Read this group, draft changes for you to send, and pay your dues here once you allow it</Detail>
           )}
-          <Detail label="It can&rsquo;t">Vote, send a draft, or spend: those stay with you</Detail>
+          {connection && group.safeAddress && (
+            <Detail label="Votes for you">
+              {aiVotes?.allowed ? (
+                <>
+                  Yes, the way you tell it.{" "}
+                  <Link href={`/ai-votes/${group.id}?remove=1` as Route} className="text-ink-muted underline underline-offset-4 hover:text-ink">
+                    Stop
+                  </Link>
+                </>
+              ) : (
+                <>
+                  Not here yet.{" "}
+                  <Link href={`/ai-votes/${group.id}` as Route} className="text-ink underline decoration-ink-faint underline-offset-4 hover:decoration-ink">
+                    Let it vote for you
+                  </Link>
+                </>
+              )}
+            </Detail>
+          )}
+          <Detail label="It can&rsquo;t">Send a draft, spend, or vote on its own: those stay with you</Detail>
         </RallMessage>
       </div>
     );

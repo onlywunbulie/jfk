@@ -11,6 +11,8 @@ import { autopayStatus, collectDues, stopAutopay } from "@/modules/groups/onchai
 import { readChainVotes } from "@/modules/groups/onchain-votes";
 import { prepareCoverDebt, readRotation } from "@/modules/groups/onchain-rotation";
 import { setGroupImageFromLink } from "@/modules/groups/images";
+import { aiVoteStatus, castVoteForUser } from "@/modules/groups/onchain-ai-votes";
+import { chainActionLimit } from "@/lib/rate-limit";
 import { issueUploadToken } from "@/lib/upload-token";
 import { nextAcrossGroups, nextForGroup } from "./next-steps";
 import { EXPLORER_URL } from "@/lib/chain/addresses";
@@ -27,8 +29,10 @@ import { DRAFT_SCOPE } from "./oauth";
  * return nothing for groups the user isn't in.
  *
  * Reading, plus drafting (with the drafts:write scope): a draft lands in the
- * user's Waiting section and does nothing until they send it. No tool moves
- * money or votes.
+ * user's Waiting section and does nothing until they send it. The only money
+ * a tool moves is the user's own dues, once they've allowed it; the only vote
+ * it casts is the user's own, the way they said, in a group where they've let
+ * their AI vote (allow_ai_votes).
  */
 export function buildRalliedServer(grant: { userId: string; scope: string; appName: string; origin: string }): McpServer {
   const { userId } = grant;
@@ -46,7 +50,9 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         "When a group is on Base and the user hasn't turned on automatic dues there (get_group shows your_dues.automatic), offer it once, briefly, with the set-up link. " +
         "In a rotating group they're required, not optional: until they're on, remind the user each time the group comes up, with set_up_auto_pay. " +
         "When the user started a group that isn't on Base yet (vault_on_base is empty), offer once to start it with start_on_base, mentioning that anyone joining afterwards needs a vote. " +
-        "You can't spend, send money anywhere else, or vote. " +
+        "You can't spend or send money anywhere else. " +
+        "You can vote for the user only how they tell you, on the exact vote they mean, in a group where they've let you (allow_ai_votes): " +
+        "never pick a side yourself, and if it's unclear, ask. They can always vote in Rallied instead. " +
         "How to reply: keep it short (one or two lines on what happened, with any link), then offer the result's suggested_next as a numbered list, " +
         "phrased exactly as given so the user can answer with just the number. If they reply with a number, do that option. " +
         "Don't add other suggestions or explain options they didn't ask about.",
@@ -219,6 +225,7 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
           votes_on_base: live.votes
             .filter((vote) => !only_open || vote.state === "OPEN" || vote.state === "PASSED")
             .map((vote) => ({
+              vote_id: vote.id,
               title: vote.title,
               change: vote.change ? `${vote.change.before} → ${vote.change.after}` : vote.detail,
               state: { OPEN: "being voted on", PASSED: "passed, being carried out", DONE: "passed and carried out", FAILED: "didn't pass" }[vote.state],
@@ -636,6 +643,73 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         ...(status.on ? { already_on_until: status.until, note: "Confirming again renews it for a year." } : {}),
         how: "One tap and one wallet confirm at the link. After that, dues are paid on each due date, or when asked.",
         suggested_next: ["I've confirmed it", ...(await suggest(group_id)).filter((step) => !/automatically/.test(step))].slice(0, 3),
+      });
+    },
+  );
+
+  server.registerTool(
+    "vote",
+    {
+      title: "Vote for the user",
+      description:
+        "Cast the user's own vote on one vote in a group on Base (vote_id from list_proposals): yes, no or abstain. " +
+        "Only the way the user told you in this conversation, for that exact vote; never choose for them, and ask if it's unclear. " +
+        "It's their one vote, cast by Rallied's key as their helper, and votes can't be changed afterwards. " +
+        "If they haven't let you vote for them in this group yet, this says so and gives the link to allow it (allow_ai_votes).",
+      inputSchema: {
+        group_id: z.string().min(1).max(64),
+        vote_id: z.string().min(1).max(40).describe("The vote_id from list_proposals"),
+        choice: z.enum(["yes", "no", "abstain"]),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    },
+    async ({ group_id, vote_id, choice }) => {
+      if (!canDraft) return noDraftScope;
+      if (!(await aiAllowedInGroup(userId, group_id))) return notFound();
+      const slow = await chainActionLimit(userId);
+      if (slow) return refusal(slow);
+      const cast = await castVoteForUser(userId, group_id, vote_id, choice);
+      if (!cast.ok) {
+        if (cast.allowAt) {
+          return json({
+            voted: false,
+            why: cast.reason,
+            allow_here: `${grant.origin}/ai-votes/${group_id}`,
+            or_vote_in_rallied: `${grant.origin}/groups/${group_id}/votes`,
+          });
+        }
+        return refusal(cast.reason);
+      }
+      return json({
+        voted: choice,
+        on_base: `${EXPLORER_URL}/tx/${cast.txHash}`,
+        suggested_next: await suggest(group_id),
+      });
+    },
+  );
+
+  server.registerTool(
+    "allow_ai_votes",
+    {
+      title: "Let the AI vote for the user, or stop it",
+      description:
+        "Returns the link where the user lets you vote for them in one group (one wallet confirm, for a year), or with stop: true, where they take that away. " +
+        "Their automatic dues are kept either way. They can always vote in Rallied too.",
+      inputSchema: {
+        group_id: z.string().min(1).max(64),
+        stop: z.boolean().optional(),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async ({ group_id, stop }) => {
+      if (!canDraft) return noDraftScope;
+      if (!(await aiAllowedInGroup(userId, group_id))) return notFound();
+      const status = await aiVoteStatus(userId, group_id);
+      if (!status) return refusal("That group isn't on Base yet, or you're not in it.");
+      return json({
+        ...(stop ? { stop_here: `${grant.origin}/ai-votes/${group_id}?remove=1` } : { allow_here: `${grant.origin}/ai-votes/${group_id}` }),
+        allowed_now: status.allowed,
+        how: "One tap and one wallet confirm at the link.",
       });
     },
   );

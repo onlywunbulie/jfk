@@ -84,8 +84,11 @@ export function AiConnection({ connection, mcpUrl }: { connection: ConnectionVie
           </div>
           <dl className="mt-4 space-y-2 text-sm">
             <Row label="Last used" value={connection.lastUsed ?? "Not yet"} />
-            <Row label="Can" value="Read your groups, create groups, draft changes for you to send, and pay your dues once you allow it" />
-            <Row label="Can't" value="Vote, send a draft, or spend" />
+            <Row
+              label="Can"
+              value="Read your groups, create groups, draft changes for you to send, pay your dues once you allow it, and vote the way you tell it where you allow it"
+            />
+            <Row label="Can't" value="Send a draft, spend, or vote on its own" />
           </dl>
 
           {confirming ? (

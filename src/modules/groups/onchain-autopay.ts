@@ -138,7 +138,13 @@ export async function prepareAutopay(userId: string, groupId: string): Promise<P
   const [, contribution, , , closed] = chainGroup;
   if (closed) return { ok: false, reason: "This group has closed." };
 
-  const expiresAt = BigInt(Math.floor(Date.now() / 1000) + LIFETIME_S);
+  // Keep what Rallied's key can already do here (voting for the member): this adds collecting.
+  const existing = await publicClient().readContract({ address: moduleAddress, abi: jfkHelperAbi, functionName: "getHelper", args: [safe, wallet] });
+  const now = BigInt(Math.floor(Date.now() / 1000));
+  const ours = existing.key.toLowerCase() === helperKey.toLowerCase() && existing.expiresAt > now;
+  const powers = HELPER_POWER.COLLECT | (ours ? existing.powers : 0);
+  const yearOut = now + BigInt(LIFETIME_S);
+  const expiresAt = ours && existing.expiresAt > yearOut ? existing.expiresAt : yearOut;
   const periods = periodsInAYear(group.cadence, group.intervalWeeks);
   const allowance = contribution * BigInt(periods);
 
@@ -148,7 +154,7 @@ export async function prepareAutopay(userId: string, groupId: string): Promise<P
     calls: [
       {
         to: moduleAddress,
-        data: encodeFunctionData({ abi: jfkHelperAbi, functionName: "setHelper", args: [safe, helperKey, HELPER_POWER.COLLECT, expiresAt] }),
+        data: encodeFunctionData({ abi: jfkHelperAbi, functionName: "setHelper", args: [safe, helperKey, powers, expiresAt] }),
       },
       // A year of dues, at most. The contract still takes only the group's amount, once a period.
       { to: CONTRACTS.usdc, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [moduleAddress, allowance] }) },
@@ -227,11 +233,16 @@ export async function prepareRemoval(
 ): Promise<{ ok: true; calls: { to: Address; data: Hex }[]; wallet: Address; groupName: string } | { ok: false; reason: string }> {
   const found = await contextFor(userId, groupId);
   if (!found.ok) return found;
-  const { safe, module: moduleAddress, wallet, group } = found.context;
+  const { safe, module: moduleAddress, wallet, group, helperKey } = found.context;
   const helper = await publicClient().readContract({ address: moduleAddress, abi: jfkHelperAbi, functionName: "getHelper", args: [safe, wallet] });
 
   const calls: { to: Address; data: Hex }[] = [];
-  if (helper.key !== "0x0000000000000000000000000000000000000000") {
+  const ours = helper.key.toLowerCase() === helperKey.toLowerCase();
+  const rest = helper.powers & ~HELPER_POWER.COLLECT;
+  if (ours && rest !== 0) {
+    // Voting through the member's AI stays; only collecting goes.
+    calls.push({ to: moduleAddress, data: encodeFunctionData({ abi: jfkHelperAbi, functionName: "setHelper", args: [safe, helperKey, rest, helper.expiresAt] }) });
+  } else if (helper.key !== "0x0000000000000000000000000000000000000000") {
     calls.push({ to: moduleAddress, data: encodeFunctionData({ abi: jfkHelperAbi, functionName: "revokeHelper", args: [safe] }) });
   }
   calls.push({ to: CONTRACTS.usdc, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [moduleAddress, 0n] }) });

@@ -343,6 +343,31 @@ export const jfkMoneyEventsAbi = [
 
 /** JfkModule's helpers, as automatic dues use them: name one with the collect power, take it away, read it, collect. */
 export const jfkHelperAbi = [
+  // Generated from the compiled contract: a helper casting its member's own vote.
+  {
+    type: "function",
+    name: "voteFor",
+    inputs: [
+      {
+        name: "safe",
+        type: "address",
+      },
+      {
+        name: "member",
+        type: "address",
+      },
+      {
+        name: "id",
+        type: "uint256",
+      },
+      {
+        name: "choice",
+        type: "uint8",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
   {
     type: "function",
     name: "setHelper",
