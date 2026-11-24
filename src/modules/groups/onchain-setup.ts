@@ -10,7 +10,7 @@ import {
   type Hex,
 } from "viem";
 import { CONTRACTS } from "@/lib/chain/addresses";
-import { jfkSetupAbi, safeAbi } from "@/lib/chain/abis";
+import { jfkRotatingSetupAbi, jfkSetupAbi, safeAbi } from "@/lib/chain/abis";
 import { DEFAULT_GOVERNANCE, type GovernedAction } from "@/lib/db/schema";
 import type { Money } from "@/lib/money";
 
@@ -54,6 +54,33 @@ export interface GroupSetupInput {
   cadence: "WEEKLY" | "MONTHLY";
   /** Weekly groups: every 1, 2 or 3 weeks. */
   intervalWeeks?: number;
+  /**
+   * Rotating groups (Ajo): when the first turn is paid out, in seconds since
+   * 1970. `memberWallets` is then the turn order.
+   */
+  rotation?: { firstPayoutAt: number };
+}
+
+const DAY_SECONDS = 24 * 60 * 60;
+
+/**
+ * A rotating group's timing on Base (contract v3):
+ *
+ * - roundGap, the least time between two payouts: a day short of the cycle
+ *   (27 days for monthly, 6, 13 or 20 for weekly), so a daily job running a
+ *   few seconds later or earlier than last time is never refused on a due date.
+ * - grace, how much longer a payout waits once due when someone hasn't
+ *   paid. Counted from the previous payout, so it must cover the longest
+ *   month: 27 + 7 = 34 days for monthly, leaving late payers at least three
+ *   days after even a 31-day month's due date. Weekly: 3 days.
+ *
+ * Rallied's daily job only tries a short payout three days after the due
+ * date; these are the contract's floor, which nobody can go under.
+ */
+export function rotationTiming(cadence: "WEEKLY" | "MONTHLY", intervalWeeks = 1): { roundGap: number; grace: number } {
+  if (cadence === "MONTHLY") return { roundGap: 27 * DAY_SECONDS, grace: 7 * DAY_SECONDS };
+  const weeks = Math.min(Math.max(Math.trunc(intervalWeeks), 1), 3);
+  return { roundGap: (7 * weeks - 1) * DAY_SECONDS, grace: 3 * DAY_SECONDS };
 }
 
 /**
@@ -85,19 +112,26 @@ export function buildGroupSetup(input: GroupSetupInput): GroupSetup {
   }
   if (input.memberWallets.length === 0) throw new Error("A group needs at least one member");
 
-  const setupData = encodeFunctionData({
-    abi: jfkSetupAbi,
-    functionName: "setupForGroup",
-    args: [
-      CONTRACTS.jfkModule,
-      CONTRACTS.usdc,
-      input.contribution.minor,
-      contractThresholds(input.governance),
-      input.quorumPct,
-      input.votingPeriodSeconds,
-      payGapSeconds(input.cadence, input.intervalWeeks),
-    ],
-  });
+  const common = [
+    CONTRACTS.jfkModule,
+    CONTRACTS.usdc,
+    input.contribution.minor,
+    contractThresholds(input.governance),
+    input.quorumPct,
+    input.votingPeriodSeconds,
+    payGapSeconds(input.cadence, input.intervalWeeks),
+  ] as const;
+  let setupData: Hex;
+  if (input.rotation) {
+    const { roundGap, grace } = rotationTiming(input.cadence, input.intervalWeeks);
+    setupData = encodeFunctionData({
+      abi: jfkRotatingSetupAbi,
+      functionName: "setupForRotatingGroup",
+      args: [...common, roundGap, grace, BigInt(input.rotation.firstPayoutAt)],
+    });
+  } else {
+    setupData = encodeFunctionData({ abi: jfkSetupAbi, functionName: "setupForGroup", args: common });
+  }
 
   const initializer = encodeFunctionData({
     abi: safeAbi,

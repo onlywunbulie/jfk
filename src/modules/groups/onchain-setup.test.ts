@@ -101,3 +101,41 @@ describe("the group's rules, in the contract's order", () => {
     }
   });
 });
+
+describe("a rotating group's setup (contract v3)", () => {
+  it("registers as rotating, in the turn order, with its timing and first payout", async () => {
+    const { decodeFunctionData: decodeCall } = await import("viem");
+    const { jfkRotatingSetupAbi } = await import("@/lib/chain/abis");
+    const { rotationTiming } = await import("./onchain-setup");
+    const firstPayoutAt = 1_800_000_000;
+    const { initializer } = setupFor({ memberWallets: [TUNDE, AMAKA], rotation: { firstPayoutAt } });
+
+    const setup = decodeCall({ abi: safeAbi, data: initializer });
+    const [owners, , , data] = setup.args as unknown as readonly [readonly string[], bigint, string, `0x${string}`];
+    expect(owners).toEqual([TUNDE, AMAKA]); // the Safe's owner order is the first cycle's turn order
+    const inner = decodeCall({ abi: jfkRotatingSetupAbi, data });
+    expect(inner.functionName).toBe("setupForRotatingGroup");
+    const args = inner.args as readonly unknown[];
+    const { roundGap, grace } = rotationTiming("MONTHLY");
+    expect(args[0]).toBe(CONTRACTS.jfkModule);
+    expect(args.slice(7)).toEqual([roundGap, grace, BigInt(firstPayoutAt)]);
+  });
+});
+
+describe("rotation timing", () => {
+  it("never refuses a payout on a due date, and leaves late payers at least three days in any month", async () => {
+    const { rotationTiming } = await import("./onchain-setup");
+    const day = 86400;
+    const { roundGap, grace } = rotationTiming("MONTHLY");
+    for (const monthDays of [28, 29, 30, 31]) {
+      expect(roundGap).toBeLessThan(monthDays * day); // due date is always past the earliest payout
+      expect(roundGap + grace - monthDays * day).toBeGreaterThanOrEqual(3 * day); // a short payout waits 3+ days past due
+    }
+    expect(grace).toBeLessThanOrEqual(7 * day); // the contract's limit
+  });
+
+  it("weekly: a day short of the cycle, three days' grace", async () => {
+    const { rotationTiming } = await import("./onchain-setup");
+    expect(rotationTiming("WEEKLY", 2)).toEqual({ roundGap: 13 * 86400, grace: 3 * 86400 });
+  });
+});

@@ -11,6 +11,7 @@ export type AuditAction =
   | "group.started_on_chain"
   | "group.settings.updated"
   | "group.dissolved"
+  | "rotation.turn_paid"
   | "member.invited"
   | "member.joined"
   | "member.removed"

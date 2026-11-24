@@ -17,6 +17,7 @@ import { recordAudit } from "@/modules/audit/service";
 import { announce } from "@/modules/chat/events";
 import { getMembership } from "./service";
 import { buildGroupSetup, predictSafeAddress } from "./onchain-setup";
+import { cyclePeriodFor } from "@/modules/contributions/schedule";
 import { confirmGroupSafe, deploySafe, hasCode, proxyCreationCode } from "@/modules/groups/onchain-chain";
 
 /**
@@ -114,6 +115,8 @@ export async function startGroupOnChain(
       quorumPct: groupSettings.quorumPct,
       cadence: groupSettings.cadence,
       intervalWeeks: groupSettings.intervalWeeks,
+      dueDay: groupSettings.dueDay,
+      type: groups.type,
     })
     .from(groups)
     .innerJoin(groupSettings, eq(groupSettings.groupId, groups.id))
@@ -121,11 +124,16 @@ export async function startGroupOnChain(
     .limit(1);
   if (!group) return { ok: false, reason: "not_found" };
   if (group.safeAddress) return { ok: false, reason: "already_started" };
+  const rotating = group.type === "ROTATING";
   if (group.currency !== "USDC") return { ok: false, reason: "not_usdc" };
 
   const members = await activeMembers(groupId);
   if (members.some((m) => m.walletAddress === null)) {
     return { ok: false, reason: "members_without_wallets" };
+  }
+  // A rotating group goes on Base in its turn order: the vault's owner order is the first cycle's.
+  if (rotating) {
+    members.sort((a, b) => (a.rotationPosition ?? Infinity) - (b.rotationPosition ?? Infinity));
   }
   const wallets = members.map((m) => getAddress(m.walletAddress as string));
 
@@ -146,6 +154,19 @@ export async function startGroupOnChain(
     votingPeriodSeconds: DEFAULT_VOTE_DAYS * 24 * 60 * 60,
     cadence: group.cadence,
     intervalWeeks: group.intervalWeeks,
+    // The first turn is paid out on the group's first due date.
+    rotation: rotating
+      ? {
+          firstPayoutAt: Math.floor(
+            cyclePeriodFor(new Date(), {
+              cadence: group.cadence,
+              dueDay: group.dueDay,
+              graceDays: 0,
+              intervalWeeks: group.intervalWeeks,
+            }).periodEnd.getTime() / 1000,
+          ),
+        }
+      : undefined,
   });
   const safeAddress = predictSafeAddress(setup, await proxyCreationCode());
 
@@ -186,6 +207,7 @@ async function activeMembers(groupId: string) {
       userId: users.id,
       displayName: users.displayName,
       walletAddress: users.walletAddress,
+      rotationPosition: groupMembers.rotationPosition,
     })
     .from(groupMembers)
     .innerJoin(users, eq(users.id, groupMembers.userId))

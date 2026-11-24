@@ -17,6 +17,7 @@ import {
   findProposalsToClose,
 } from "@/modules/governance/service";
 import { runScheduledCollections } from "@/modules/groups/onchain-autopay";
+import { runTurnPayouts } from "@/modules/groups/onchain-rotation";
 import { dayKey, hourKey, type JobDefinition } from "./runner";
 
 /**
@@ -216,18 +217,21 @@ export const closeProposals: JobDefinition = {
 
 /**
  * Collect dues on Base for members who turned on automatic dues, on each due
- * date. Safe to run any number of times a day: the contract refuses a second
- * collection inside the group's gap, and Rallied checks the period first.
+ * date, then pay out rotating groups' turns that are due, so that morning's
+ * dues are in the pot first. Safe to run any number of times a day: the
+ * contract refuses a second collection inside the group's gap and a payout
+ * that isn't due, and Rallied checks both first.
  */
 export const collectDuesOnBase: JobDefinition = {
   name: "collect-dues-on-base",
-  description: "Collect dues on Base for members with automatic dues on",
+  description: "Collect dues on Base for members with automatic dues on, then pay out due turns",
   key: (ctx) => `collect-dues-on-base:${hourKey(ctx.now)}`,
-  async run() {
+  async run(ctx) {
     const outcome = await runScheduledCollections();
+    const turns = await runTurnPayouts(ctx.now);
     return {
-      summary: `Collected ${outcome.collected} of ${outcome.tried} with automatic dues on`,
-      details: { results: outcome.results },
+      summary: `Collected ${outcome.collected} of ${outcome.tried} with automatic dues on; paid ${turns.paid} of ${turns.tried} rotating turns`,
+      details: { results: outcome.results, turns: turns.results },
     };
   },
 };
