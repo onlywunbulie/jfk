@@ -361,7 +361,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
     const saved = Object.fromEntries(
       group.governance.map((rule) => [rule.action, rule.thresholdPermille]),
     ) as Partial<Record<GovernedAction, number>>;
-    const [small, large, , , , , , close] = contractThresholds(saved);
+    const [small, large, , , , , rules, close] = contractThresholds(saved);
     return (
       <div className="flex min-h-full flex-col justify-end">
         <ChannelIntro title="Propose">
@@ -369,7 +369,9 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
         </ChannelIntro>
         <ProposeChannel
           rotating={rotating}
-          decisions={(await listWaitingDrafts(user.id, group.id, "GROUP_CHANGE")).map((draft) => decisionDraftView(draft, percent(close)))}
+          decisions={(await listWaitingDrafts(user.id, group.id, "GROUP_CHANGE")).map((draft) =>
+            decisionDraftView(draft, percent((draft.details as { change?: string }).change === "change_order" ? rules : close)),
+          )}
           drafts={rotating ? [] : (await listWaitingDrafts(user.id, group.id, "SPEND")).map(spendDraftView)}
           recent={await recentSpends(group.id, user.id)}
           base={`/groups/${group.id}`}

@@ -9,6 +9,8 @@ vi.mock("@/lib/db", async () => ({ db: t.db }));
 vi.mock("server-only", () => ({}));
 
 const chainState = {
+  order: [] as string[],
+  turn: 0,
   onV2: true,
   isOwner: true,
   receipt: null as null | { status: "success" | "reverted"; logs: { address: string; data: Hex; topics: Hex[] }[] },
@@ -20,6 +22,9 @@ vi.mock("@/lib/chain/client", () => ({
       if (functionName === "isOwner") return chainState.isOwner;
       if (functionName === "getGroup") return ["0x0", 0n, 3 * 86400, 60, false, [500, 667, 500, 667, 750, 667, 750, 800, 750], 0n];
       if (functionName === "getGroupSettings") return [false, 25 * 86400];
+      // A rotating group on Base: Amaka has collected; Kemi still to collect.
+      if (functionName === "getOrder") return [chainState.order, []];
+      if (functionName === "getRotation") return [true, 1, 1, chainState.turn, 0n, 0, 0, 0n, 0n];
       throw new Error(`unexpected read ${functionName}`);
     },
     waitForTransactionReceipt: async () => chainState.receipt,
@@ -31,6 +36,7 @@ const { draftSpend, draftRuleChange, draftRoleChange, draftGroupChange, listWait
 const { createGroup } = await import("@/modules/groups/service");
 const { users, groups, groupMembers, agentDrafts } = await import("@/lib/db/schema");
 const { Money } = await import("@/lib/money");
+const { eq } = await import("drizzle-orm");
 const { CONTRACTS } = await import("@/lib/chain/addresses");
 const { jfkModuleAbi } = await import("@/lib/chain/abis");
 
@@ -41,7 +47,7 @@ const TX = `0x${"ab".repeat(32)}` as Hex;
 
 beforeEach(async () => {
   await t.reset();
-  Object.assign(chainState, { onV2: true, isOwner: true, receipt: null });
+  Object.assign(chainState, { onV2: true, isOwner: true, receipt: null, order: [], turn: 0 });
 });
 
 afterAll(async () => {
@@ -249,5 +255,56 @@ describe("sending the proposals beyond spends", () => {
     const [unchanged, , newPeriod] = decodeAbiParameters(RULES, proposeArgs(p2.call.data)[2]);
     expect([...unchanged]).toEqual([500, 667, 500, 667, 750, 667, 750, 800, 750]);
     expect(newPeriod).toBe(7 * 86400);
+  });
+});
+
+describe("sending a new payout order", () => {
+  /** A waiting order draft: Kemi, then Amaka, both still to collect. */
+  async function orderDraft() {
+    const { amaka, groupId } = await setup();
+    const members = await t.db.select().from(groupMembers).where(eq(groupMembers.groupId, groupId));
+    const memberOf = async (wallet: string) => {
+      const [user] = await t.db.select().from(users).where(eq(users.walletAddress, wallet));
+      return members.find((m) => m.userId === user.id)!.id;
+    };
+    const [draft] = await t.db
+      .insert(agentDrafts)
+      .values({
+        userId: amaka,
+        groupId,
+        kind: "GROUP_CHANGE",
+        madeBy: "Claude",
+        details: {
+          change: "change_order",
+          label: "Change the payout order",
+          detail: "",
+          order: [
+            { memberId: await memberOf(KEMI_WALLET), name: "Kemi" },
+            { memberId: await memberOf(AMAKA_WALLET), name: "Amaka" },
+          ],
+        },
+      })
+      .returning();
+    return { amaka, draftId: draft.id };
+  }
+
+  it("becomes propose(CHANGE_ORDER) with their wallets, in the new order", async () => {
+    const { amaka, draftId } = await orderDraft();
+    chainState.order = [AMAKA_WALLET, KEMI_WALLET];
+    chainState.turn = 0;
+    const prepared = await prepareProposal(amaka, draftId);
+    if (!prepared.ok) throw new Error(prepared.reason);
+    const [safe, action, payload] = proposeArgs(prepared.call.data);
+    expect(safe).toBe(SAFE);
+    expect(action).toBe(8);
+    expect(decodeAbiParameters([{ type: "address[]" }], payload)[0]).toEqual([getAddress(KEMI_WALLET), getAddress(AMAKA_WALLET)]);
+  });
+
+  it("refuses once who's still to collect has changed on Base", async () => {
+    const { amaka, draftId } = await orderDraft();
+    // Amaka has since collected: only Kemi is still to collect.
+    chainState.order = [AMAKA_WALLET, KEMI_WALLET];
+    chainState.turn = 1;
+    expect(await prepareProposal(amaka, draftId)).toMatchObject({ ok: false, reason: expect.stringContaining("has changed on Base") });
   });
 });

@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { agentDrafts, type AgentDraft } from "@/lib/db/schema";
 import { publicClient } from "@/lib/chain/client";
 import { RALLIED_MODULES, moduleFor } from "@/lib/chain/module";
-import { jfkModuleAbi, safeAbi } from "@/lib/chain/abis";
+import { jfkModuleAbi, jfkRotationAbi, safeAbi } from "@/lib/chain/abis";
 import { getGroupDetail, listMembers } from "@/modules/groups/service";
 import { DECISIONS, type GroupDetails, type RoleDetails, type RuleDetails, type SpendDetails } from "@/modules/agents/drafts";
 
@@ -35,6 +35,7 @@ const ACTION = {
   CHANGE_CONTRIBUTION: 4,
   CHANGE_RULES: 5,
   CLOSE_GROUP: 6,
+  CHANGE_ORDER: 8,
 } as const;
 
 export type Prepared =
@@ -110,6 +111,26 @@ async function buildPayload(
   if (draft.kind === "GROUP_CHANGE") {
     const details = draft.details as unknown as GroupDetails;
     if (details.change === "close_group") return { ok: true, action: ACTION.CLOSE_GROUP, payload: "0x" };
+    if (details.change === "change_order" && details.order) {
+      const wallets: Address[] = [];
+      for (const placed of details.order) {
+        const wallet = members.find((member) => member.memberId === placed.memberId)?.walletAddress;
+        if (!wallet) return { ok: false, reason: `${placed.name} has no wallet on Base.` };
+        wallets.push(getAddress(wallet));
+      }
+      // The order on Base moves on its own (each payout, and anyone who misses goes to the back).
+      const client = publicClient();
+      const [[order], rotation] = await Promise.all([
+        client.readContract({ address: moduleAddress, abi: jfkRotationAbi, functionName: "getOrder", args: [safe] }),
+        client.readContract({ address: moduleAddress, abi: jfkRotationAbi, functionName: "getRotation", args: [safe] }),
+      ]);
+      const still = order.slice(Number(rotation[3])).map((wallet) => wallet.toLowerCase());
+      const same = still.length === wallets.length && wallets.every((wallet) => still.includes(wallet.toLowerCase()));
+      if (!same) {
+        return { ok: false, reason: "Who's still to collect has changed on Base since this was drafted. Ask your AI for a new order." };
+      }
+      return { ok: true, action: ACTION.CHANGE_ORDER, payload: encodeAbiParameters([{ type: "address[]" }], [wallets]) };
+    }
     return { ok: false, reason: "Rallied can't send that kind of group decision yet." };
   }
 

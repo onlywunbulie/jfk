@@ -34,6 +34,7 @@ const ACTIONS = [
   "CHANGE_RULES",
   "CLOSE_GROUP",
   "MIGRATE_MODULE",
+  "CHANGE_ORDER",
 ] as const;
 type Action = (typeof ACTIONS)[number];
 
@@ -231,6 +232,15 @@ function describe(
     case "MIGRATE_MODULE": {
       const [to] = one([{ type: "address" }] as const);
       return { kind: "GROUP", title: "Move to a new Rallied contract", detail: shortAddress(to), change: null };
+    }
+    case "CHANGE_ORDER": {
+      const [order] = one([{ type: "address[]" }] as const);
+      return {
+        kind: "GROUP",
+        title: "Change the payout order",
+        detail: `Still to collect, in order: ${order.map((wallet) => ctx.names(wallet)).join(", ")}`,
+        change: null,
+      };
     }
   }
 }

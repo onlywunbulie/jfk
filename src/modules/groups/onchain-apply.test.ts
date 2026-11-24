@@ -101,3 +101,30 @@ describe("Rallied follows what Base carried out", () => {
     });
   });
 });
+
+describe("a new payout order, once voted", () => {
+  it("hands the same seats out again in the voted order", async () => {
+    const [ade] = await t.db.insert(users).values({ displayName: "Ade", walletAddress: "0x00000000000000000000000000000000000000a1" }).returning();
+    const [bisi] = await t.db.insert(users).values({ displayName: "Bisi", walletAddress: "0x00000000000000000000000000000000000000b2" }).returning();
+    const [chidi] = await t.db.insert(users).values({ displayName: "Chidi", walletAddress: "0x00000000000000000000000000000000000000c3" }).returning();
+    const { groupId } = await createGroup(ade.id, {
+      name: "Ajo",
+      type: "ROTATING",
+      contributionAmount: Money.fromMajor(100, "USDC"),
+      cadence: "MONTHLY",
+      dueDay: 1,
+    });
+    await t.db.insert(groupMembers).values([
+      { groupId, userId: bisi.id, role: "MEMBER", status: "ACTIVE", rotationPosition: 2 },
+      { groupId, userId: chidi.id, role: "MEMBER", status: "ACTIVE", rotationPosition: 3 },
+    ]);
+
+    // Ade has collected (seat 1); Bisi and Chidi swap seats 2 and 3.
+    const payload = encodeAbiParameters([{ type: "address[]" }], [["0x00000000000000000000000000000000000000c3", "0x00000000000000000000000000000000000000b2"]]);
+    await t.db.transaction((tx) => applyOnRallied(tx, groupId, "CHANGE_ORDER", payload));
+
+    const seats = await t.db.select({ userId: groupMembers.userId, seat: groupMembers.rotationPosition }).from(groupMembers).where(eq(groupMembers.groupId, groupId));
+    const seatOf = (userId: string) => seats.find((s) => s.userId === userId)?.seat;
+    expect([seatOf(ade.id), seatOf(chidi.id), seatOf(bisi.id)]).toEqual([1, 2, 3]);
+  });
+});

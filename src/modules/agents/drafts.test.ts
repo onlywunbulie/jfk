@@ -229,3 +229,58 @@ describe("the proposals beyond spends", () => {
     expect(made.ok && made.draft).toMatchObject({ kind: "GROUP_CHANGE", details: { change: "close_group", label: "Close Detty December" } });
   });
 });
+
+// The rotation as Base has it, for drafting a new payout order.
+const rotationOnBase = vi.hoisted(() => ({ value: null as unknown }));
+vi.mock("@/modules/groups/onchain-rotation", () => ({ readRotation: async () => rotationOnBase.value }));
+
+describe("drafting a new payout order", () => {
+  /** A rotating group on Base: Amaka has collected; Kemi, Tunde and Bisi still to collect, in that order. */
+  async function rotatingOnBase() {
+    const amaka = await makeUser("Amaka");
+    const kemi = await makeUser("Kemi");
+    const tunde = await makeUser("Tunde");
+    const bisi = await makeUser("Bisi");
+    const groupId = await groupWith(amaka, "ROTATING", [kemi, tunde, bisi]);
+    await t.db.update(groups).set({ safeAddress: "0x2a7a348bccee61c5ef6c213efc0baa05841a5a70", currency: "USDC" }).where(eq(groups.id, groupId));
+    const seat = (userId: string) => ({ userId, name: "", wallet: "0x0", paidThisRound: false, collected: false, leaving: false, debt: 0n });
+    rotationOnBase.value = { ok: true, cycle: 1, turn: 1, order: [seat(amaka), seat(kemi), seat(tunde), seat(bisi)], joining: [] };
+    return { amaka, groupId };
+  }
+
+  it("drafts the same people still to collect, rearranged, found by name in any case", async () => {
+    const { amaka, groupId } = await rotatingOnBase();
+    const made = await draftGroupChange({ ...base(amaka, groupId), change: "change_order", order: ["bisi", "Kemi", "TUNDE"] });
+    expect(made).toMatchObject({ ok: true });
+    const [draft] = await listWaitingDrafts(amaka, groupId, "GROUP_CHANGE");
+    expect(draft.details).toMatchObject({
+      change: "change_order",
+      label: "Change the payout order",
+      detail: "Still to collect this cycle, in order: Bisi, Kemi, Tunde.",
+    });
+  });
+
+  it("refuses someone who has already collected, a missing name, a repeat, or no change", async () => {
+    const { amaka, groupId } = await rotatingOnBase();
+    const order = (names: string[]) => draftGroupChange({ ...base(amaka, groupId), change: "change_order", order: names });
+    expect(await order(["Amaka", "Kemi", "Tunde"])).toMatchObject({ ok: false, reason: expect.stringContaining("Amaka isn't still to collect") });
+    expect(await order(["Bisi", "Kemi"])).toMatchObject({ ok: false, reason: expect.stringContaining("Name everyone still to collect") });
+    expect(await order(["Bisi", "Bisi", "Kemi"])).toMatchObject({ ok: false, reason: expect.stringContaining("Name everyone still to collect") });
+    expect(await order(["Kemi", "Tunde", "Bisi"])).toMatchObject({ ok: false, reason: "That's already the order." });
+  });
+
+  it("says plainly when there's no order on Base to change", async () => {
+    const { amaka, groupId } = await rotatingOnBase();
+    rotationOnBase.value = { ok: false, reason: "not_on_base" };
+    expect(await draftGroupChange({ ...base(amaka, groupId), change: "change_order", order: ["Kemi"] })).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining("isn't on Base yet"),
+    });
+    const kemi = await makeUser("Kemi2");
+    const pot = await groupWith(kemi, "TREASURY");
+    expect(await draftGroupChange({ ...base(kemi, pot), change: "change_order", order: ["Kemi2"] })).toMatchObject({
+      ok: false,
+      reason: "Only a rotating group has a payout order.",
+    });
+  });
+});

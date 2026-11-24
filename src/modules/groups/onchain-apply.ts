@@ -26,6 +26,7 @@ export type CarriedOutAction =
   | "CHANGE_CONTRIBUTION"
   | "CHANGE_RULES"
   | "CLOSE_GROUP"
+  | "CHANGE_ORDER"
   | "MIGRATE_MODULE";
 
 /**
@@ -106,6 +107,27 @@ export async function applyOnRallied(tx: Transaction, groupId: string, action: C
     case "CLOSE_GROUP":
       await tx.update(groups).set({ status: "DISSOLVED" }).where(eq(groups.id, groupId));
       return;
+    case "CHANGE_ORDER": {
+      const [order] = decodeAbiParameters([{ type: "address[]" }], payload);
+      const placed: { memberId: string; position: number }[] = [];
+      for (const wallet of order) {
+        const userId = await userWith(tx, wallet);
+        if (!userId) return;
+        const [row] = await tx
+          .select({ id: groupMembers.id, position: groupMembers.rotationPosition })
+          .from(groupMembers)
+          .where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.userId, userId)))
+          .limit(1);
+        if (!row || row.position === null) return;
+        placed.push({ memberId: row.id, position: row.position });
+      }
+      // The seats these members held, handed out again in the voted order.
+      const seats = placed.map((p) => p.position).sort((a, b) => a - b);
+      for (let i = 0; i < placed.length; i++) {
+        await tx.update(groupMembers).set({ rotationPosition: seats[i] }).where(eq(groupMembers.id, placed[i].memberId));
+      }
+      return;
+    }
     case "SPEND":
     case "MIGRATE_MODULE":
       // Money out shows in #transactions from Base itself; a move takes a new contract version.

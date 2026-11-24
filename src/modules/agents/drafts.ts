@@ -6,6 +6,7 @@ import { isAddress } from "viem";
 import { DEFAULT_GOVERNANCE, type GovernedAction } from "@/lib/db/schema";
 import { getGroupDetail, listMembers, type GroupDetail, type MemberView } from "@/modules/groups/service";
 import { aiAllowedInGroup } from "./connection";
+import { readRotation } from "@/modules/groups/onchain-rotation";
 
 /**
  * Drafts a user's AI prepares for them: a spend, a rule change, a change to
@@ -83,9 +84,15 @@ export type RoleDetails = {
 };
 
 /** Whole-group decisions. Moving to a new contract comes with that contract. */
-export type GroupChange = "close_group";
+export type GroupChange = "close_group" | "change_order";
 
-export type GroupDetails = { change: GroupChange; label: string; detail: string };
+export type GroupDetails = {
+  change: GroupChange;
+  label: string;
+  detail: string;
+  /** change_order: everyone still to collect this cycle, in the new order. */
+  order?: { memberId: string; name: string }[];
+};
 
 type Made = { ok: true; draft: AgentDraft } | { ok: false; reason: string };
 
@@ -393,10 +400,18 @@ export async function draftRoleChange(input: {
 // Whole-group decisions
 // ---------------------------------------------------------------------------
 
-export async function draftGroupChange(input: { userId: string; groupId: string; madeBy: string; change: GroupChange }): Promise<Made> {
+export async function draftGroupChange(input: {
+  userId: string;
+  groupId: string;
+  madeBy: string;
+  change: GroupChange;
+  /** change_order: the names of everyone still to collect, in the new order. */
+  order?: string[];
+}): Promise<Made> {
   const checked = await draftableGroup(input.userId, input.groupId);
   if (!checked.ok) return checked;
   const { group } = checked;
+  if (input.change === "change_order") return draftOrderChange(input, group, checked.members);
   if (!group.safeAddress) {
     return {
       ok: false,
@@ -407,6 +422,66 @@ export async function draftGroupChange(input: { userId: string; groupId: string;
     change: "close_group",
     label: `Close ${group.name}`,
     detail: "The vault is shared out by how much each member paid in, and the group ends.",
+  };
+  return save(input.userId, input.groupId, input.madeBy, "GROUP_CHANGE", details);
+}
+
+/**
+ * A new payout order for a rotating group on Base: the same people still to
+ * collect this cycle, rearranged. Checked against Base, since the order
+ * there moves on its own (each payout, and anyone who misses goes to the back).
+ */
+async function draftOrderChange(
+  input: { userId: string; groupId: string; madeBy: string; order?: string[] },
+  group: GroupDetail,
+  members: MemberView[],
+): Promise<Made> {
+  if (group.type !== "ROTATING") return { ok: false, reason: "Only a rotating group has a payout order." };
+  const chain = await readRotation(group.safeAddress, members);
+  if (!chain.ok) {
+    return {
+      ok: false,
+      reason:
+        chain.reason === "not_on_base"
+          ? "This group isn't on Base yet. Before then the order is the order people joined; start it on Base (start_on_base) to change it by vote."
+          : chain.reason === "not_rotating"
+            ? "This group runs on Rallied's earlier contract, which has no payout order on Base."
+            : "Couldn't reach Base just now. Try again in a moment.",
+    };
+  }
+
+  // Who can still be moved: everyone who hasn't collected yet this cycle.
+  const still = chain.order.slice(chain.turn).map((seat) => members.find((m) => m.userId === seat.userId) ?? null);
+  if (still.some((member) => member === null)) {
+    return { ok: false, reason: "Someone in this cycle isn't in Rallied's member list, so the order can't be changed here." };
+  }
+  const remaining = still as MemberView[];
+  const names = remaining.map((m) => m.displayName).join(", ");
+  if (remaining.length < 2) return { ok: false, reason: `Only ${names} still has to collect this cycle, so there's nothing to rearrange.` };
+
+  // Matched in any case; a refusal repeats the name as it was given.
+  const given = (input.order ?? []).map((name) => name.trim());
+  const picked = given.map((name) => remaining.filter((m) => m.displayName.trim().toLowerCase() === name.toLowerCase()));
+  const unknown = given.filter((_, i) => picked[i].length === 0);
+  if (unknown.length > 0) {
+    return { ok: false, reason: `${unknown.join(", ")} isn't still to collect this cycle. Still to collect: ${names}.` };
+  }
+  if (picked.some((match) => match.length > 1)) {
+    return { ok: false, reason: "Two people still to collect have the same name, so a name alone can't place them." };
+  }
+  const order = picked.map(([m]) => m);
+  if (new Set(order.map((m) => m.memberId)).size !== order.length || order.length !== remaining.length) {
+    return { ok: false, reason: `Name everyone still to collect, once each, in the new order: ${names}.` };
+  }
+  if (order.every((m, i) => m.memberId === remaining[i].memberId)) {
+    return { ok: false, reason: "That's already the order." };
+  }
+
+  const details: GroupDetails = {
+    change: "change_order",
+    label: "Change the payout order",
+    detail: `Still to collect this cycle, in order: ${order.map((m) => m.displayName).join(", ")}.`,
+    order: order.map((m) => ({ memberId: m.memberId, name: m.displayName })),
   };
   return save(input.userId, input.groupId, input.madeBy, "GROUP_CHANGE", details);
 }

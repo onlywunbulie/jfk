@@ -316,18 +316,25 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
     {
       title: "Draft a whole-group decision",
       description:
-        "Prepare a decision about the whole group on Base: close it (close_group), sharing the vault out by how much each member paid in. " +
+        "Prepare a decision about the whole group on Base: close it (close_group), sharing the vault out by how much each member paid in; " +
+        "or, in a rotating group, rearrange who collects next (change_order, with order: the names of everyone still to collect this cycle, each once, in the new order). " +
+        "get_group shows the current order. A new order is voted on with the bar for changing the rules. " +
         "It lands in the user's Waiting section in #propose; they send it to a vote. A group not on Base isn't closed by vote: its starter deletes it (delete_group).",
       inputSchema: {
         group_id: z.string().min(1).max(64),
-        change: z.enum(["close_group"]),
+        change: z.enum(["close_group", "change_order"]),
+        order: z
+          .array(z.string().min(1).max(60))
+          .max(50)
+          .optional()
+          .describe("change_order only: everyone still to collect this cycle, by name, in the new order"),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     },
-    async ({ group_id, change }) => {
+    async ({ group_id, change, order }) => {
       if (!canDraft) return noDraftScope;
-      const result = await draftGroupChange({ userId, groupId: group_id, madeBy: grant.appName, change });
-      return drafted(result, "propose", "closing the group");
+      const result = await draftGroupChange({ userId, groupId: group_id, madeBy: grant.appName, change, order });
+      return drafted(result, "propose", change === "change_order" ? "a new payout order" : "closing the group");
     },
   );
 
