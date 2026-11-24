@@ -1,8 +1,9 @@
 import "server-only";
 import { decodeEventLog, getAddress, pad, type Hex } from "viem";
-import { CONTRACTS, HISTORY_API_URL, shortAddress } from "@/lib/chain/addresses";
+import { HISTORY_API_URL, shortAddress } from "@/lib/chain/addresses";
 import { jfkModuleAbi, jfkMoneyEventsAbi } from "@/lib/chain/abis";
 import { publicClient } from "@/lib/chain/client";
+import { moduleFor } from "@/lib/chain/module";
 import { Money } from "@/lib/money";
 import { getGroupDetail, listMembers } from "./service";
 
@@ -53,13 +54,16 @@ export async function readHistory(groupId: string, userId: string): Promise<Hist
   const nameOf = (wallet: string) => names.get(wallet.toLowerCase()) ?? shortAddress(wallet);
   const me = members.find((m) => m.userId === userId)?.walletAddress ?? null;
 
+  const vault = await moduleFor(safe).catch(() => null);
+  if (!vault) return { ok: false, reason: "unreachable" };
+
   let logs: RawLog[];
   try {
     const url = new URL(HISTORY_API_URL);
     url.search = new URLSearchParams({
       module: "logs",
       action: "getLogs",
-      address: CONTRACTS.jfkModule,
+      address: vault.address,
       topic1: pad(safe),
       fromBlock: "0",
       toBlock: "latest",
@@ -96,7 +100,7 @@ export async function readHistory(groupId: string, userId: string): Promise<Hist
     try {
       const proposals = await publicClient().multicall({
         allowFailure: false,
-        contracts: ids.map((id) => ({ address: CONTRACTS.jfkModule, abi: jfkModuleAbi, functionName: "getProposal", args: [safe, id] }) as const),
+        contracts: ids.map((id) => ({ address: vault.address, abi: jfkModuleAbi, functionName: "getProposal", args: [safe, id] }) as const),
       });
       ids.forEach((id, i) => approvals.set(id.toString(), `${proposals[i].yes} of ${proposals[i].eligible} voted yes`));
     } catch {

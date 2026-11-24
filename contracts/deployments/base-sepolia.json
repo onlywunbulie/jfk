@@ -1,11 +1,22 @@
 {
   "chainId": 84532,
   "network": "Base Sepolia",
-  "deployedAt": "2026-11-16",
-  "version": "2",
+  "deployedAt": "2026-11-20",
+  "version": "3",
+  "note": "Rotating savings (Ajo): turns paid out on schedule, public debts, cycles. Shared-pot groups behave as in v2.",
   "contracts": {
-    "JfkModule": "0x2E036f9aFdC44D1399FD720A0626544b1e57F401",
-    "JfkSetup": "0xDaf87e6Af54E85762476AC21baD7d53BdfAC88D0"
+    "JfkModule": "0x48bB48799153c1a420B8476EaC663C396E291655",
+    "JfkSetup": "0xF44DF78ba5BaA9a3F836E446af99930389196f10"
+  },
+  "libraries": {
+    "RotationLib": "0x7C635fa531b5cCA8597Fb6E5E48CAEB21c3b5a2b",
+    "SafeOps": "0xE911b9Dc5eD417339B18eEef2Be169AE5ECE5fD5"
+  },
+  "transactions": {
+    "JfkModule": "0x522069646d8063527095166006d7b1be5ff04b3166d75d26b9babe0c184119f1",
+    "JfkSetup": "0x66a9297cfed2e1d00183b6445b9aa2a7ebfd666f521d6b0d994b58c1be79cb60",
+    "RotationLib": "0x6e19ce637f94f19df9de3ef87bf7ba0dfa29bf9e6be87814f566bf9241a1ada1",
+    "SafeOps": "0x4d4cfbe34a88ed8259ed734f562cc535f09c20b95f5681c44392d4c60b221446"
   },
   "dependencies": {
     "SafeL2_v1_4_1": "0x29fcB43b46531BcA003ddC8FCB67FFE91900C762",
@@ -13,6 +24,15 @@
     "USDC": "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
   },
   "previous": [
+    {
+      "version": "2",
+      "deployedAt": "2026-11-16",
+      "note": "Helpers and collected dues. Groups started on Base from 2026-11-16 to 2026-11-20 run on it; Rallied reads each vault to tell which version it uses.",
+      "contracts": {
+        "JfkModule": "0x2E036f9aFdC44D1399FD720A0626544b1e57F401",
+        "JfkSetup": "0xDaf87e6Af54E85762476AC21baD7d53BdfAC88D0"
+      }
+    },
     {
       "version": "1",
       "deployedAt": "2026-10-22",

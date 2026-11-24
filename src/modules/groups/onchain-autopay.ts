@@ -6,6 +6,7 @@ import { duesAutopay } from "@/lib/db/schema";
 import { CONTRACTS } from "@/lib/chain/addresses";
 import { erc20Abi, HELPER_POWER, jfkDuesAbi, jfkHelperAbi, jfkModuleAbi, safeAbi } from "@/lib/chain/abis";
 import { publicClient } from "@/lib/chain/client";
+import { moduleFor } from "@/lib/chain/module";
 import { relayer } from "@/lib/chain/relayer";
 import { Money } from "@/lib/money";
 import { everyText } from "@/lib/schedule-text";
@@ -42,6 +43,8 @@ function periodsInAYear(cadence: "WEEKLY" | "MONTHLY", intervalWeeks: number): n
 
 interface Context {
   safe: Address;
+  /** The Rallied contract this vault runs on (v3, or v2 for older groups). */
+  module: Address;
   wallet: Address;
   helperKey: Address;
   group: NonNullable<Awaited<ReturnType<typeof getGroupDetail>>>;
@@ -58,13 +61,16 @@ async function contextFor(userId: string, groupId: string): Promise<ContextResul
   if (!wallet) return { ok: false, reason: "Your account has no wallet. Sign in with your wallet first." };
   const key = relayer();
   if (!key) return { ok: false, reason: "Rallied can't collect dues right now. Pay in the group's #about instead." };
-  return { ok: true, context: { safe: getAddress(group.safeAddress), wallet: getAddress(wallet), helperKey: key.account.address, group } };
+  const safe = getAddress(group.safeAddress);
+  const vault = await moduleFor(safe).catch(() => null);
+  if (!vault) return { ok: false, reason: "This group runs on an older Rallied contract without automatic dues." };
+  return { ok: true, context: { safe, module: vault.address, wallet: getAddress(wallet), helperKey: key.account.address, group } };
 }
 
 /** Is Rallied's key this member's live helper with the collect power, on Base? */
 async function helperOnBase(context: Context): Promise<{ live: boolean; expiresAt: bigint }> {
   const helper = await publicClient().readContract({
-    address: CONTRACTS.jfkModule,
+    address: context.module,
     abi: jfkHelperAbi,
     functionName: "getHelper",
     args: [context.safe, context.wallet],
@@ -121,12 +127,12 @@ export type PreparedAutopay =
 export async function prepareAutopay(userId: string, groupId: string): Promise<PreparedAutopay> {
   const found = await contextFor(userId, groupId);
   if (!found.ok) return found;
-  const { safe, wallet, helperKey, group } = found.context;
+  const { safe, module: moduleAddress, wallet, helperKey, group } = found.context;
 
   const client = publicClient();
   const [isOwner, chainGroup] = await Promise.all([
     client.readContract({ address: safe, abi: safeAbi, functionName: "isOwner", args: [wallet] }),
-    client.readContract({ address: CONTRACTS.jfkModule, abi: jfkModuleAbi, functionName: "getGroup", args: [safe] }),
+    client.readContract({ address: moduleAddress, abi: jfkModuleAbi, functionName: "getGroup", args: [safe] }),
   ]);
   if (!isOwner) return { ok: false, reason: "The wallet you're signed in with isn't one of this group's owners on Base." };
   const [, contribution, , , closed] = chainGroup;
@@ -141,11 +147,11 @@ export async function prepareAutopay(userId: string, groupId: string): Promise<P
     wallet,
     calls: [
       {
-        to: CONTRACTS.jfkModule,
+        to: moduleAddress,
         data: encodeFunctionData({ abi: jfkHelperAbi, functionName: "setHelper", args: [safe, helperKey, HELPER_POWER.COLLECT, expiresAt] }),
       },
       // A year of dues, at most. The contract still takes only the group's amount, once a period.
-      { to: CONTRACTS.usdc, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [CONTRACTS.jfkModule, allowance] }) },
+      { to: CONTRACTS.usdc, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [moduleAddress, allowance] }) },
     ],
     summary: {
       amount: usdc(contribution),
@@ -221,14 +227,14 @@ export async function prepareRemoval(
 ): Promise<{ ok: true; calls: { to: Address; data: Hex }[]; wallet: Address; groupName: string } | { ok: false; reason: string }> {
   const found = await contextFor(userId, groupId);
   if (!found.ok) return found;
-  const { safe, wallet, group } = found.context;
-  const helper = await publicClient().readContract({ address: CONTRACTS.jfkModule, abi: jfkHelperAbi, functionName: "getHelper", args: [safe, wallet] });
+  const { safe, module: moduleAddress, wallet, group } = found.context;
+  const helper = await publicClient().readContract({ address: moduleAddress, abi: jfkHelperAbi, functionName: "getHelper", args: [safe, wallet] });
 
   const calls: { to: Address; data: Hex }[] = [];
   if (helper.key !== "0x0000000000000000000000000000000000000000") {
-    calls.push({ to: CONTRACTS.jfkModule, data: encodeFunctionData({ abi: jfkHelperAbi, functionName: "revokeHelper", args: [safe] }) });
+    calls.push({ to: moduleAddress, data: encodeFunctionData({ abi: jfkHelperAbi, functionName: "revokeHelper", args: [safe] }) });
   }
-  calls.push({ to: CONTRACTS.usdc, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [CONTRACTS.jfkModule, 0n] }) });
+  calls.push({ to: CONTRACTS.usdc, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [moduleAddress, 0n] }) });
   return { ok: true, calls, wallet, groupName: group.name };
 }
 
@@ -255,7 +261,7 @@ export type CollectResult =
 export async function collectDues(userId: string, groupId: string, when: "asked" | "schedule"): Promise<CollectResult> {
   const found = await contextFor(userId, groupId);
   if (!found.ok) return { ok: false, reason: "not_found", text: found.reason };
-  const { safe, wallet, group } = found.context;
+  const { safe, module: moduleAddress, wallet, group } = found.context;
 
   const [row] = await db
     .select()
@@ -267,14 +273,14 @@ export async function collectDues(userId: string, groupId: string, when: "asked"
   if (row.endsAt.getTime() <= Date.now()) return { ok: false, reason: "ended", text: "Your automatic dues permission in this group has ended. Set it up again to continue." };
 
   const client = publicClient();
-  const jfk = { address: CONTRACTS.jfkModule } as const;
+  const jfk = { address: moduleAddress } as const;
   const [{ live }, chainGroup, settings, last, balance, allowance] = await Promise.all([
     helperOnBase(found.context),
     client.readContract({ ...jfk, abi: jfkModuleAbi, functionName: "getGroup", args: [safe] }),
     client.readContract({ ...jfk, abi: jfkModuleAbi, functionName: "getGroupSettings", args: [safe] }),
     client.readContract({ ...jfk, abi: jfkDuesAbi, functionName: "lastPaidAt", args: [safe, wallet] }),
     client.readContract({ address: CONTRACTS.usdc, abi: erc20Abi, functionName: "balanceOf", args: [wallet] }),
-    client.readContract({ address: CONTRACTS.usdc, abi: erc20Abi, functionName: "allowance", args: [wallet, CONTRACTS.jfkModule] }),
+    client.readContract({ address: CONTRACTS.usdc, abi: erc20Abi, functionName: "allowance", args: [wallet, moduleAddress] }),
   ]);
   if (!live) return { ok: false, reason: "removed_from_base", text: "Rallied is no longer your helper on Base in this group, so it can't collect." };
 

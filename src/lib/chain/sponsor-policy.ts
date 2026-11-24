@@ -1,6 +1,6 @@
 import { decodeFunctionData, getAddress, isAddress, type Address, type Hex } from "viem";
-import { CONTRACTS, chain } from "./addresses";
-import { erc20Abi, jfkDuesAbi, jfkHelperAbi, jfkModuleAbi } from "./abis";
+import { CONTRACTS, RALLIED_MODULES, chain, isRalliedModule } from "./addresses";
+import { erc20Abi, jfkDuesAbi, jfkHelperAbi, jfkModuleAbi, jfkRotationAbi } from "./abis";
 
 /**
  * What Rallied will pay the network fee for. A wallet asks the paymaster to
@@ -50,13 +50,24 @@ const smartWalletAbi = [
   },
 ] as const;
 
-/** The only contracts Rallied pays for: its module, and USDC (only to approve the module). */
-export const SPONSORED_CONTRACTS: readonly Address[] = [CONTRACTS.jfkModule, CONTRACTS.usdc];
+/** The only contracts Rallied pays for: its modules (v3 and v2), and USDC (only to approve one of them). */
+export const SPONSORED_CONTRACTS: readonly Address[] = [...RALLIED_MODULES, CONTRACTS.usdc];
 
 /** The member-side functions of Rallied's contract, the only ones a member's wallet sends. */
-const MODULE_FUNCTIONS = new Set(["propose", "vote", "contribute", "setHelper", "revokeHelper", "leave"]);
+const MODULE_FUNCTIONS = new Set([
+  "propose",
+  "vote",
+  "contribute",
+  "setHelper",
+  "revokeHelper",
+  "leave",
+  // Rotating groups (v3): anyone may trigger a due payout, or cover a member's debt.
+  "payTurn",
+  "coverDebt",
+]);
 const moduleAbi = [
   ...jfkModuleAbi,
+  ...jfkRotationAbi,
   ...jfkDuesAbi,
   ...jfkHelperAbi,
   { type: "function", name: "leave", stateMutability: "nonpayable", inputs: [{ name: "safe", type: "address" }], outputs: [] },
@@ -66,7 +77,7 @@ const moduleAbi = [
 function callProblem(target: Address, value: bigint, data: Hex): string | null {
   if (value !== 0n) return "sends money";
   const to = target.toLowerCase();
-  if (to === CONTRACTS.jfkModule.toLowerCase()) {
+  if (isRalliedModule(to)) {
     try {
       const call = decodeFunctionData({ abi: moduleAbi, data });
       return MODULE_FUNCTIONS.has(call.functionName) ? null : `calls ${call.functionName}, which members don't send`;
@@ -79,7 +90,7 @@ function callProblem(target: Address, value: bigint, data: Hex): string | null {
       const call = decodeFunctionData({ abi: erc20Abi, data });
       if (call.functionName !== "approve") return "a USDC call other than approving Rallied's contract";
       const [spender] = call.args as readonly [Address, bigint];
-      return spender.toLowerCase() === CONTRACTS.jfkModule.toLowerCase() ? null : "approves someone other than Rallied's contract";
+      return isRalliedModule(spender) ? null : "approves someone other than Rallied's contract";
     } catch {
       return "a USDC call other than approving Rallied's contract";
     }

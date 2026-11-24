@@ -10,6 +10,8 @@ vi.mock("@/lib/db", async () => ({ db: t.db }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/chain/client", () => ({
   publicClient: () => ({
+    // The only single read: which contract runs the vault (Rallied's current one).
+    readContract: async () => true,
     multicall: async ({ contracts }: { contracts: unknown[] }) => contracts.map(() => ({ yes: 2, eligible: 3 })),
   }),
 }));

@@ -30,6 +30,9 @@ const chain = {
 
 function read({ functionName }: { functionName: string }) {
   switch (functionName) {
+    // Every vault here runs on Rallied's current contract.
+    case "isModuleEnabled":
+      return true;
     case "isOwner":
       return true;
     case "getGroup":

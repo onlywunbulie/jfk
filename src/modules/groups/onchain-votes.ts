@@ -1,9 +1,10 @@
 import "server-only";
 import { decodeAbiParameters, encodeFunctionData, getAddress, type Address, type Hex } from "viem";
 import { db } from "@/lib/db";
-import { CONTRACTS, shortAddress } from "@/lib/chain/addresses";
-import { jfkModuleAbi, safeAbi } from "@/lib/chain/abis";
+import { shortAddress } from "@/lib/chain/addresses";
+import { jfkModuleAbi } from "@/lib/chain/abis";
 import { publicClient } from "@/lib/chain/client";
+import { moduleFor } from "@/lib/chain/module";
 import { relayer } from "@/lib/chain/relayer";
 import { Money } from "@/lib/money";
 import { recordAudit } from "@/modules/audit/service";
@@ -81,11 +82,9 @@ export async function readChainVotes(groupId: string, userId: string): Promise<C
   const client = publicClient();
 
   try {
-    const [onV2, chainGroup] = await Promise.all([
-      client.readContract({ address: safe, abi: safeAbi, functionName: "isModuleEnabled", args: [CONTRACTS.jfkModule] }),
-      client.readContract({ address: CONTRACTS.jfkModule, abi: jfkModuleAbi, functionName: "getGroup", args: [safe] }),
-    ]);
-    if (!onV2) return { ok: false, reason: "old_contract" };
+    const vault = await moduleFor(safe);
+    if (!vault) return { ok: false, reason: "old_contract" };
+    const chainGroup = await client.readContract({ address: vault.address, abi: jfkModuleAbi, functionName: "getGroup", args: [safe] });
     const [, contribution, votingPeriodNow, quorumNow, , thresholdsNow, proposalCount] = chainGroup;
 
     const count = Number(proposalCount);
@@ -96,7 +95,7 @@ export async function readChainVotes(groupId: string, userId: string): Promise<C
     const me = members.find((m) => m.userId === userId)?.walletAddress;
     const names = nameBook(members, userId);
 
-    const jfk = { address: CONTRACTS.jfkModule, abi: jfkModuleAbi } as const;
+    const jfk = { address: vault.address, abi: jfkModuleAbi } as const;
     const [proposals, decisions, ballots] = await Promise.all([
       client.multicall({ allowFailure: false, contracts: ids.map((id) => ({ ...jfk, functionName: "getProposal", args: [safe, id] }) as const) }),
       client.multicall({ allowFailure: false, contracts: ids.map((id) => ({ ...jfk, functionName: "decision", args: [safe, id] }) as const) }),
@@ -255,7 +254,9 @@ export async function prepareVote(userId: string, groupId: string, proposalId: s
   const voter = getAddress(wallet);
   const id = BigInt(proposalId);
   const client = publicClient();
-  const jfk = { address: CONTRACTS.jfkModule, abi: jfkModuleAbi } as const;
+  const vault = await moduleFor(safe).catch(() => null);
+  if (!vault) return { ok: false, reason: "This group runs on an older Rallied contract that this screen can't vote on." };
+  const jfk = { address: vault.address, abi: jfkModuleAbi } as const;
   const [proposal, eligible, already] = await Promise.all([
     client.readContract({ ...jfk, functionName: "getProposal", args: [safe, id] }),
     client.readContract({ ...jfk, functionName: "eligibleVoter", args: [safe, id, voter] }),
@@ -268,7 +269,7 @@ export async function prepareVote(userId: string, groupId: string, proposalId: s
   if (already !== 0) return { ok: false, reason: "You've already voted on this one. Votes can't be changed." };
 
   const data = encodeFunctionData({ ...jfk, functionName: "vote", args: [safe, id, CHOICE[choice]] });
-  return { ok: true, call: { to: CONTRACTS.jfkModule, data }, wallet: voter };
+  return { ok: true, call: { to: vault.address, data }, wallet: voter };
 }
 
 // ---------------------------------------------------------------------------
@@ -285,7 +286,9 @@ export async function carryOut(userId: string, groupId: string, proposalId: stri
   const safe = getAddress(group.safeAddress);
   const id = BigInt(proposalId);
   const client = publicClient();
-  const jfk = { address: CONTRACTS.jfkModule, abi: jfkModuleAbi } as const;
+  const vault = await moduleFor(safe).catch(() => null);
+  if (!vault) return { ok: false, reason: "failed" };
+  const jfk = { address: vault.address, abi: jfkModuleAbi } as const;
 
   const [proposal, decision] = await Promise.all([
     client.readContract({ ...jfk, functionName: "getProposal", args: [safe, id] }),

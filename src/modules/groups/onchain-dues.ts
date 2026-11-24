@@ -3,6 +3,7 @@ import { encodeFunctionData, getAddress, type Address, type Hex } from "viem";
 import { CONTRACTS } from "@/lib/chain/addresses";
 import { erc20Abi, jfkDuesAbi, jfkModuleAbi, safeAbi } from "@/lib/chain/abis";
 import { publicClient } from "@/lib/chain/client";
+import { moduleFor } from "@/lib/chain/module";
 import { Money } from "@/lib/money";
 import { getGroupDetail, listMembers } from "./service";
 
@@ -49,17 +50,17 @@ export async function readDues(groupId: string, userId: string): Promise<Dues> {
   const client = publicClient();
 
   try {
-    const onV2 = await client.readContract({ address: safe, abi: safeAbi, functionName: "isModuleEnabled", args: [CONTRACTS.jfkModule] });
-    if (!onV2) return { ok: false, reason: "old_contract" };
+    const contract = await moduleFor(safe);
+    if (!contract) return { ok: false, reason: "old_contract" };
 
     const withWallets = members.filter((m) => m.walletAddress);
     const wallets = withWallets.map((m) => getAddress(m.walletAddress as string));
     const me = members.find((m) => m.userId === userId)?.walletAddress;
-    const dues = { address: CONTRACTS.jfkModule, abi: jfkDuesAbi } as const;
+    const dues = { address: contract.address, abi: jfkDuesAbi } as const;
 
     const [chainGroup, settings, vault, myBalance, paid, last] = await Promise.all([
-      client.readContract({ address: CONTRACTS.jfkModule, abi: jfkModuleAbi, functionName: "getGroup", args: [safe] }),
-      client.readContract({ address: CONTRACTS.jfkModule, abi: jfkModuleAbi, functionName: "getGroupSettings", args: [safe] }),
+      client.readContract({ address: contract.address, abi: jfkModuleAbi, functionName: "getGroup", args: [safe] }),
+      client.readContract({ address: contract.address, abi: jfkModuleAbi, functionName: "getGroupSettings", args: [safe] }),
       client.readContract({ address: CONTRACTS.usdc, abi: erc20Abi, functionName: "balanceOf", args: [safe] }),
       me ? client.readContract({ address: CONTRACTS.usdc, abi: erc20Abi, functionName: "balanceOf", args: [getAddress(me)] }) : Promise.resolve(0n),
       client.multicall({ allowFailure: false, contracts: wallets.map((w) => ({ ...dues, functionName: "paidIn", args: [safe, w] }) as const) }),
@@ -109,11 +110,13 @@ export async function prepareDues(userId: string, groupId: string): Promise<Prep
   const safe = getAddress(group.safeAddress);
   const payer = getAddress(wallet);
   const client = publicClient();
+  const contract = await moduleFor(safe).catch(() => null);
+  if (!contract) return { ok: false, reason: "This group runs on an older Rallied contract that this screen can't pay into." };
   const [isOwner, chainGroup, balance, allowance] = await Promise.all([
     client.readContract({ address: safe, abi: safeAbi, functionName: "isOwner", args: [payer] }),
-    client.readContract({ address: CONTRACTS.jfkModule, abi: jfkModuleAbi, functionName: "getGroup", args: [safe] }),
+    client.readContract({ address: contract.address, abi: jfkModuleAbi, functionName: "getGroup", args: [safe] }),
     client.readContract({ address: CONTRACTS.usdc, abi: erc20Abi, functionName: "balanceOf", args: [payer] }),
-    client.readContract({ address: CONTRACTS.usdc, abi: erc20Abi, functionName: "allowance", args: [payer, CONTRACTS.jfkModule] }),
+    client.readContract({ address: CONTRACTS.usdc, abi: erc20Abi, functionName: "allowance", args: [payer, contract.address] }),
   ]);
   if (!isOwner) return { ok: false, reason: "The wallet you're signed in with isn't one of this group's owners on Base." };
   const [, contribution, , , closed] = chainGroup;
@@ -130,10 +133,10 @@ export async function prepareDues(userId: string, groupId: string): Promise<Prep
   if (allowance < contribution) {
     calls.push({
       to: CONTRACTS.usdc,
-      data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [CONTRACTS.jfkModule, contribution] }),
+      data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [contract.address, contribution] }),
     });
   }
-  calls.push({ to: CONTRACTS.jfkModule, data: encodeFunctionData({ abi: jfkDuesAbi, functionName: "contribute", args: [safe] }) });
+  calls.push({ to: contract.address, data: encodeFunctionData({ abi: jfkDuesAbi, functionName: "contribute", args: [safe] }) });
 
   return { ok: true, calls, wallet: payer, amount: usdc(contribution) };
 }

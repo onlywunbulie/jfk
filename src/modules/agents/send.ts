@@ -4,7 +4,7 @@ import { decodeEventLog, encodeAbiParameters, encodeFunctionData, getAddress, is
 import { db } from "@/lib/db";
 import { agentDrafts, type AgentDraft } from "@/lib/db/schema";
 import { publicClient } from "@/lib/chain/client";
-import { CONTRACTS } from "@/lib/chain/addresses";
+import { RALLIED_MODULES, moduleFor } from "@/lib/chain/module";
 import { jfkModuleAbi, safeAbi } from "@/lib/chain/abis";
 import { getGroupDetail, listMembers } from "@/modules/groups/service";
 import { DECISIONS, type GroupDetails, type RoleDetails, type RuleDetails, type SpendDetails } from "@/modules/agents/drafts";
@@ -64,20 +64,20 @@ export async function prepareProposal(userId: string, draftId: string): Promise<
   const safe = getAddress(group.safeAddress);
   const wallet = getAddress(me.walletAddress);
   const client = publicClient();
-  const [onV2, isOwner] = await Promise.all([
-    client.readContract({ address: safe, abi: safeAbi, functionName: "isModuleEnabled", args: [CONTRACTS.jfkModule] }),
+  const [vault, isOwner] = await Promise.all([
+    moduleFor(safe),
     client.readContract({ address: safe, abi: safeAbi, functionName: "isOwner", args: [wallet] }),
   ]);
-  if (!onV2) {
+  if (!vault) {
     return { ok: false, reason: "This group runs on Rallied's first contract, which can't take this. Start a new group on Base to try it." };
   }
   if (!isOwner) return { ok: false, reason: "The wallet you're signed in with isn't one of this group's owners on Base." };
 
-  const built = await buildPayload(draft, members, safe);
+  const built = await buildPayload(draft, members, safe, vault.address);
   if (!built.ok) return built;
 
   const data = encodeFunctionData({ abi: jfkModuleAbi, functionName: "propose", args: [safe, built.action, built.payload] });
-  return { ok: true, call: { to: CONTRACTS.jfkModule, data }, wallet, safe };
+  return { ok: true, call: { to: vault.address, data }, wallet, safe };
 }
 
 type Built = { ok: true; action: number; payload: Hex } | { ok: false; reason: string };
@@ -86,6 +86,7 @@ async function buildPayload(
   draft: AgentDraft,
   members: Awaited<ReturnType<typeof listMembers>> & object,
   safe: Address,
+  moduleAddress: Address,
 ): Promise<Built> {
   if (draft.kind === "SPEND") {
     const details = draft.details as unknown as SpendDetails;
@@ -150,8 +151,8 @@ async function buildPayload(
     // CHANGE_RULES replaces the whole rule set, so everything else is kept as it is on Base now.
     const client = publicClient();
     const [group, settings] = await Promise.all([
-      client.readContract({ address: CONTRACTS.jfkModule, abi: jfkModuleAbi, functionName: "getGroup", args: [safe] }),
-      client.readContract({ address: CONTRACTS.jfkModule, abi: jfkModuleAbi, functionName: "getGroupSettings", args: [safe] }),
+      client.readContract({ address: moduleAddress, abi: jfkModuleAbi, functionName: "getGroup", args: [safe] }),
+      client.readContract({ address: moduleAddress, abi: jfkModuleAbi, functionName: "getGroupSettings", args: [safe] }),
     ]);
     const [, , votingPeriodNow, quorumNow, , thresholdsNow] = group;
     const [humanVotesOnly] = settings;
@@ -192,7 +193,7 @@ export async function confirmProposal(
   if (receipt.status !== "success") return { ok: false, reason: "The transaction didn't go through on Base. Nothing was sent." };
 
   for (const log of receipt.logs) {
-    if (log.address.toLowerCase() !== CONTRACTS.jfkModule.toLowerCase()) continue;
+    if (!RALLIED_MODULES.some((address) => address.toLowerCase() === log.address.toLowerCase())) continue;
     try {
       const event = decodeEventLog({ abi: jfkModuleAbi, data: log.data, topics: log.topics });
       if (

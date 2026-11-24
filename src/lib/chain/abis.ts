@@ -396,3 +396,420 @@ export const jfkHelperAbi = [
 
 /** JfkModule's helper powers. Automatic dues only ever asks for COLLECT. */
 export const HELPER_POWER = { PROPOSE: 1, VOTE: 2, COLLECT: 4 } as const;
+
+/**
+ * Contract v3: rotating savings. Generated from the compiled contract
+ * (contracts/out) so it can't drift from what's deployed. The events are
+ * RotationLib's, emitted from JfkModule's address.
+ */
+export const jfkRotationAbi = [
+  {
+    type: "function",
+    name: "coverDebt",
+    inputs: [
+      {
+        name: "safe",
+        type: "address",
+      },
+      {
+        name: "debtor",
+        type: "address",
+      },
+      {
+        name: "amount",
+        type: "uint256",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "debtOf",
+    inputs: [
+      {
+        name: "safe",
+        type: "address",
+      },
+      {
+        name: "member",
+        type: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "uint256",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getOrder",
+    inputs: [
+      {
+        name: "safe",
+        type: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "order",
+        type: "address[]",
+      },
+      {
+        name: "joining",
+        type: "address[]",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getRotation",
+    inputs: [
+      {
+        name: "safe",
+        type: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "on",
+        type: "bool",
+      },
+      {
+        name: "cycle",
+        type: "uint32",
+      },
+      {
+        name: "round",
+        type: "uint32",
+      },
+      {
+        name: "turn",
+        type: "uint32",
+      },
+      {
+        name: "nextPayoutAt",
+        type: "uint64",
+      },
+      {
+        name: "roundGap",
+        type: "uint32",
+      },
+      {
+        name: "grace",
+        type: "uint32",
+      },
+      {
+        name: "roundPot",
+        type: "uint256",
+      },
+      {
+        name: "pendingContribution",
+        type: "uint256",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "payTurn",
+    inputs: [
+      {
+        name: "safe",
+        type: "address",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "rotationStatus",
+    inputs: [
+      {
+        name: "safe",
+        type: "address",
+      },
+      {
+        name: "member",
+        type: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "inOrder",
+        type: "bool",
+      },
+      {
+        name: "paidThisRound",
+        type: "bool",
+      },
+      {
+        name: "collected",
+        type: "bool",
+      },
+      {
+        name: "leaving",
+        type: "bool",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "totalShort",
+    inputs: [
+      {
+        name: "safe",
+        type: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "uint256",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "event",
+    name: "CycleStarted",
+    inputs: [
+      {
+        name: "safe",
+        type: "address",
+        indexed: true,
+      },
+      {
+        name: "cycle",
+        type: "uint32",
+        indexed: false,
+      },
+      {
+        name: "members",
+        type: "uint256",
+        indexed: false,
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "DebtRecorded",
+    inputs: [
+      {
+        name: "safe",
+        type: "address",
+        indexed: true,
+      },
+      {
+        name: "member",
+        type: "address",
+        indexed: true,
+      },
+      {
+        name: "amount",
+        type: "uint256",
+        indexed: false,
+      },
+      {
+        name: "round",
+        type: "uint32",
+        indexed: false,
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "DebtRepaid",
+    inputs: [
+      {
+        name: "safe",
+        type: "address",
+        indexed: true,
+      },
+      {
+        name: "debtor",
+        type: "address",
+        indexed: true,
+      },
+      {
+        name: "creditor",
+        type: "address",
+        indexed: true,
+      },
+      {
+        name: "amount",
+        type: "uint256",
+        indexed: false,
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "LeaveScheduled",
+    inputs: [
+      {
+        name: "safe",
+        type: "address",
+        indexed: true,
+      },
+      {
+        name: "member",
+        type: "address",
+        indexed: true,
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "MovedToBack",
+    inputs: [
+      {
+        name: "safe",
+        type: "address",
+        indexed: true,
+      },
+      {
+        name: "member",
+        type: "address",
+        indexed: true,
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "OrderChanged",
+    inputs: [
+      {
+        name: "safe",
+        type: "address",
+        indexed: true,
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "RotationStarted",
+    inputs: [
+      {
+        name: "safe",
+        type: "address",
+        indexed: true,
+      },
+      {
+        name: "roundGap",
+        type: "uint32",
+        indexed: false,
+      },
+      {
+        name: "grace",
+        type: "uint32",
+        indexed: false,
+      },
+      {
+        name: "firstPayoutAt",
+        type: "uint64",
+        indexed: false,
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "TurnPaid",
+    inputs: [
+      {
+        name: "safe",
+        type: "address",
+        indexed: true,
+      },
+      {
+        name: "round",
+        type: "uint32",
+        indexed: false,
+      },
+      {
+        name: "holder",
+        type: "address",
+        indexed: true,
+      },
+      {
+        name: "paid",
+        type: "uint256",
+        indexed: false,
+      },
+      {
+        name: "missing",
+        type: "uint256",
+        indexed: false,
+      },
+    ],
+    anonymous: false,
+  },
+] as const;
+
+/** JfkSetup v3: turns a new Safe into a rotating group. */
+export const jfkRotatingSetupAbi = [
+  {
+    type: "function",
+    name: "setupForRotatingGroup",
+    inputs: [
+      {
+        name: "module",
+        type: "address",
+      },
+      {
+        name: "token",
+        type: "address",
+      },
+      {
+        name: "contribution",
+        type: "uint256",
+      },
+      {
+        name: "thresholds",
+        type: "uint16[9]",
+      },
+      {
+        name: "quorumPct",
+        type: "uint8",
+      },
+      {
+        name: "votingPeriod",
+        type: "uint32",
+      },
+      {
+        name: "payGap",
+        type: "uint32",
+      },
+      {
+        name: "roundGap",
+        type: "uint32",
+      },
+      {
+        name: "grace",
+        type: "uint32",
+      },
+      {
+        name: "firstPayoutAt",
+        type: "uint64",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+] as const;
+
+/** Contract v3's new vote: rearrange who still has to collect (rotating groups). */
+export const CHANGE_ORDER_ACTION = 8;

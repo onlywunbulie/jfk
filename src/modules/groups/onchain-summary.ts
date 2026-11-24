@@ -3,6 +3,7 @@ import { getAddress, type Address } from "viem";
 import { CONTRACTS } from "@/lib/chain/addresses";
 import { erc20Abi, jfkModuleAbi } from "@/lib/chain/abis";
 import { publicClient } from "@/lib/chain/client";
+import { moduleFor } from "@/lib/chain/module";
 import { Money } from "@/lib/money";
 
 /**
@@ -49,7 +50,9 @@ export async function chainSummaries(
 
 async function summarise(safe: Address, me: Address | null): Promise<ChainSummary> {
   const client = publicClient();
-  const jfk = { address: CONTRACTS.jfkModule, abi: jfkModuleAbi } as const;
+  const contract = await moduleFor(safe);
+  if (!contract) throw new Error("This vault doesn't run on a contract Rallied reads");
+  const jfk = { address: contract.address, abi: jfkModuleAbi } as const;
   const [group, vault] = await client.multicall({
     allowFailure: false,
     contracts: [

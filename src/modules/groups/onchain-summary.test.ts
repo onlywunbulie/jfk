@@ -36,6 +36,8 @@ function read({ functionName, args }: { functionName: string; args: readonly unk
 }
 vi.mock("@/lib/chain/client", () => ({
   publicClient: () => ({
+    // Which contract runs the vault: Rallied's current one.
+    readContract: async () => true,
     multicall: async ({ contracts }: { contracts: { functionName: string; args: readonly unknown[] }[] }) => contracts.map(read),
   }),
 }));
