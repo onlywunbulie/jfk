@@ -18,18 +18,49 @@ export async function setGroupImageFromLink(
   kind: ImageKind,
   link: string,
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const allowed = await mayChangeImages(userId, groupId);
+  if (!allowed.ok) return allowed;
+
+  const fetched = await fetchPublicImage(link);
+  if (!fetched.ok) return fetched;
+  return saveGroupImage(userId, groupId, kind, fetched.bytes);
+}
+
+/**
+ * The bytes of an image someone sent Rallied directly (Claude uploading a file
+ * the user attached). The same rules as a link: owners and admins, the rate
+ * limit, re-encoded before it's stored.
+ */
+export async function setGroupImageFromBytes(
+  userId: string,
+  groupId: string,
+  kind: ImageKind,
+  bytes: Buffer,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const allowed = await mayChangeImages(userId, groupId);
+  if (!allowed.ok) return allowed;
+  return saveGroupImage(userId, groupId, kind, bytes);
+}
+
+async function mayChangeImages(userId: string, groupId: string): Promise<{ ok: true } | { ok: false; reason: string }> {
   const membership = await getMembership(groupId, userId);
   if (!membership || membership.role === null) return { ok: false, reason: "That group doesn't exist." };
   if (membership.role !== "OWNER" && membership.role !== "ADMIN") {
     return { ok: false, reason: "Only the group's owner and admins can change its picture and banner." };
   }
-
   const limited = await rateLimit(`image:user:${userId}`, LIMITS.imageUpload.limit, LIMITS.imageUpload.windowSeconds);
   if (!limited.ok) return { ok: false, reason: `That's a lot of images at once. Try again in ${Math.ceil(limited.retryAfterSeconds / 60)} minutes.` };
+  return { ok: true };
+}
 
-  const fetched = await fetchPublicImage(link);
-  if (!fetched.ok) return fetched;
-  const processed = await toStoredWebp(fetched.bytes, kind);
+/** Re-encode, store, swap in, and remove the image it replaces. */
+async function saveGroupImage(
+  userId: string,
+  groupId: string,
+  kind: ImageKind,
+  input: Buffer,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const processed = await toStoredWebp(input, kind);
   if (!processed.ok) return processed;
 
   const stored = await storeGroupImage(groupId, kind, processed.bytes);

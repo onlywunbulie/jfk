@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import { DEFAULT_GOVERNANCE, type GovernedAction } from "@/lib/db/schema";
-import { createGroup, createInvite, deleteGroup, getGroupDetail, listGroupsForUser, listMembers } from "@/modules/groups/service";
+import { createGroup, createInvite, deleteGroup, getGroupDetail, getMembership, listGroupsForUser, listMembers } from "@/modules/groups/service";
 import { Money } from "@/lib/money";
 import { contractThresholds } from "@/modules/groups/onchain-setup";
 import { startGroupOnChain } from "@/modules/groups/onchain";
@@ -11,6 +11,7 @@ import { autopayStatus, collectDues, stopAutopay } from "@/modules/groups/onchai
 import { readChainVotes } from "@/modules/groups/onchain-votes";
 import { prepareCoverDebt, readRotation } from "@/modules/groups/onchain-rotation";
 import { setGroupImageFromLink } from "@/modules/groups/images";
+import { issueUploadToken } from "@/lib/upload-token";
 import { nextAcrossGroups, nextForGroup } from "./next-steps";
 import { EXPLORER_URL } from "@/lib/chain/addresses";
 import { HOW_OFTEN, everyText } from "@/lib/schedule-text";
@@ -386,7 +387,7 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
       description:
         "Set a group's picture (square; the side rail) or banner (wide; the top of its sidebar) from an https link to a PNG, JPG or WebP image online, up to 10 MB. " +
         "Rallied downloads it, crops it to shape and saves a fresh copy. Only the group's owner and admins can. " +
-        "A photo the user attached in this chat has no link you can pass: give them the group's add_picture_and_banner link instead (from create_group), " +
+        "A photo the user attached in this chat has no link you can pass: send it with upload_group_image, or give them the group's add_picture_and_banner link (from create_group), " +
         `or ${grant.origin}/groups/<group_id>/about?group-profile=1.`,
       inputSchema: {
         group_id: z.string().min(1).max(64),
@@ -404,6 +405,42 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         set: kind,
         see_it: `${grant.origin}/groups/${group_id}/about?group-profile=1`,
         suggested_next: await suggest(group_id),
+      });
+    },
+  );
+
+  server.registerTool(
+    "upload_group_image",
+    {
+      title: "Get an address to upload a group's picture or banner",
+      description:
+        "For a photo the user attached in this chat: returns a one-time https address (valid 15 minutes, one upload) for one group's picture (square; the side rail) or banner (wide). " +
+        "Send the file there with code, e.g. curl -X PUT --data-binary @<path of the attached file> <upload_url>. " +
+        "Attached files are usually under /mnt/user-data/uploads/. PNG, JPG or WebP, at most 4.5 MB: shrink a bigger photo first. " +
+        "Rallied crops it to shape and saves a fresh copy. Only the group's owner and admins can. " +
+        "If your code can't reach the address (no internet access), give the user the add_picture_and_banner link instead.",
+      inputSchema: {
+        group_id: z.string().min(1).max(64),
+        kind: z.enum(["picture", "banner"]),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    },
+    async ({ group_id, kind }) => {
+      if (!canDraft) return noDraftScope;
+      if (!(await aiAllowedInGroup(userId, group_id))) return notFound();
+      const membership = await getMembership(group_id, userId);
+      if (!membership || membership.role === null) return notFound();
+      if (membership.role !== "OWNER" && membership.role !== "ADMIN") {
+        return refusal("Only the group's owner and admins can change its picture and banner.");
+      }
+      const token = issueUploadToken({ userId, groupId: group_id, kind: kind === "picture" ? "avatar" : "banner" });
+      const uploadUrl = `${grant.origin}/api/upload/group-image/${token}`;
+      return json({
+        upload_url: uploadUrl,
+        how: `curl -X PUT --data-binary @<file> "${uploadUrl}"`,
+        expires_in: "15 minutes, one upload",
+        largest: "4.5 MB",
+        if_it_fails: `${grant.origin}/groups/${group_id}/about?group-profile=1`,
       });
     },
   );
@@ -451,7 +488,8 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
         "Confirm the name, kind, amount, how often and due day with the user first. " +
         "Also ask whether they have a group picture (square; shows beside the group in the side rail) and a banner (wide; across the top of the group's sidebar). " +
         "Once it's created: for an image that's online, pass its https link to set_group_image. " +
-        "For a photo they attached in this chat, you can't send the file itself, so give them add_picture_and_banner, where they upload it in one step. " +
+        "For a photo they attached in this chat: if you can run code that reaches the internet, send it with upload_group_image; " +
+        "if you can't, or that fails, give them add_picture_and_banner, where they upload it in one step. " +
         "Then offer the suggested next steps.",
       inputSchema: {
         name: z.string().min(1).max(60).describe("The group's name, e.g. 'Detty December'"),

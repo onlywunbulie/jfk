@@ -133,6 +133,7 @@ describe("/api/mcp", () => {
       "set_up_auto_pay",
       "start_on_base",
       "stop_auto_pay",
+      "upload_group_image",
     ]);
   });
 
