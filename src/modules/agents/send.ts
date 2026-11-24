@@ -171,12 +171,11 @@ async function buildPayload(
   if (details.rule === "votes_count_share" || details.rule === "share_needed" || details.rule === "vote_days") {
     // CHANGE_RULES replaces the whole rule set, so everything else is kept as it is on Base now.
     const client = publicClient();
-    const [group, settings] = await Promise.all([
-      client.readContract({ address: moduleAddress, abi: jfkModuleAbi, functionName: "getGroup", args: [safe] }),
-      client.readContract({ address: moduleAddress, abi: jfkModuleAbi, functionName: "getGroupSettings", args: [safe] }),
-    ]);
+    const group = await client.readContract({ address: moduleAddress, abi: jfkModuleAbi, functionName: "getGroup", args: [safe] });
     const [, , votingPeriodNow, quorumNow, , thresholdsNow] = group;
-    const [humanVotesOnly] = settings;
+    // "Every vote needs a human" is always sent off: in Rallied, a member can always vote
+    // either here or through their AI, never only here. (The next contract drops the setting.)
+    const humanVotesOnly = false;
     const thresholds = [...thresholdsNow] as number[];
     let quorum = quorumNow;
     let votingPeriod = votingPeriodNow;
