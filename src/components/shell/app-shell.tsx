@@ -8,7 +8,7 @@ import { cn } from "@/lib/cn";
 import { DEFAULT_CHANNEL, MenuIcon, findChannel, sectionsFor, type GroupKind } from "./channels";
 import { AiNudge } from "./ai-nudge";
 import { GroupProfile } from "./group-profile";
-import { BellIcon, EditPencilIcon, GroupIcon, WalletIcon } from "@/components/ui/iconoir";
+import { BellIcon, EditPencilIcon, GroupIcon, UserIcon, WalletIcon } from "@/components/ui/iconoir";
 import { AlertsNudge } from "@/components/alerts/alerts-nudge";
 import { markNotificationsReadAction } from "@/app/(app)/notify-actions";
 import { Inbox, type InboxItem } from "./inbox";
@@ -30,6 +30,8 @@ export interface ShellGroup {
   balance: string;
   /** Open votes this person hasn't cast yet. */
   waiting: number;
+  /** A rotating group on Base: this round instead of a balance. */
+  round?: { paidIn: string; fullPot: string; next: string | null };
   /**
    * What's waiting for this person, by channel slug: their AI's drafts, and
    * votes they haven't cast. Drives the sidebar counts and the rail's dot.
@@ -509,7 +511,16 @@ function GroupSections({ group, pathname }: { group: ShellGroup; pathname: strin
   return (
     <>
       <Section label="Group Stats" gap="gap-4">
-        <Stat icon={<WalletIcon className="size-5" />}>Balance: {group.balance}</Stat>
+        {group.round ? (
+          <>
+            <Stat icon={<WalletIcon className="size-5" />}>
+              This round: {group.round.paidIn} of {group.round.fullPot}
+            </Stat>
+            {group.round.next && <Stat icon={<UserIcon className="size-5" />}>Next payout: {group.round.next}</Stat>}
+          </>
+        ) : (
+          <Stat icon={<WalletIcon className="size-5" />}>Balance: {group.balance}</Stat>
+        )}
         <Stat icon={<GroupIcon className="size-5" />}>Members: {group.memberCount}</Stat>
       </Section>
 

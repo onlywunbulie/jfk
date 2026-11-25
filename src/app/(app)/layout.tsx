@@ -2,12 +2,12 @@ import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import { signInHref } from "@/lib/auth/return-to";
 import { getCurrentUser } from "@/lib/auth/session";
-import { listGroupsForUser } from "@/modules/groups/service";
+import { listGroupsForUser, listMembers } from "@/modules/groups/service";
 import { countVotesAwaitingUser } from "@/modules/governance/service";
 import { countWaitingDrafts } from "@/modules/agents/drafts";
 import { getAiConnection } from "@/modules/agents/connection";
 import { AI_NUDGE_COOKIE } from "@/components/shell/ai-nudge-cookie";
-import { chainSummaries } from "@/modules/groups/onchain-summary";
+import { chainSummaries, type RoundSummary } from "@/modules/groups/onchain-summary";
 import { AppShell, type ShellGroup } from "@/components/shell/app-shell";
 import { ProfilePanel } from "@/components/shell/profile-panel";
 import { PersonInitial } from "@/components/person-initial";
@@ -40,6 +40,18 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   // Groups on Base: the vault and the votes waiting come from Base. The old
   // off-chain records only know about groups from before the move on-chain.
   const onBase = await chainSummaries(groups, user.walletAddress);
+  // Rotating groups name who collects next: the members, for the ones that have a round.
+  const nextNames = new Map(
+    await Promise.all(
+      groups
+        .filter((group) => onBase.get(group.id)?.round)
+        .map(async (group) => {
+          const wallet = onBase.get(group.id)?.round?.nextWallet?.toLowerCase();
+          const member = (await listMembers(group.id, user.id))?.find((m) => m.walletAddress === wallet);
+          return [group.id, member ? (member.userId === user.id ? "You" : member.displayName) : null] as const;
+        }),
+    ),
+  );
 
   const shellGroups: ShellGroup[] = groups.map((group) => {
     const groupDrafts = drafts.get(group.id) ?? {};
@@ -54,6 +66,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       // "$15,000.00": money is always written with its symbol, the same as the vault on Base reads.
       balance: onBase.get(group.id)?.vault ?? group.balance.total.format(),
       waiting: onBase.get(group.id)?.votesWaiting ?? waiting.get(group.id) ?? 0,
+      round: roundFor(onBase.get(group.id)?.round, nextNames.get(group.id) ?? null),
       // What's waiting for this user, by channel: their AI's drafts, and votes they haven't cast.
       needsYou: {
         propose: (groupDrafts.SPEND ?? 0) + (groupDrafts.GROUP_CHANGE ?? 0),
@@ -94,4 +107,16 @@ const TIME = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digi
 /** "Today 07:02" for today, else "24 Nov". */
 function when(at: Date): string {
   return DAY.format(at) === DAY.format(new Date()) ? `Today ${TIME.format(at)}` : DAY.format(at);
+}
+
+const PAYOUT_DAY = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: TIME_ZONE });
+
+/** The sidebar's round line: "$3.00 of $5.00", and "Tola · Mon 1 Dec" for who collects next. */
+function roundFor(round: RoundSummary | undefined, nextName: string | null): ShellGroup["round"] {
+  if (!round) return undefined;
+  return {
+    paidIn: round.paidIn,
+    fullPot: round.fullPot,
+    next: nextName ? `${nextName} · ${PAYOUT_DAY.format(round.nextPayoutAt)}` : null,
+  };
 }

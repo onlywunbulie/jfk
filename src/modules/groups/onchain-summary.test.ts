@@ -30,6 +30,11 @@ function read({ functionName, args }: { functionName: string; args: readonly unk
       return proposal().eligible;
     case "voteOf":
       return proposal().myVote;
+    case "getRotation":
+      // on, cycle, round, turn, nextPayoutAt, roundGap, grace, roundPot, pendingContribution
+      return [true, 1, 2, 1, 1_764_576_000n, 7 * 86400, 86400, 2_000_000n, 0n];
+    case "getOrder":
+      return [["0x00000000000000000000000000000000000000a1", "0x00000000000000000000000000000000000000b2", "0x00000000000000000000000000000000000000c3"], []];
     default:
       throw new Error(`unexpected read ${functionName}`);
   }
@@ -73,4 +78,21 @@ describe("the frame's numbers for a group on Base", () => {
     chain.proposals = [{ status: 1, deadline: now() + 86_400n, eligible: true, myVote: 0 }];
     expect((await chainSummaries([{ id: "g", safeAddress: SAFE }], null)).get("g")).toMatchObject({ votesWaiting: 0 });
   });
+
+  it("for a rotating group, gives this round and who collects next instead of only the vault", async () => {
+    const summaries = await chainSummaries([{ id: "g", safeAddress: SAFE_FOR_ROUND, type: "ROTATING" }], null);
+    expect(summaries.get("g")?.round).toEqual({
+      paidIn: "$2.00",
+      fullPot: "$3.00",
+      nextWallet: "0x00000000000000000000000000000000000000b2",
+      nextPayoutAt: new Date(1_764_576_000 * 1000),
+    });
+  });
+
+  it("a shared pot has no round", async () => {
+    const summaries = await chainSummaries([{ id: "g", safeAddress: SAFE_FOR_ROUND, type: "TREASURY" }], null);
+    expect(summaries.get("g")?.round).toBeUndefined();
+  });
 });
+
+const SAFE_FOR_ROUND = "0x1111111111111111111111111111111111111111";

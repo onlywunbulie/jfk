@@ -1,7 +1,7 @@
 import "server-only";
 import { getAddress, type Address } from "viem";
 import { CONTRACTS } from "@/lib/chain/addresses";
-import { erc20Abi, jfkModuleAbi } from "@/lib/chain/abis";
+import { erc20Abi, jfkModuleAbi, jfkRotationAbi } from "@/lib/chain/abis";
 import { publicClient } from "@/lib/chain/client";
 import { moduleFor } from "@/lib/chain/module";
 import { Money } from "@/lib/money";
@@ -24,10 +24,25 @@ export interface ChainSummary {
   /** "$12.00" */
   vault: string;
   votesWaiting: number;
+  /**
+   * A rotating group (contract v3): this round instead of a balance, since the
+   * vault empties every turn and "$0.00" would look like something's wrong.
+   */
+  round?: RoundSummary;
+}
+
+export interface RoundSummary {
+  /** "$3.00": paid in so far this round. */
+  paidIn: string;
+  /** "$5.00": the whole turn, when everyone has paid. */
+  fullPot: string;
+  /** Who collects next, as a wallet (the caller names them). */
+  nextWallet: Address | null;
+  nextPayoutAt: Date;
 }
 
 export async function chainSummaries(
-  groups: { id: string; safeAddress: string | null }[],
+  groups: { id: string; safeAddress: string | null; type?: "ROTATING" | "TREASURY" }[],
   wallet: string | null,
 ): Promise<Map<string, ChainSummary>> {
   const onBase = groups.filter((group) => group.safeAddress);
@@ -37,7 +52,7 @@ export async function chainSummaries(
   const results = await Promise.all(
     onBase.map(async (group) => {
       try {
-        return [group.id, await summarise(getAddress(group.safeAddress as string), wallet ? getAddress(wallet) : null)] as const;
+        return [group.id, await summarise(getAddress(group.safeAddress as string), wallet ? getAddress(wallet) : null, group.type === "ROTATING")] as const;
       } catch (cause) {
         console.error("[summary] couldn't read Base for a group", cause);
         return null;
@@ -48,7 +63,7 @@ export async function chainSummaries(
   return summaries;
 }
 
-async function summarise(safe: Address, me: Address | null): Promise<ChainSummary> {
+async function summarise(safe: Address, me: Address | null, rotating: boolean): Promise<ChainSummary> {
   const client = publicClient();
   const contract = await moduleFor(safe);
   if (!contract) throw new Error("This vault doesn't run on a contract Rallied reads");
@@ -82,5 +97,33 @@ async function summarise(safe: Address, me: Address | null): Promise<ChainSummar
     }
   }
 
-  return { vault: Money.fromMinor(vault, "USDC").format(), votesWaiting };
+  // The round is extra: if Base can't say, the frame still shows the vault and the votes.
+  const round =
+    rotating && contract.version === 3
+      ? await readRound(contract.address, safe, group[1]).catch((cause) => {
+          console.error("[summary] couldn't read the round", cause);
+          return undefined;
+        })
+      : undefined;
+  return { vault: Money.fromMinor(vault, "USDC").format(), votesWaiting, ...(round ? { round } : {}) };
+}
+
+async function readRound(module: Address, safe: Address, contribution: bigint): Promise<RoundSummary | undefined> {
+  const jfk = { address: module, abi: jfkRotationAbi } as const;
+  const [rotation, orders] = await publicClient().multicall({
+    allowFailure: false,
+    contracts: [
+      { ...jfk, functionName: "getRotation", args: [safe] },
+      { ...jfk, functionName: "getOrder", args: [safe] },
+    ],
+  });
+  const [on, , , turn, nextPayoutAt, , , roundPot] = rotation;
+  if (!on) return undefined;
+  const [order] = orders;
+  return {
+    paidIn: Money.fromMinor(roundPot, "USDC").format(),
+    fullPot: Money.fromMinor(contribution * BigInt(order.length), "USDC").format(),
+    nextWallet: order[Number(turn)] ?? null,
+    nextPayoutAt: new Date(Number(nextPayoutAt) * 1000),
+  };
 }

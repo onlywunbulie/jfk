@@ -24,6 +24,7 @@ import { EditRules } from "./edit-rules";
 import { Votes } from "./votes";
 import { readChainVotes } from "@/modules/groups/onchain-votes";
 import { readDues } from "@/modules/groups/onchain-dues";
+import { chainSummaries } from "@/modules/groups/onchain-summary";
 import { autopayStatus } from "@/modules/groups/onchain-autopay";
 import { readHistory } from "@/modules/groups/onchain-history";
 import { Dues } from "./dues";
@@ -201,6 +202,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
               groupId={group.id}
               autopay={await autopayStatus(user.id, group.id)}
               required={rotating}
+              round={rotating ? (await chainSummaries([group], user.walletAddress)).get(group.id)?.round : undefined}
             />
           </div>
         )}

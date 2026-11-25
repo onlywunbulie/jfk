@@ -8,6 +8,7 @@ import { Money } from "@/lib/money";
 import { contractThresholds } from "@/modules/groups/onchain-setup";
 import { startGroupOnChain } from "@/modules/groups/onchain";
 import { readDues } from "@/modules/groups/onchain-dues";
+import { chainSummaries } from "@/modules/groups/onchain-summary";
 import { autopayStatus, collectDues, stopAutopay } from "@/modules/groups/onchain-autopay";
 import { readChainVotes } from "@/modules/groups/onchain-votes";
 import { prepareCoverDebt, readRotation } from "@/modules/groups/onchain-rotation";
@@ -66,25 +67,31 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
     "list_groups",
     {
       title: "List my groups",
-      description: "Every Rallied group the user is in: name, kind, members, what each member pays, and the balance.",
+      description: "Every Rallied group the user is in: name, kind, members, what each member pays, and the balance (for rotating savings, this round and the next payout date instead).",
       annotations: { readOnlyHint: true },
     },
     async () => {
       const [all, optedOut] = await Promise.all([listGroupsForUser(userId), aiOptedOutGroups(userId)]);
       const groups = all.filter((group) => !optedOut.has(group.id));
+      // Rotating groups: the round, from Base, instead of a balance (their vault empties every turn).
+      const rounds = await chainSummaries(groups.filter((group) => group.type === "ROTATING"), null);
       return json({
         suggested_next: await nextAcrossGroups(userId, groups),
-        groups: groups
-          .map((group) => ({
+        groups: groups.map((group) => {
+          const round = rounds.get(group.id)?.round;
+          return {
           group_id: group.id,
           name: group.name,
           kind: group.type === "ROTATING" ? "rotating savings" : "shared pot",
           your_role: group.role.toLowerCase(),
           members: group.memberCount,
           each_pays: `${money(group.contributionAmount)} every ${everyText(group.cadence, group.intervalWeeks)}`,
-          balance: money(group.balance.total),
+          ...(round
+            ? { this_round: `${round.paidIn} of ${round.fullPot} paid in`, next_payout: round.nextPayoutAt.toISOString().slice(0, 10) }
+            : { balance: money(group.balance.total) }),
           on_base: group.safeAddress !== null,
-        })),
+          };
+        }),
       });
     },
   );

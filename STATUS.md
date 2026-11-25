@@ -58,8 +58,9 @@ _Last updated: 2026-11-25._
 
 ## Next up
 
-1. Rotating groups in the rest of the app: #about, the sidebar and Claude's
-   summary still read partly like a shared pot.
+1. Rotating groups in the rest of the app: the sidebar, #about's dues card and
+   Claude's list_groups now show this round and the next payout (2026-11-25).
+   Still to check: #general and #transactions wording for rotating groups.
 2. Warning when someone invited owes money in another Rallied group (agreed).
 3. Before real money: see Claude memory `before-real-money` (collector key,
    v3 audit, backups), then contract v4 (`contracts/NEXT-VERSION.md`), then mainnet.

@@ -27,11 +27,14 @@ export function Dues({
   groupId,
   autopay,
   required = false,
+  round,
 }: {
   dues: DuesData;
   groupId: string;
   autopay: AutopayStatus | null;
   required?: boolean;
+  /** A rotating group: what's in this round, shown instead of the vault (which empties every turn). */
+  round?: { paidIn: string; fullPot: string };
 }) {
   const router = useRouter();
   const sendToBase = useSendToBase();
@@ -104,11 +107,19 @@ export function Dues({
           Dues
         </h3>
         <p className="text-sm text-ink-muted tabular-nums">
-          Vault holds <span className="text-ink">{dues.vault}</span>
+          {round ? (
+            <>
+              This round: <span className="text-ink">{round.paidIn}</span> of {round.fullPot} paid in
+            </>
+          ) : (
+            <>
+              Vault holds <span className="text-ink">{dues.vault}</span>
+            </>
+          )}
         </p>
       </div>
       <p className="mt-1 text-sm text-ink-muted tabular-nums">
-        {dues.contribution} each, this period
+        {dues.contribution} each, this {round ? "round" : "period"}
       </p>
 
       <ul className="mt-4 divide-y divide-border text-sm">
