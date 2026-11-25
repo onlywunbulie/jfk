@@ -18,6 +18,7 @@ import {
 } from "@/modules/governance/service";
 import { runScheduledCollections } from "@/modules/groups/onchain-autopay";
 import { runTurnPayouts } from "@/modules/groups/onchain-rotation";
+import { checkAllGroups } from "@/modules/notifications/service";
 import { dayKey, hourKey, type JobDefinition } from "./runner";
 
 /**
@@ -224,14 +225,16 @@ export const closeProposals: JobDefinition = {
  */
 export const collectDuesOnBase: JobDefinition = {
   name: "collect-dues-on-base",
-  description: "Collect dues on Base for members with automatic dues on, then pay out due turns",
+  description: "Collect dues on Base for members with automatic dues on, pay out due turns, then tell members what needs them",
   key: (ctx) => `collect-dues-on-base:${hourKey(ctx.now)}`,
   async run(ctx) {
     const outcome = await runScheduledCollections();
     const turns = await runTurnPayouts(ctx.now);
+    // Last, so the morning alerts include what was just collected and paid.
+    const told = await checkAllGroups(ctx.now);
     return {
-      summary: `Collected ${outcome.collected} of ${outcome.tried} with automatic dues on; paid ${turns.paid} of ${turns.tried} rotating turns`,
-      details: { results: outcome.results, turns: turns.results },
+      summary: `Collected ${outcome.collected} of ${outcome.tried} with automatic dues on; paid ${turns.paid} of ${turns.tried} rotating turns; ${told.created} new notifications, ${told.pushed} alerts sent`,
+      details: { results: outcome.results, turns: turns.results, notifications: told },
     };
   },
 };

@@ -1,4 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { after } from "next/server";
 import { z } from "zod";
 
 import { DEFAULT_GOVERNANCE, type GovernedAction } from "@/lib/db/schema";
@@ -21,6 +22,7 @@ import { listProposals } from "@/modules/governance/service";
 import { aiAllowedInGroup, aiOptedOutGroups } from "./connection";
 import { DECISIONS, draftGroupChange, draftRoleChange, draftRuleChange, draftSpend } from "@/modules/agents/drafts";
 import { DRAFT_SCOPE } from "./oauth";
+import { checkGroup, checkUser, listNotifications } from "@/modules/notifications/service";
 
 /**
  * Rallied's MCP server, as one signed-in user's AI sees it. Built fresh for
@@ -43,6 +45,7 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
       instructions:
         "Rallied is a group savings app: friends pool money in USDC on Base, and money only moves when the group votes. " +
         "Use list_groups first to find the user's groups, then get_group or list_proposals with a group_id. " +
+        "For \"what's new\" or a daily check-in, use whats_new. " +
         "Amounts are exact; don't round them. " +
         "The draft_ tools only prepare a draft: confirm the details with the user first, then share the link it returns; " +
         "the user sends it to a vote themselves in Rallied. " +
@@ -197,6 +200,38 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
                 closing: "the pot is split by how much each person paid in",
               }),
         },
+      });
+    },
+  );
+
+  server.registerTool(
+    "whats_new",
+    {
+      title: "What needs me",
+      description:
+        "Across all the user's groups, checked on Base now: what needs them (votes to vote on, votes closing soon, dues due, money owed) " +
+        "and what happened recently (results, payouts). Made for a daily check-in: tell the user the needs_you items first, then the news, briefly. " +
+        "Nothing new is a fine answer; say so in one line.",
+      inputSchema: {
+        days: z.number().int().min(1).max(14).default(1).describe("How many days of news to include"),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ days }) => {
+      const now = new Date();
+      const [optedOut, run] = await Promise.all([aiOptedOutGroups(userId), checkUser(userId, now)]);
+      const since = now.getTime() - days * 24 * 60 * 60 * 1000;
+      const link = (url: string) => `${grant.origin}${url}`;
+      const needs = run.current.filter((notice) => !optedOut.has(notice.groupId) && NEEDS_YOU.test(notice.key));
+      const news = (await listNotifications(userId, 50)).filter(
+        (row) => row.createdAt.getTime() >= since && !(row.groupId && optedOut.has(row.groupId)) && !NEEDS_YOU.test(row.key),
+      );
+      const groups = (await listGroupsForUser(userId)).filter((group) => !optedOut.has(group.id));
+      return json({
+        checked_at: now.toISOString(),
+        needs_you: needs.map((notice) => ({ what: notice.title, detail: notice.body, open: link(notice.url) })),
+        news: news.map((row) => ({ when: row.createdAt.toISOString(), what: row.title, detail: row.body, open: link(row.url) })),
+        suggested_next: await nextAcrossGroups(userId, groups),
       });
     },
   );
@@ -669,6 +704,8 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
       const slow = await chainActionLimit(userId);
       if (slow) return refusal(slow);
       const cast = await castVoteForUser(userId, group_id, vote_id, choice);
+      // If that vote decided it, the group hears the result now.
+      if (cast.ok) after(() => checkGroup(group_id).then(() => undefined));
       if (!cast.ok) {
         if (cast.allowAt) {
           return json({
@@ -821,6 +858,9 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
 
   return server;
 }
+
+/** Notices about something the user should still do, as opposed to news. */
+const NEEDS_YOU = /^(vote-opened|vote-closing|dues|debt):/;
 
 function refusal(text: string) {
   return { isError: true, content: [{ type: "text" as const, text }] };

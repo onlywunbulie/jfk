@@ -13,3 +13,4 @@ export * from "./governance";
 export * from "./chat";
 export * from "./agents";
 export * from "./rate-limits";
+export * from "./notifications";

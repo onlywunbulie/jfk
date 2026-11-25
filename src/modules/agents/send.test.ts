@@ -178,7 +178,7 @@ describe("confirming it was sent", () => {
     if (!made.ok) throw new Error(made.reason);
     chainState.receipt = { status: "success", logs: [proposalOpenedLog(AMAKA_WALLET)] };
 
-    expect(await confirmProposal(amaka, made.draft.id, TX)).toEqual({ ok: true, proposalId: "3" });
+    expect(await confirmProposal(amaka, made.draft.id, TX)).toEqual({ ok: true, proposalId: "3", groupId: made.draft.groupId });
     expect(await listWaitingDrafts(amaka, groupId)).toEqual([]);
     const [row] = await t.db.select().from(agentDrafts);
     expect(row.status).toBe("SENT");

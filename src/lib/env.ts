@@ -58,6 +58,14 @@ const serverEnvSchema = z.object({
    */
   BLOB_STORE_ID: z.string().optional(),
   BLOB_READ_WRITE_TOKEN: z.string().optional(),
+  /**
+   * Phone and browser alerts (Web Push). Generate the pair once with
+   * `npx web-push generate-vapid-keys`. The public half is also read by the
+   * browser to subscribe. With neither set, Rallied still keeps each
+   * member's list of what needs them; it just doesn't alert devices.
+   */
+  NEXT_PUBLIC_VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

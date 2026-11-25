@@ -141,6 +141,13 @@
       "when": 1795043775932,
       "tag": "0019_striped_moonstone",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1795567293406,
+      "tag": "0020_left_shriek",
+      "breakpoints": true
     }
   ]
 }

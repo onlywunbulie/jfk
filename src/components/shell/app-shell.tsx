@@ -8,7 +8,10 @@ import { cn } from "@/lib/cn";
 import { DEFAULT_CHANNEL, MenuIcon, findChannel, sectionsFor, type GroupKind } from "./channels";
 import { AiNudge } from "./ai-nudge";
 import { GroupProfile } from "./group-profile";
-import { EditPencilIcon, GroupIcon, WalletIcon } from "@/components/ui/iconoir";
+import { BellIcon, EditPencilIcon, GroupIcon, WalletIcon } from "@/components/ui/iconoir";
+import { AlertsNudge } from "@/components/alerts/alerts-nudge";
+import { markNotificationsReadAction } from "@/app/(app)/notify-actions";
+import { Inbox, type InboxItem } from "./inbox";
 import { ProfileModal } from "./profile-modal";
 
 export interface ShellGroup {
@@ -53,6 +56,7 @@ export function AppShell({
   userInitial,
   profile,
   aiNudge = false,
+  inbox,
   children,
 }: {
   groups: ShellGroup[];
@@ -62,6 +66,8 @@ export function AppShell({
   profile: ReactNode;
   /** No AI connected yet: show the reminder above the page. */
   aiNudge?: boolean;
+  /** The bell's list, newest first. */
+  inbox: InboxItem[];
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -73,6 +79,22 @@ export function AppShell({
     (current !== null && findChannel(match?.[2] ?? DEFAULT_CHANNEL) !== undefined) || pathname === "/groups/new";
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  // The bell: what it showed when opened stays put while it's open, so "New" doesn't vanish under the reader.
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const [inboxShown, setInboxShown] = useState<InboxItem[]>(inbox);
+  const hasUnread = inbox.some((item) => item.unread);
+  const openInbox = () => {
+    setMenuOpen(false);
+    setInboxShown(inbox);
+    setInboxOpen(true);
+    if (hasUnread) void markNotificationsReadAction();
+  };
+  const router = useRouter();
+  // Closing reloads the shell, so the dot goes once the member has seen what was new.
+  const closeInbox = () => {
+    setInboxOpen(false);
+    if (hasUnread) router.refresh();
+  };
   // The group profile (picture and banner): owners and admins only.
   const [groupProfileOpen, setGroupProfileOpen] = useState(false);
   const [groupDirty, setGroupDirty] = useState(false);
@@ -112,11 +134,17 @@ export function AppShell({
           userInitial={userInitial}
           profileOpen={profileOpen}
           onOpenProfile={openProfile}
+          inboxOpen={inboxOpen}
+          inboxUnread={hasUnread}
+          onOpenInbox={openInbox}
         />
       </div>
 
       <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)}>
         {profile}
+      </ProfileModal>
+      <ProfileModal open={inboxOpen} onClose={closeInbox} labelledBy="inbox-title" closeLabel="Close what needs you">
+        <Inbox items={inboxShown} onNavigate={closeInbox} />
       </ProfileModal>
       {/* Any link ending in ?profile=1 opens the profile over the current screen. */}
       <Suspense fallback={null}>
@@ -150,6 +178,9 @@ export function AppShell({
           userInitial={userInitial}
           profileOpen={profileOpen}
           onOpenProfile={openProfile}
+          inboxOpen={inboxOpen}
+          inboxUnread={hasUnread}
+          onOpenInbox={openInbox}
         />
         {current && (
           <div className="flex min-w-0 flex-1 rounded-[var(--radius-control)] bg-raised p-3">
@@ -186,7 +217,8 @@ export function AppShell({
           </header>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 lg:px-8">
-            {aiNudge && <AiNudge onConnect={openProfile} />}
+            {/* One reminder at a time: connecting an AI first, then alerts. */}
+            {aiNudge ? <AiNudge onConnect={openProfile} /> : <AlertsNudge />}
             {children}
           </div>
         </main>
@@ -292,6 +324,9 @@ function Rail({
   userInitial,
   profileOpen,
   onOpenProfile,
+  inboxOpen,
+  inboxUnread,
+  onOpenInbox,
 }: {
   groups: ShellGroup[];
   currentId: string | null;
@@ -299,7 +334,11 @@ function Rail({
   userInitial: ReactNode;
   profileOpen: boolean;
   onOpenProfile: () => void;
+  inboxOpen: boolean;
+  inboxUnread: boolean;
+  onOpenInbox: () => void;
 }) {
+  const bellLabel = inboxUnread ? "What needs you, something new" : "What needs you";
   return (
     <nav aria-label="Your groups" className="flex h-full w-[var(--rail-width)] shrink-0 flex-col justify-between gap-4">
       <div className="flex min-h-0 flex-col gap-4">
@@ -308,6 +347,23 @@ function Rail({
             <path d="M10 4v12M4 10h12" />
           </svg>
         </RailItem>
+        <button
+          type="button"
+          onClick={onOpenInbox}
+          title={bellLabel}
+          aria-label={bellLabel}
+          aria-haspopup="dialog"
+          aria-expanded={inboxOpen}
+          className={cn(
+            "press relative grid h-[41px] w-[var(--rail-width)] place-items-center rounded-[var(--radius-control)] border-2 bg-raised text-ink-muted transition-colors hover:text-ink",
+            inboxOpen ? "border-accent" : "border-transparent hover:bg-overlay",
+          )}
+        >
+          <BellIcon className="size-5" />
+          {inboxUnread && (
+            <span aria-hidden="true" className="absolute -top-1 -right-1 size-3 rounded-full border-2 border-canvas bg-danger" />
+          )}
+        </button>
         <ul className="flex min-h-0 flex-col gap-4 overflow-y-auto">
           {groups.map((group) => (
             <li key={group.id}>

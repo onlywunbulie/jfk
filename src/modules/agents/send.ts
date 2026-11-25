@@ -202,7 +202,7 @@ export async function confirmProposal(
   userId: string,
   draftId: string,
   txHash: Hex,
-): Promise<{ ok: true; proposalId: string } | { ok: false; reason: string }> {
+): Promise<{ ok: true; proposalId: string; groupId: string } | { ok: false; reason: string }> {
   const draft = await ownWaitingDraft(userId, draftId);
   if (!draft) return { ok: false, reason: "This draft has already been sent or discarded." };
   const [group, members] = await Promise.all([getGroupDetail(draft.groupId, userId), listMembers(draft.groupId, userId)]);
@@ -230,7 +230,7 @@ export async function confirmProposal(
             details: { ...draft.details, sent: { txHash, proposalId } },
           })
           .where(and(eq(agentDrafts.id, draftId), eq(agentDrafts.userId, userId), eq(agentDrafts.status, "WAITING")));
-        return { ok: true, proposalId };
+        return { ok: true, proposalId, groupId: draft.groupId };
       }
     } catch {
       // Not one of our events; keep looking.

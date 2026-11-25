@@ -784,6 +784,31 @@ export interface MemberView {
   joinedAt: Date;
 }
 
+/**
+ * For Rallied's own checks (no viewer): every active group on Base, with the
+ * ids of its active members. Only ids leave here; anything shown to a member
+ * is read again as that member, through the usual permission checks.
+ */
+export async function listGroupsOnBaseWithMembers(
+  only?: string,
+): Promise<{ groupId: string; userIds: string[] }[]> {
+  const rows = await db
+    .select({ groupId: groups.id, userId: groupMembers.userId })
+    .from(groups)
+    .innerJoin(groupMembers, eq(groupMembers.groupId, groups.id))
+    .where(
+      and(
+        eq(groups.status, "ACTIVE"),
+        sql`${groups.safeAddress} is not null`,
+        eq(groupMembers.status, "ACTIVE"),
+        only ? eq(groups.id, only) : undefined,
+      ),
+    );
+  const byGroup = new Map<string, string[]>();
+  for (const row of rows) byGroup.set(row.groupId, [...(byGroup.get(row.groupId) ?? []), row.userId]);
+  return [...byGroup].map(([groupId, userIds]) => ({ groupId, userIds }));
+}
+
 export async function listMembers(
   groupId: string,
   viewerId: string,

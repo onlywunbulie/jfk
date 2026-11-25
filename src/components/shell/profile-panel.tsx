@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { AiConnection } from "@/components/ai-connection";
 import { PersonInitial } from "@/components/person-initial";
 import { NameEditor } from "./name-editor";
+import { AlertsSwitch } from "@/components/alerts/alerts-switch";
 import { isWalletName } from "@/lib/names";
 import { EXPLORER_URL, shortAddress } from "@/lib/chain/addresses";
 import { signOutAction } from "@/app/(app)/actions";
@@ -73,6 +74,14 @@ export async function ProfilePanel({ user }: { user: SessionUser }) {
               : null
           }
         />
+      </section>
+
+      <section aria-labelledby="profile-alerts">
+        <h3 id="profile-alerts" className="text-sm font-semibold text-ink">
+          Alerts
+        </h3>
+        <p className="mt-1 mb-4 text-sm text-ink-muted">Rallied tells you when something needs you. No emails.</p>
+        <AlertsSwitch />
       </section>
 
       <section aria-labelledby="profile-details">

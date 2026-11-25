@@ -1,10 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/session";
 import { chainActionLimit } from "@/lib/rate-limit";
 import { carryOut, prepareVote } from "@/modules/groups/onchain-votes";
+import { checkGroup } from "@/modules/notifications/service";
 
 /**
  * Voting on Base. The member's own wallet casts the vote (prepareVoteAction
@@ -50,6 +52,8 @@ export async function carryOutAction(groupId: string, proposalId: string): Promi
   const parsed = ids.safeParse({ groupId, proposalId });
   if (!parsed.success) return { ok: false, error: "That didn't work. Try again." };
   const result = await carryOut(user.id, parsed.data.groupId, parsed.data.proposalId);
+  // Called after every vote: if it decided the vote, the group hears the result now.
+  if (result.ok || result.reason !== "not_found") after(() => checkGroup(parsed.data.groupId).then(() => undefined));
   if (!result.ok) {
     // Someone else (or an earlier tap) already did it: that's the outcome they wanted.
     if (result.reason === "already_done") return { ok: true };

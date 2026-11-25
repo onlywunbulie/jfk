@@ -11,6 +11,8 @@ import { chainSummaries } from "@/modules/groups/onchain-summary";
 import { AppShell, type ShellGroup } from "@/components/shell/app-shell";
 import { ProfilePanel } from "@/components/shell/profile-panel";
 import { PersonInitial } from "@/components/person-initial";
+import type { InboxItem } from "@/components/shell/inbox";
+import { listNotifications } from "@/modules/notifications/service";
 
 /**
  * The authenticated frame: a rail of groups, the open group's sidebar card
@@ -25,12 +27,13 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   // Back to the page they asked for once signed in (see proxy.ts).
   if (!user) redirect(signInHref((await headers()).get("x-rallied-path")));
 
-  const [groups, waiting, drafts, connection, cookieStore] = await Promise.all([
+  const [groups, waiting, drafts, connection, cookieStore, notices] = await Promise.all([
     listGroupsForUser(user.id),
     countVotesAwaitingUser(user.id),
     countWaitingDrafts(user.id),
     getAiConnection(user.id),
     cookies(),
+    listNotifications(user.id, 30),
   ]);
   // No AI connected and not snoozed: remind them. Rallied is built around one.
   const aiNudge = connection === null && !cookieStore.has(AI_NUDGE_COOKIE);
@@ -67,8 +70,28 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       userInitial={<PersonInitial name={user.displayName} iconClassName="size-4" />}
       profile={<ProfilePanel user={user} />}
       aiNudge={aiNudge}
+      inbox={notices.map(
+        (row): InboxItem => ({
+          id: row.id,
+          title: row.title,
+          body: row.body,
+          url: row.url,
+          when: when(row.createdAt),
+          unread: row.readAt === null,
+        }),
+      )}
     >
       {children}
     </AppShell>
   );
+}
+
+// Lagos time, formatted here so the bell reads the same on every screen and never mismatches when it hydrates.
+const TIME_ZONE = "Africa/Lagos";
+const DAY = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: TIME_ZONE });
+const TIME = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: TIME_ZONE });
+
+/** "Today 07:02" for today, else "24 Nov". */
+function when(at: Date): string {
+  return DAY.format(at) === DAY.format(new Date()) ? `Today ${TIME.format(at)}` : DAY.format(at);
 }

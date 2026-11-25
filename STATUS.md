@@ -4,7 +4,7 @@ Read this first in a new session, then continue from **Next up**. Keep it curren
 update it when a feature lands or a decision is made. Product rules the user set
 are also in Claude's memory (`product-rules-nov`).
 
-_Last updated: 2026-11-24._
+_Last updated: 2026-11-25._
 
 ## Live
 
@@ -34,21 +34,31 @@ _Last updated: 2026-11-24._
 - Group pictures and banners (Vercel Blob), Discord-style group profile panel.
 - Polish: no pills, loading/error screens, $ everywhere, quiet scrollbars,
   Iconoir icons, names for wallet users, connect-Claude reminder.
+- **Notifications (no email, by the user's choice)** in `src/modules/notifications`:
+  Rallied reads Base for what needs each member (new vote, last day to vote,
+  result, your turn paid, a round owed, dues by hand due), stores each once
+  (`notifications`, unique key per user), and alerts their devices by Web
+  Push. Checked right after a proposal is sent or a vote cast (in Rallied or
+  by Claude) and in the 07:00 job. The bell on the rail lists them; the
+  profile has an Alerts switch; a bar offers alerts once (iPhone: Add to Home
+  Screen first). Claude's `whats_new` tool reads the same check.
 
 ## Waiting to be seen working live
 
 - The first rotating payout: test group **Ajo Test** (vault
   0xb151f44e361780b7357ac9ce2d46f0f1472f8467) pays out 2026-11-25 07:00 UTC.
   Check #transactions ("Your turn, round 1") and #payout order ("Last payout").
+- Alerts on a real phone: needs `NEXT_PUBLIC_VAPID_PUBLIC_KEY` and
+  `VAPID_PRIVATE_KEY` in Vercel (`npx web-push generate-vapid-keys`), then a
+  redeploy. Then a morning Claude task that calls whats_new.
 - Voting through Claude; covering a debt; uploading an attached photo through
   Claude (needs code execution with network access in Claude's settings).
 
 ## Next up
 
-1. **Notifications from both Rallied and Claude** (agreed in principle, not
-   started): one live "what needs me" check across the user's groups, shown in
-   Rallied; and a Claude tool (`whats_new`) for a scheduled Claude task to call
-   each morning. **No email notifications** — the user doesn't want them.
+1. Notifications, still to add: someone covering your debt, automatic dues
+   failing, a member joining. Rallied can't start a Claude conversation; Claude
+   only checks when asked or on a schedule the user sets up in Claude.
 2. Rotating groups in the rest of the app: #about, the sidebar and Claude's
    summary still read partly like a shared pot.
 3. Warning when someone invited owes money in another Rallied group (agreed).

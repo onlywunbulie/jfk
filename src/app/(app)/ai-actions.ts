@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/session";
 import { chainActionLimit } from "@/lib/rate-limit";
@@ -8,6 +9,7 @@ import { revokeAllForUser } from "@/modules/agents/oauth";
 import { setAiInGroup } from "@/modules/agents/connection";
 import { discardDraft } from "@/modules/agents/drafts";
 import { confirmProposal, prepareProposal } from "@/modules/agents/send";
+import { checkGroup } from "@/modules/notifications/service";
 
 /**
  * Switching the user's AI off. Disconnect cuts every token at once (Claude's
@@ -65,6 +67,8 @@ export async function confirmSentAction(id: string, hash: string): Promise<{ ok:
   if (!parsedId.success || !parsedHash.success) return { ok: false, error: "That didn't work. Try again." };
   const confirmed = await confirmProposal(user.id, parsedId.data, parsedHash.data as `0x${string}`);
   if (!confirmed.ok) return { ok: false, error: confirmed.reason };
+  // The rest of the group hears about the new vote now, not tomorrow morning.
+  after(() => checkGroup(confirmed.groupId).then(() => undefined));
   revalidatePath("/", "layout");
   return { ok: true };
 }
