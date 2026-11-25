@@ -26,10 +26,12 @@ const FILTERS: { value: Filter; label: string }[] = [
   { value: "out", label: "Out" },
 ];
 
-/** The user's own money, from Base: everything they've paid in, and whether this period is paid. */
+/** The user's own money, from Base: everything they've paid in, and whether this period (or round) is paid. */
 export interface YourMoneyData {
   paidIn: string;
   thisPeriod: string | null;
+  /** A rotating group says "This round", since a turn is paid out each round. */
+  rotating?: boolean;
 }
 
 export function Transactions({
@@ -152,17 +154,18 @@ export function Transactions({
 function YourMoney({ you }: { you: YourMoneyData }) {
   const period = you.thisPeriod ?? "Not paid yet";
   const tone = you.thisPeriod ? "inflow" : "pending";
+  const label = you.rotating ? "This round" : "This period";
   return (
     <section aria-label="Your money">
       <p className="text-sm text-ink-muted sm:hidden">
-        Paid in <span className="text-ink tabular-nums">{you.paidIn}</span> · This period:{" "}
+        Paid in <span className="text-ink tabular-nums">{you.paidIn}</span> · {label}:{" "}
         <span className={tone === "inflow" ? "text-inflow" : "text-pending"}>{period}</span>
       </p>
       <div className="hidden w-fit min-w-72 sm:block">
         <h3 className="text-sm text-ink-muted">Your money</h3>
         <dl className="mt-3 space-y-2 text-sm">
           <Pair label="You've paid in" value={you.paidIn} />
-          <Pair label="This period" value={period} tone={tone} />
+          <Pair label={label} value={period} tone={tone} />
         </dl>
       </div>
     </section>

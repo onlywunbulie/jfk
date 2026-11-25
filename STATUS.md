@@ -44,6 +44,8 @@ _Last updated: 2026-11-25._
   by Claude) and in the 07:00 job. The bell on the rail lists them; the
   profile has an Alerts switch; a bar offers alerts once (iPhone: Add to Home
   Screen first). Claude's `whats_new` tool reads the same check.
+- Rotating groups show this round and the next payout (sidebar, #general,
+  #about dues, #transactions, Claude's list_groups), not a balance.
 
 ## Waiting to be seen working live
 
@@ -58,13 +60,10 @@ _Last updated: 2026-11-25._
 
 ## Next up
 
-1. Rotating groups in the rest of the app: the sidebar, #about's dues card and
-   Claude's list_groups now show this round and the next payout (2026-11-25).
-   Still to check: #general and #transactions wording for rotating groups.
-2. Warning when someone invited owes money in another Rallied group (agreed).
-3. Before real money: see Claude memory `before-real-money` (collector key,
+1. Warning when someone invited owes money in another Rallied group (agreed).
+2. Before real money: see Claude memory `before-real-money` (collector key,
    v3 audit, backups), then contract v4 (`contracts/NEXT-VERSION.md`), then mainnet.
-4. The user's own to-do: a free uptime monitor on `/api/health`.
+3. The user's own to-do: a free uptime monitor on `/api/health`.
 
 ## How to work here
 

@@ -321,11 +321,16 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
       );
     }
 
-    const [dues, votes, history] = await Promise.all([
+    const [dues, votes, history, summaries] = await Promise.all([
       readDues(group.id, user.id),
       readChainVotes(group.id, user.id),
       readHistory(group.id, user.id),
+      rotating ? chainSummaries([group], user.walletAddress) : null,
     ]);
+    // A rotating group: this round and who collects next, instead of a pot that empties every turn.
+    const round = summaries?.get(group.id)?.round;
+    const nextMember = round?.nextWallet ? members.find((m) => m.walletAddress === round.nextWallet?.toLowerCase()) : undefined;
+    const nextName = nextMember ? (nextMember.userId === user.id ? "You" : nextMember.displayName) : null;
     const paid = dues.ok ? dues.members.filter((member) => member.paidThisPeriod) : [];
     const notPaid = dues.ok ? dues.members.filter((member) => !member.paidThisPeriod).map((member) => member.name) : [];
     const open = votes.ok ? votes.votes.filter((vote) => vote.state === "OPEN") : [];
@@ -333,19 +338,34 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
 
     return (
       <div className="flex min-h-full flex-col justify-end">
-        <ChannelIntro title="The group's money">Where the money stands, read from the group&rsquo;s vault on Base.</ChannelIntro>
+        <ChannelIntro title="The group's money">
+          {round ? "Where this round stands, read from Base." : <>Where the money stands, read from the group&rsquo;s vault on Base.</>}
+        </ChannelIntro>
         <DateDivider date={now} label="Today" />
         <RallMessage sentAt={now} footnote={transactionsLink}>
-          <Detail label="In the pot">
-            {dues.ok ? <span className="font-semibold tabular-nums">{dues.vault}</span> : <span className="text-ink-muted">Couldn&rsquo;t reach Base just now</span>}
-          </Detail>
+          {round ? (
+            <>
+              <Detail label="This round">
+                <span className="font-semibold tabular-nums">{round.paidIn}</span>
+                <span className="text-ink-muted tabular-nums"> of {round.fullPot} paid in</span>
+              </Detail>
+              <Detail label="Next payout">
+                {nextName ? `${nextName} · ` : ""}
+                {LONG_DAY.format(round.nextPayoutAt)}
+              </Detail>
+            </>
+          ) : (
+            <Detail label="In the pot">
+              {dues.ok ? <span className="font-semibold tabular-nums">{dues.vault}</span> : <span className="text-ink-muted">Couldn&rsquo;t reach Base just now</span>}
+            </Detail>
+          )}
           {dues.ok && (
-            <Detail label="This period">
+            <Detail label={round ? "Paid this round" : "This period"}>
               {paid.length} of {dues.members.length} paid · {dues.contribution} each
               {notPaid.length > 0 && <span className="text-ink-muted"> · Not yet: {notPaid.join(", ")}</span>}
             </Detail>
           )}
-          <Detail label="Next due">{nextDue}</Detail>
+          {!round && <Detail label="Next due">{nextDue}</Detail>}
           <Detail label="Up for a vote">
             {open.length === 0 ? (
               <span className="text-ink-muted">Nothing right now</span>
@@ -490,7 +510,7 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
         base={`/groups/${group.id}`}
         filter={filter === "mine" || filter === "in" || filter === "out" ? filter : "all"}
         history={history}
-        you={dues.ok && mine ? { paidIn: mine.paidIn, thisPeriod: dues.you.paidThisPeriod } : null}
+        you={dues.ok && mine ? { paidIn: mine.paidIn, thisPeriod: dues.you.paidThisPeriod, rotating } : null}
       />
     );
   }
