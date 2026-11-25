@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { HELPER_POWER, jfkHelperAbi, jfkModuleAbi, safeAbi } from "@/lib/chain/abis";
 import { publicClient } from "@/lib/chain/client";
 import { moduleFor } from "@/lib/chain/module";
-import { relayer } from "@/lib/chain/relayer";
+import { helperKey, isRalliedHelper, signerForHelper } from "@/lib/chain/helper-key";
 import { recordAudit } from "@/modules/audit/service";
 import { getGroupDetail, listMembers } from "./service";
 
@@ -40,7 +40,7 @@ async function contextFor(userId: string, groupId: string): Promise<{ ok: true; 
   if (!group.safeAddress) return { ok: false, reason: "This group isn't on Base yet, so there's nothing to vote on there." };
   const wallet = members.find((m) => m.userId === userId)?.walletAddress;
   if (!wallet) return { ok: false, reason: "Your account has no wallet. Sign in with your wallet first." };
-  const key = relayer();
+  const key = helperKey();
   if (!key) return { ok: false, reason: "Rallied can't vote for anyone right now. Vote in the group's #votes instead." };
   const safe = getAddress(group.safeAddress);
   const contract = await moduleFor(safe).catch(() => null);
@@ -49,16 +49,17 @@ async function contextFor(userId: string, groupId: string): Promise<{ ok: true; 
 }
 
 /** The member's helper as Base has it: Rallied's key or not, and what it may do. */
-async function helperFor(context: Context): Promise<{ ours: boolean; powers: number; expiresAt: bigint; live: boolean }> {
+async function helperFor(context: Context): Promise<{ ours: boolean; powers: number; expiresAt: bigint; live: boolean; key: string }> {
   const helper = await publicClient().readContract({
     address: context.module,
     abi: jfkHelperAbi,
     functionName: "getHelper",
     args: [context.safe, context.wallet],
   });
-  const ours = helper.key.toLowerCase() === context.helperKey.toLowerCase();
+  // Either of Rallied's keys: the helper key, or the fee wallet for setups from before it.
+  const ours = isRalliedHelper(helper.key);
   const live = ours && helper.expiresAt > BigInt(Math.floor(Date.now() / 1000));
-  return { ours, powers: live ? helper.powers : 0, expiresAt: helper.expiresAt, live };
+  return { ours, powers: live ? helper.powers : 0, expiresAt: helper.expiresAt, live, key: helper.key };
 }
 
 /** The powers Rallied's key already has here, to keep when another one is added or taken away. */
@@ -159,7 +160,8 @@ export async function castVoteForUser(userId: string, groupId: string, proposalI
   // Rallied never turns this on, but a group from before could have it.
   if (settings[0]) return { ok: false, reason: "This group's contract only takes votes cast in Rallied. Vote in #votes." };
 
-  const wallet_ = relayer();
+  // The key this member named signs for them.
+  const wallet_ = signerForHelper(helper.key);
   if (!wallet_ || wallet_.account.address === zeroAddress) return { ok: false, reason: "Rallied can't vote for anyone right now." };
   try {
     const txHash = await wallet_.writeContract({

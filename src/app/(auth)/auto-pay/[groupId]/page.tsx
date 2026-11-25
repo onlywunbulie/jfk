@@ -54,6 +54,7 @@ export default async function AutoPayPage({ params, searchParams }: PageProps<"/
             "Stop any time by telling your AI, or here.",
           ]}
           alreadyOn={status?.on === true ? status.until : null}
+          renew={status?.on === true && status.renew}
         />
       )}
     </AuthFrame>

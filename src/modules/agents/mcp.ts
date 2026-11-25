@@ -139,7 +139,9 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
           ? {
               this_period: dues.you.paidThisPeriod ?? "not paid yet",
               automatic: autopay?.on
-                ? `on, until ${autopay.until}`
+                ? autopay.renew
+                  ? `on, until ${autopay.until}, but on Rallied's old key: renew once at ${grant.origin}/auto-pay/${group_id} (one wallet confirm)`
+                  : `on, until ${autopay.until}`
                 : rotating
                   ? "off, and required in a rotating group: set it up now with set_up_auto_pay"
                   : "off (set_up_auto_pay turns it on)",

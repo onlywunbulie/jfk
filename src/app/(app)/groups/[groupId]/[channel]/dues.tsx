@@ -172,6 +172,15 @@ export function Dues({
             {autopay.problem && (
               <p className="mt-1 text-xs text-pending">{autopay.problem}</p>
             )}
+            {autopay.renew && (
+              <p className="mt-1 text-xs text-pending">
+                Rallied has a new, safer key for automatic dues.{" "}
+                <Link href={`/auto-pay/${groupId}` as Route} className="underline underline-offset-4 hover:text-ink">
+                  Renew once
+                </Link>{" "}
+                (one wallet confirm).
+              </p>
+            )}
             {required ? (
               <p className="mt-1 text-xs text-ink-faint">
                 Required in a rotating group, so everyone&rsquo;s turn is paid in

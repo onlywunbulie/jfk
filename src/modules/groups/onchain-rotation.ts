@@ -10,6 +10,7 @@ import { HELPER_POWER, erc20Abi, jfkHelperAbi, jfkModuleAbi, jfkRotationAbi } fr
 import { publicClient } from "@/lib/chain/client";
 import { moduleFor } from "@/lib/chain/module";
 import { relayer } from "@/lib/chain/relayer";
+import { isRalliedHelper } from "@/lib/chain/helper-key";
 import { recordAudit } from "@/modules/audit/service";
 
 /**
@@ -215,7 +216,6 @@ export async function readRotation(
         { address: contract.address, abi: jfkHelperAbi, functionName: "getHelper", args: [safe, wallet] } as const,
       ]),
     });
-    const ralliedKey = relayer()?.account.address.toLowerCase() ?? null;
     const now = BigInt(Math.floor(Date.now() / 1000));
     const byWallet = new Map(members.filter((m) => m.walletAddress).map((m) => [(m.walletAddress as string).toLowerCase(), m]));
     const seat = (wallet: Address, i: number): RotationSeat => {
@@ -230,8 +230,7 @@ export async function readRotation(
         collected,
         leaving,
         debt: reads[i * 3 + 1] as bigint,
-        autoDues:
-          ralliedKey !== null && helper.key.toLowerCase() === ralliedKey && (helper.powers & HELPER_POWER.COLLECT) !== 0 && helper.expiresAt > now,
+        autoDues: isRalliedHelper(helper.key) && (helper.powers & HELPER_POWER.COLLECT) !== 0 && helper.expiresAt > now,
       };
     };
     const lastPayout = await lastPayoutFor(contract.address, safe, (wallet) => {

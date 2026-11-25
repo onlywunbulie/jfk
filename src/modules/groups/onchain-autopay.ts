@@ -7,7 +7,7 @@ import { CONTRACTS } from "@/lib/chain/addresses";
 import { erc20Abi, HELPER_POWER, jfkDuesAbi, jfkHelperAbi, jfkModuleAbi, safeAbi } from "@/lib/chain/abis";
 import { publicClient } from "@/lib/chain/client";
 import { moduleFor } from "@/lib/chain/module";
-import { relayer } from "@/lib/chain/relayer";
+import { helperKey, isOldHelper, isRalliedHelper, signerForHelper } from "@/lib/chain/helper-key";
 import { Money } from "@/lib/money";
 import { everyText } from "@/lib/schedule-text";
 import { recordAudit } from "@/modules/audit/service";
@@ -59,7 +59,7 @@ async function contextFor(userId: string, groupId: string): Promise<ContextResul
   if (!group.safeAddress) return { ok: false, reason: "This group isn't on Base yet. Start it on Base first." };
   const wallet = members.find((m) => m.userId === userId)?.walletAddress;
   if (!wallet) return { ok: false, reason: "Your account has no wallet. Sign in with your wallet first." };
-  const key = relayer();
+  const key = helperKey();
   if (!key) return { ok: false, reason: "Rallied can't collect dues right now. Pay in the group's #about instead." };
   const safe = getAddress(group.safeAddress);
   const vault = await moduleFor(safe).catch(() => null);
@@ -67,8 +67,12 @@ async function contextFor(userId: string, groupId: string): Promise<ContextResul
   return { ok: true, context: { safe, module: vault.address, wallet: getAddress(wallet), helperKey: key.account.address, group } };
 }
 
-/** Is Rallied's key this member's live helper with the collect power, on Base? */
-async function helperOnBase(context: Context): Promise<{ live: boolean; expiresAt: bigint }> {
+/**
+ * Is one of Rallied's keys this member's live helper with the collect power,
+ * on Base? `key` is the one they named, which signs for them; `old` means
+ * it's the fee wallet from before the helper key, and they should renew.
+ */
+async function helperOnBase(context: Context): Promise<{ live: boolean; expiresAt: bigint; key: string; old: boolean }> {
   const helper = await publicClient().readContract({
     address: context.module,
     abi: jfkHelperAbi,
@@ -76,9 +80,8 @@ async function helperOnBase(context: Context): Promise<{ live: boolean; expiresA
     args: [context.safe, context.wallet],
   });
   const now = BigInt(Math.floor(Date.now() / 1000));
-  const live =
-    helper.key.toLowerCase() === context.helperKey.toLowerCase() && (helper.powers & HELPER_POWER.COLLECT) !== 0 && helper.expiresAt > now;
-  return { live, expiresAt: helper.expiresAt };
+  const live = isRalliedHelper(helper.key) && (helper.powers & HELPER_POWER.COLLECT) !== 0 && helper.expiresAt > now;
+  return { live, expiresAt: helper.expiresAt, key: helper.key, old: live && isOldHelper(helper.key) };
 }
 
 // ---------------------------------------------------------------------------
@@ -86,7 +89,14 @@ async function helperOnBase(context: Context): Promise<{ live: boolean; expiresA
 // ---------------------------------------------------------------------------
 
 export type AutopayStatus =
-  | { on: true; until: string; lastCollected: string | null; problem: string | null }
+  | {
+      on: true;
+      until: string;
+      lastCollected: string | null;
+      problem: string | null;
+      /** Set up with Rallied's old key (the fee wallet): still works, but one confirm moves it to the helper key. */
+      renew: boolean;
+    }
   | { on: false; why: "never_set_up" | "stopped" | "ended" | "removed_from_base" };
 
 export async function autopayStatus(userId: string, groupId: string): Promise<AutopayStatus | null> {
@@ -100,10 +110,11 @@ export async function autopayStatus(userId: string, groupId: string): Promise<Au
   if (!row) return { on: false, why: "never_set_up" };
   if (row.stoppedAt) return { on: false, why: "stopped" };
   if (row.endsAt.getTime() <= Date.now()) return { on: false, why: "ended" };
-  const { live } = await helperOnBase(found.context);
+  const { live, old } = await helperOnBase(found.context);
   if (!live) return { on: false, why: "removed_from_base" };
   return {
     on: true,
+    renew: old,
     until: LAGOS_DAY.format(row.endsAt),
     lastCollected: row.lastCollectedAt ? LAGOS_DAY.format(row.lastCollectedAt) : null,
     problem: row.lastProblem,
@@ -141,7 +152,8 @@ export async function prepareAutopay(userId: string, groupId: string): Promise<P
   // Keep what Rallied's key can already do here (voting for the member): this adds collecting.
   const existing = await publicClient().readContract({ address: moduleAddress, abi: jfkHelperAbi, functionName: "getHelper", args: [safe, wallet] });
   const now = BigInt(Math.floor(Date.now() / 1000));
-  const ours = existing.key.toLowerCase() === helperKey.toLowerCase() && existing.expiresAt > now;
+  // Either of Rallied's keys counts, so renewing onto the helper key keeps the member's AI vote too.
+  const ours = isRalliedHelper(existing.key) && existing.expiresAt > now;
   const powers = HELPER_POWER.COLLECT | (ours ? existing.powers : 0);
   const yearOut = now + BigInt(LIFETIME_S);
   const expiresAt = ours && existing.expiresAt > yearOut ? existing.expiresAt : yearOut;
@@ -285,7 +297,7 @@ export async function collectDues(userId: string, groupId: string, when: "asked"
 
   const client = publicClient();
   const jfk = { address: moduleAddress } as const;
-  const [{ live }, chainGroup, settings, last, balance, allowance] = await Promise.all([
+  const [{ live, key: named }, chainGroup, settings, last, balance, allowance] = await Promise.all([
     helperOnBase(found.context),
     client.readContract({ ...jfk, abi: jfkModuleAbi, functionName: "getGroup", args: [safe] }),
     client.readContract({ ...jfk, abi: jfkModuleAbi, functionName: "getGroupSettings", args: [safe] }),
@@ -317,7 +329,8 @@ export async function collectDues(userId: string, groupId: string, when: "asked"
     return await problem(row.id, "allowance_used_up", "The amount you approved has been used up (or the group's dues went up). Set up automatic dues again to approve more.");
   }
 
-  const key = relayer();
+  // Whichever of Rallied's keys this member named signs: old setups keep working until they renew.
+  const key = signerForHelper(named);
   if (!key) return { ok: false, reason: "failed", text: "Rallied can't collect right now. Try again later, or pay in #about." };
   try {
     const txHash = await key.writeContract({ ...jfk, abi: jfkHelperAbi, functionName: "collect", args: [safe, wallet] });

@@ -15,12 +15,15 @@ export function AutoPayConfirm({
   title,
   lines,
   alreadyOn = null,
+  renew = false,
 }: {
   mode: "set-up" | "remove";
   groupId: string;
   title: string;
   lines: string[];
   alreadyOn?: string | null;
+  /** On, but with Rallied's old key: confirming moves it to the new one. */
+  renew?: boolean;
 }) {
   const sendToBase = useSendToBase();
   const [busy, setBusy] = useState<string | null>(null);
@@ -85,7 +88,11 @@ export function AutoPayConfirm({
         ))}
       </div>
       {alreadyOn && mode === "set-up" && (
-        <p className="mt-4 text-sm text-inflow">Already on until {alreadyOn}. Confirming again renews it for a year.</p>
+        <p className="mt-4 text-sm text-inflow">
+          {renew
+            ? "Rallied has a new key just for automatic dues and your AI's votes, kept apart from the one that pays fees. Confirming moves you to it; nothing else changes."
+            : `Already on until ${alreadyOn}. Confirming again renews it for a year.`}
+        </p>
       )}
       <div className="mt-8">
         <Button type="button" size="lg" fullWidth loading={busy !== null} onClick={go}>
