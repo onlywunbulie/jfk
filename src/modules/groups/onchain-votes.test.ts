@@ -40,6 +40,8 @@ const chain = {
   eligible: true,
   executed: [] as unknown[],
   receiptStatus: "success" as "success" | "reverted",
+  /** What debtOf answers, for a wallet being voted in. */
+  debt: 0n,
 };
 
 function read({ functionName, args }: { functionName: string; args?: readonly unknown[] }) {
@@ -56,6 +58,8 @@ function read({ functionName, args }: { functionName: string; args?: readonly un
       return chain.votes[String(args?.[2]).toLowerCase()] ?? 0;
     case "eligibleVoter":
       return chain.eligible;
+    case "debtOf":
+      return chain.debt;
     default:
       throw new Error(`unexpected read ${functionName}`);
   }
@@ -94,6 +98,7 @@ beforeEach(async () => {
   chain.eligible = true;
   chain.executed = [];
   chain.receiptStatus = "success";
+  chain.debt = 0n;
 });
 
 afterAll(async () => {
@@ -247,5 +252,41 @@ describe("carrying out a vote", () => {
     chain.decision = 1;
     expect(await carryOut(stranger.id, groupId, "1")).toEqual({ ok: false, reason: "not_found" });
     expect(chain.executed).toEqual([]);
+  });
+});
+
+describe("adding someone who owes elsewhere", () => {
+  const TOLA_WALLET = "0x00000000000000000000000000000000000070a1";
+
+  /** Tola, in another rotating group on Base; a vote here to add her. */
+  async function voteToAddTola() {
+    const ids = await setup();
+    const [tola] = await t.db.insert(users).values({ displayName: "Tola", walletAddress: TOLA_WALLET }).returning();
+    const { groupId: other } = await createGroup(tola.id, {
+      name: "Lagos Ajo",
+      type: "ROTATING",
+      contributionAmount: Money.fromMajor(10, "USDC"),
+      cadence: "WEEKLY",
+      dueDay: 1,
+    });
+    await t.db.update(groups).set({ safeAddress: "0x00000000000000000000000000000000000000ff", currency: "USDC" }).where(eq(groups.id, other));
+    chain.proposal = { ...chain.proposal, action: 1, payload: encodeAbiParameters([{ type: "address" }], [getAddress(TOLA_WALLET)]) as Hex };
+    return ids;
+  }
+
+  it("says how much they owe, but not where", async () => {
+    const { amaka, groupId } = await voteToAddTola();
+    chain.debt = 20_000_000n;
+    const live = await readChainVotes(groupId, amaka);
+    if (!live.ok) throw new Error(live.reason);
+    expect(live.votes[0].warning).toBe("Tola owes $20.00 in another Rallied group. Missed rounds there aren't paid back yet.");
+    expect(live.votes[0].warning).not.toContain("Lagos Ajo");
+  });
+
+  it("says nothing when they owe nothing", async () => {
+    const { amaka, groupId } = await voteToAddTola();
+    const live = await readChainVotes(groupId, amaka);
+    if (!live.ok) throw new Error(live.reason);
+    expect(live.votes[0].warning).toBeNull();
   });
 });

@@ -46,6 +46,8 @@ _Last updated: 2026-11-25._
   Screen first). Claude's `whats_new` tool reads the same check.
 - Rotating groups show this round and the next payout (sidebar, #general,
   #about dues, #transactions, Claude's list_groups), not a balance.
+- A vote to add someone who owes in another rotating group warns how much
+  (never which group), on the vote card and in Claude's list_proposals.
 
 ## Waiting to be seen working live
 
@@ -60,10 +62,9 @@ _Last updated: 2026-11-25._
 
 ## Next up
 
-1. Warning when someone invited owes money in another Rallied group (agreed).
-2. Before real money: see Claude memory `before-real-money` (collector key,
+1. Before real money: see Claude memory `before-real-money` (collector key,
    v3 audit, backups), then contract v4 (`contracts/NEXT-VERSION.md`), then mainnet.
-3. The user's own to-do: a free uptime monitor on `/api/health`.
+2. The user's own to-do: a free uptime monitor on `/api/health`.
 
 ## How to work here
 

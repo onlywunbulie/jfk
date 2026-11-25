@@ -198,6 +198,11 @@ function VoteCard({ vote, groupId }: { vote: ChainVote; groupId: string }) {
         </p>
       )}
       {vote.detail && <p className="mt-1 text-sm text-ink-muted tabular-nums">{vote.detail}</p>}
+      {vote.warning && (
+        <p role="note" className="mt-3 rounded-[var(--radius-control)] bg-pending-soft px-3 py-2 text-sm text-pending tabular-nums">
+          {vote.warning}
+        </p>
+      )}
 
       <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-4">
         <VoteRing yes={yes.length} no={no.length} eligible={vote.eligible} neededYes={vote.neededYes} />

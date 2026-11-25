@@ -277,6 +277,7 @@ export function buildRalliedServer(grant: { userId: string; scope: string; appNa
               eligible_voters: vote.eligible,
               must_agree: vote.need,
               your_vote: vote.mine?.toLowerCase() ?? (vote.canVote ? "not voted yet" : "not voting"),
+              ...(vote.warning ? { warning: vote.warning } : {}),
             })),
           vote_in_rallied: `${grant.origin}/groups/${group_id}/votes`,
         });

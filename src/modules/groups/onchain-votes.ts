@@ -10,6 +10,7 @@ import { Money } from "@/lib/money";
 import { recordAudit } from "@/modules/audit/service";
 import { getGroupDetail, listMembers, type MemberView } from "./service";
 import { applyOnRallied } from "@/modules/groups/onchain-apply";
+import { owedElsewhere } from "@/modules/groups/onchain-rotation";
 
 /**
  * A group's votes, read from Base. For a group on Base the contract is the
@@ -66,6 +67,8 @@ export interface ChainVote {
   state: "OPEN" | "PASSED" | "DONE" | "FAILED";
   mine: Choice | null;
   canVote: boolean;
+  /** A vote to add someone who owes money in another Rallied group: how much, never where. */
+  warning: string | null;
 }
 
 export type ChainVotes =
@@ -141,8 +144,22 @@ export async function readChainVotes(groupId: string, userId: string): Promise<C
         state,
         mine: mineChoice,
         canVote: state === "OPEN" && mineChoice === null && Boolean(me) && p.deadline > now,
+        warning: null,
       };
     });
+
+    // Adding someone: say if they owe in another rotating group, while the vote is still open.
+    await Promise.all(
+      votes.map(async (vote, i) => {
+        const p = proposals[i];
+        if (vote.state !== "OPEN" || ACTIONS[p.action] !== "ADD_MEMBER") return;
+        const [who] = decodeAbiParameters([{ type: "address" }] as const, p.payload);
+        const { owed, name } = await owedElsewhere(who, groupId);
+        if (owed > 0n) {
+          vote.warning = `${name ?? names(who)} owes ${usdc(owed)} in another Rallied group. Missed rounds there aren't paid back yet.`;
+        }
+      }),
+    );
     return { ok: true, votes, safe };
   } catch (cause) {
     console.error("[votes] couldn't read Base", cause);

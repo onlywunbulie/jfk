@@ -1,11 +1,11 @@
 import "server-only";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull, ne } from "drizzle-orm";
 import { decodeEventLog, encodeEventTopics, encodeFunctionData, getAddress, pad, erc20Abi as standardErc20Abi, type Address, type Hex } from "viem";
 import { CONTRACTS, HISTORY_API_URL, isRalliedModule } from "@/lib/chain/addresses";
 import { Money } from "@/lib/money";
 import { getGroupDetail, listMembers } from "./service";
 import { db } from "@/lib/db";
-import { groups } from "@/lib/db/schema";
+import { groupMembers, groups, users } from "@/lib/db/schema";
 import { HELPER_POWER, erc20Abi, jfkHelperAbi, jfkModuleAbi, jfkRotationAbi } from "@/lib/chain/abis";
 import { publicClient } from "@/lib/chain/client";
 import { moduleFor } from "@/lib/chain/module";
@@ -385,4 +385,34 @@ export async function readCover(userId: string, groupId: string, txHash: Hex): P
     console.error("[rotation] couldn't read the cover", cause);
     return null;
   }
+}
+
+/**
+ * What a wallet owes across Rallied's other rotating groups on Base, for the
+ * warning on a vote to add them (with their Rallied name, since they aren't in
+ * this group yet): one total, never which group, so one group's
+ * business stays its own. Groups they were voted out of count too, since a
+ * debt stays on record. Zero when they've never been in one, or Base can't say.
+ */
+export async function owedElsewhere(wallet: string, exceptGroupId: string): Promise<{ owed: bigint; name: string | null }> {
+  const rows = await db
+    .select({ id: groups.id, safeAddress: groups.safeAddress, name: users.displayName })
+    .from(groups)
+    .innerJoin(groupMembers, eq(groupMembers.groupId, groups.id))
+    .innerJoin(users, eq(users.id, groupMembers.userId))
+    .where(and(eq(users.walletAddress, wallet.toLowerCase()), eq(groups.type, "ROTATING"), isNotNull(groups.safeAddress), ne(groups.id, exceptGroupId)));
+
+  const debts = await Promise.all(
+    [...new Map(rows.map((row) => [row.id, row.safeAddress as string])).values()].map(async (safeAddress) => {
+      try {
+        const safe = getAddress(safeAddress);
+        const contract = await moduleFor(safe);
+        if (!contract || contract.version !== 3) return 0n;
+        return await publicClient().readContract({ address: contract.address, abi: jfkRotationAbi, functionName: "debtOf", args: [safe, getAddress(wallet)] });
+      } catch {
+        return 0n;
+      }
+    }),
+  );
+  return { owed: debts.reduce((sum, debt) => sum + debt, 0n), name: rows[0]?.name ?? null };
 }
