@@ -36,7 +36,9 @@ _Last updated: 2026-11-25._
   Iconoir icons, names for wallet users, connect-Claude reminder.
 - **Notifications (no email, by the user's choice)** in `src/modules/notifications`:
   Rallied reads Base for what needs each member (new vote, last day to vote,
-  result, your turn paid, a round owed, dues by hand due), stores each once
+  result, your turn paid, a round owed, dues by hand due, automatic dues
+  failing; plus someone covering your debt, checked against the covering
+  transaction, and someone joining a group not yet on Base), stores each once
   (`notifications`, unique key per user), and alerts their devices by Web
   Push. Checked right after a proposal is sent or a vote cast (in Rallied or
   by Claude) and in the 07:00 job. The bell on the rail lists them; the
@@ -56,15 +58,12 @@ _Last updated: 2026-11-25._
 
 ## Next up
 
-1. Notifications, still to add: someone covering your debt, automatic dues
-   failing, a member joining. Rallied can't start a Claude conversation; Claude
-   only checks when asked or on a schedule the user sets up in Claude.
-2. Rotating groups in the rest of the app: #about, the sidebar and Claude's
+1. Rotating groups in the rest of the app: #about, the sidebar and Claude's
    summary still read partly like a shared pot.
-3. Warning when someone invited owes money in another Rallied group (agreed).
-4. Before real money: see Claude memory `before-real-money` (collector key,
+2. Warning when someone invited owes money in another Rallied group (agreed).
+3. Before real money: see Claude memory `before-real-money` (collector key,
    v3 audit, backups), then contract v4 (`contracts/NEXT-VERSION.md`), then mainnet.
-5. The user's own to-do: a free uptime monitor on `/api/health`.
+4. The user's own to-do: a free uptime monitor on `/api/health`.
 
 ## How to work here
 

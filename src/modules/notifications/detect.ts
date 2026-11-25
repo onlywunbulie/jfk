@@ -73,6 +73,16 @@ export async function noticesFor(userId: string, groupId: string, now: Date = ne
     }
   }
 
+  // Automatic dues that didn't go through (no USDC left, say): each new problem is news once.
+  if (autopay?.on && autopay.problem) {
+    notices.push({
+      key: `autopay-problem:${groupId}:${autopay.lastCollected ?? "never"}:${autopay.problem}`,
+      title: `Automatic dues didn't go through in ${g}`,
+      body: autopay.problem,
+      url: at("transactions"),
+    });
+  }
+
   // Dues by hand only: with automatic dues on, Rallied collects them anyway.
   if (dues.ok && !dues.you.paidThisPeriod && dues.you.canPay && !autopay?.on) {
     notices.push({

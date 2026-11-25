@@ -1,7 +1,7 @@
 import "server-only";
 import { and, eq, isNotNull } from "drizzle-orm";
-import { decodeEventLog, encodeEventTopics, encodeFunctionData, getAddress, pad, type Address, type Hex } from "viem";
-import { CONTRACTS, HISTORY_API_URL } from "@/lib/chain/addresses";
+import { decodeEventLog, encodeEventTopics, encodeFunctionData, getAddress, pad, erc20Abi as standardErc20Abi, type Address, type Hex } from "viem";
+import { CONTRACTS, HISTORY_API_URL, isRalliedModule } from "@/lib/chain/addresses";
 import { Money } from "@/lib/money";
 import { getGroupDetail, listMembers } from "./service";
 import { db } from "@/lib/db";
@@ -319,4 +319,70 @@ export async function prepareCoverDebt(userId: string, groupId: string, memberId
     data: encodeFunctionData({ abi: jfkRotationAbi, functionName: "coverDebt", args: [safe, getAddress(debtor.walletAddress), debt] }),
   });
   return { ok: true, calls, wallet: payer, amount, debtorName: debtor.displayName, groupName: group.name, self: debtor.userId === userId };
+}
+
+export interface CoverSeen {
+  debtorUserId: string;
+  /** "$10.00": everything this transaction paid off for them. */
+  amount: string;
+  coveredBy: string;
+  groupName: string;
+}
+
+/**
+ * After someone covered a debt: what Base says that transaction did. Only a
+ * successful transaction, sent from the user's own wallet, that paid off
+ * another member's debt in this group counts, so nobody can make Rallied
+ * announce a cover that didn't happen. Null otherwise.
+ */
+export async function readCover(userId: string, groupId: string, txHash: Hex): Promise<CoverSeen | null> {
+  const [group, members] = await Promise.all([getGroupDetail(groupId, userId), listMembers(groupId, userId)]);
+  const me = members?.find((m) => m.userId === userId);
+  if (!group?.safeAddress || !members || !me?.walletAddress) return null;
+  const client = publicClient();
+  try {
+    const [receipt, tx] = await Promise.all([
+      client.waitForTransactionReceipt({ hash: txHash, timeout: 60_000 }),
+      client.getTransaction({ hash: txHash }),
+    ]);
+    if (receipt.status !== "success") return null;
+    // A browser wallet sends the transaction itself; a Coinbase smart wallet goes through a bundler,
+    // so for it the proof is the USDC leaving the user's own wallet in the same transaction.
+    const sentByMe =
+      tx.from.toLowerCase() === me.walletAddress.toLowerCase() ||
+      receipt.logs.some((log) => {
+        if (log.address.toLowerCase() !== CONTRACTS.usdc.toLowerCase()) return false;
+        try {
+          const event = decodeEventLog({ abi: standardErc20Abi, data: log.data, topics: log.topics });
+          return event.eventName === "Transfer" && event.args.from.toLowerCase() === me.walletAddress!.toLowerCase();
+        } catch {
+          return false;
+        }
+      });
+    if (!sentByMe) return null;
+
+    const byWallet = new Map(members.filter((m) => m.walletAddress).map((m) => [(m.walletAddress as string).toLowerCase(), m]));
+    let debtor: (typeof members)[number] | undefined;
+    let total = 0n;
+    for (const log of receipt.logs) {
+      if (!isRalliedModule(log.address)) continue;
+      try {
+        const event = decodeEventLog({ abi: jfkRotationAbi, data: log.data, topics: log.topics });
+        if (event.eventName !== "DebtRepaid") continue;
+        const args = event.args as { safe: string; debtor: string; amount: bigint };
+        if (args.safe.toLowerCase() !== group.safeAddress.toLowerCase()) continue;
+        const who = byWallet.get(args.debtor.toLowerCase());
+        if (!who || who.userId === userId) continue;
+        debtor = who;
+        total += args.amount;
+      } catch {
+        // Not a rotation event; keep looking.
+      }
+    }
+    if (!debtor || total === 0n) return null;
+    return { debtorUserId: debtor.userId, amount: Money.fromMinor(total, "USDC").format(), coveredBy: me.displayName, groupName: group.name };
+  } catch (cause) {
+    console.error("[rotation] couldn't read the cover", cause);
+    return null;
+  }
 }

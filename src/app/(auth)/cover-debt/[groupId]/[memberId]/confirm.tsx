@@ -27,7 +27,7 @@ export function CoverDebtConfirm({ groupId, memberId, title, lines }: { groupId:
         onStage: (stage, wallet) => setBusy(SEND_STAGE_TEXT[wallet][stage]),
       });
       if (!sent.ok) return setError(sent.error);
-      await coveredAction(groupId);
+      await coveredAction(groupId, sent.hash);
       setDone(true);
     } finally {
       setBusy(null);

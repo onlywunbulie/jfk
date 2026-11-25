@@ -2,6 +2,8 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
+import { tellAboutJoin } from "@/modules/notifications/service";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/session";
@@ -128,6 +130,8 @@ export async function acceptInviteAction(code: string): Promise<never> {
   });
 
   if (!result.ok) redirect(`/join/${code}?error=${result.reason}`);
+  // Everyone already in the group hears who joined.
+  if (!result.alreadyMember) after(() => tellAboutJoin(result.groupId, user.id));
 
   revalidatePath("/");
   revalidatePath("/groups");

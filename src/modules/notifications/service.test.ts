@@ -16,13 +16,19 @@ const chain = {
   dues: { ok: false } as Record<string, unknown>,
   autopayOn: false,
   rotation: { ok: false } as Record<string, unknown>,
+  autopayProblem: null as string | null,
+  onBase: true,
+  cover: null as Record<string, unknown> | null,
 };
 const pushed: { endpoint: string; title: string }[] = [];
 let pushOutcome: "sent" | "gone" = "sent";
 
 vi.mock("@/modules/groups/service", () => ({
-  getGroupDetail: async (groupId: string) => ({ id: groupId, name: "Ajo Test", type: chain.type, safeAddress: "0xsafe" }),
-  listMembers: async () => [],
+  getGroupDetail: async (groupId: string) => ({ id: groupId, name: "Ajo Test", type: chain.type, safeAddress: chain.onBase ? "0xsafe" : null }),
+  listMembers: async () => [
+    { userId: ADA, displayName: "Ada" },
+    { userId: BAYO, displayName: "Bayo" },
+  ],
   listGroupsForUser: async () => [{ id: GROUP, safeAddress: "0xsafe" }],
   listGroupsOnBaseWithMembers: async (only?: string) => [{ groupId: only ?? GROUP, userIds: [ADA, BAYO] }],
 }));
@@ -34,9 +40,10 @@ vi.mock("@/modules/groups/onchain-votes", () => ({
 }));
 vi.mock("@/modules/groups/onchain-dues", () => ({ readDues: async () => chain.dues }));
 vi.mock("@/modules/groups/onchain-autopay", () => ({
-  autopayStatus: async () => (chain.autopayOn ? { on: true } : { on: false, why: "never_set_up" }),
+  autopayStatus: async () =>
+    chain.autopayOn ? { on: true, lastCollected: null, problem: chain.autopayProblem } : { on: false, why: "never_set_up" },
 }));
-vi.mock("@/modules/groups/onchain-rotation", () => ({ readRotation: async () => chain.rotation }));
+vi.mock("@/modules/groups/onchain-rotation", () => ({ readRotation: async () => chain.rotation, readCover: async () => chain.cover }));
 vi.mock("@/modules/notifications/push", () => ({
   sendPush: async (device: { endpoint: string }, message: { title: string }) => {
     pushed.push({ endpoint: device.endpoint, title: message.title });
@@ -45,7 +52,7 @@ vi.mock("@/modules/notifications/push", () => ({
 }));
 
 const { users, groups, notifications, pushSubscriptions } = await import("@/lib/db/schema");
-const { checkGroup, checkUser, listNotifications, markAllRead, saveDevice } = await import("@/modules/notifications/service");
+const { checkGroup, checkUser, listNotifications, markAllRead, saveDevice, tellAboutCover, tellAboutJoin } = await import("@/modules/notifications/service");
 
 const [ada] = await t.db.insert(users).values({ displayName: "Ada" }).returning();
 const [bayo] = await t.db.insert(users).values({ displayName: "Bayo" }).returning();
@@ -75,7 +82,7 @@ function vote(overrides: Record<string, unknown> = {}) {
 beforeEach(async () => {
   await t.db.delete(notifications);
   await t.db.delete(pushSubscriptions);
-  Object.assign(chain, { type: "TREASURY", votes: [], dues: { ok: false }, autopayOn: false, rotation: { ok: false } });
+  Object.assign(chain, { type: "TREASURY", votes: [], dues: { ok: false }, autopayOn: false, rotation: { ok: false }, autopayProblem: null, onBase: true, cover: null });
   pushed.length = 0;
   pushOutcome = "sent";
 });
@@ -193,5 +200,32 @@ describe("the bell and Claude", () => {
     const run = await checkUser(BAYO, NOW);
     expect(run.created).toBe(0);
     expect(run.current.map((notice) => notice.key)).toEqual([`vote-opened:${GROUP}:7`]);
+  });
+});
+
+describe("one-off news", () => {
+  it("tells a member their automatic dues didn't go through", async () => {
+    chain.autopayOn = true;
+    chain.autopayProblem = "Your wallet has $2.00 and the dues are $10.00.";
+    await checkGroup(GROUP, NOW);
+    expect(await titles(BAYO)).toEqual(["Automatic dues didn't go through in Ajo Test"]);
+  });
+
+  it("tells the debtor who covered them, once, and only when Base confirms it", async () => {
+    await tellAboutCover(BAYO, GROUP, "0xaa", NOW);
+    expect(await titles(ADA)).toEqual([]);
+
+    chain.cover = { debtorUserId: ADA, amount: "$10.00", coveredBy: "Bayo", groupName: "Ajo Test" };
+    await tellAboutCover(BAYO, GROUP, "0xaa", NOW);
+    await tellAboutCover(BAYO, GROUP, "0xaa", NOW);
+    const rows = await listNotifications(ADA);
+    expect(rows.map((row) => [row.title, row.body])).toEqual([["Bayo covered your debt", "$10.00 of what you owed in Ajo Test is paid off."]]);
+  });
+
+  it("tells everyone else when someone joins a group not yet on Base", async () => {
+    chain.onBase = false;
+    await tellAboutJoin(GROUP, BAYO, NOW);
+    expect(await titles(ADA)).toEqual(["Bayo joined Ajo Test"]);
+    expect(await titles(BAYO)).toEqual([]);
   });
 });

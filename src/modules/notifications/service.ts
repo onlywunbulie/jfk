@@ -2,7 +2,8 @@ import "server-only";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { notifications, pushSubscriptions, type NotificationRow } from "@/lib/db/schema";
-import { listGroupsForUser, listGroupsOnBaseWithMembers } from "@/modules/groups/service";
+import { getGroupDetail, listGroupsForUser, listGroupsOnBaseWithMembers, listMembers } from "@/modules/groups/service";
+import { readCover } from "@/modules/groups/onchain-rotation";
 import { noticesFor, type Notice } from "./detect";
 import { sendPush, type Device } from "./push";
 
@@ -130,4 +131,46 @@ export async function markAllRead(userId: string, now: Date = new Date()): Promi
     .update(notifications)
     .set({ readAt: now })
     .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
+}
+
+// ---------------------------------------------------------------------------
+// Things only one moment knows about
+// ---------------------------------------------------------------------------
+
+/**
+ * Someone covered another member's debt. Base can't say afterwards who paid
+ * (only that it's paid), so this comes from the covering transaction itself,
+ * read and checked in readCover: nobody can announce a cover that didn't happen.
+ */
+export async function tellAboutCover(userId: string, groupId: string, txHash: `0x${string}`, now: Date = new Date()): Promise<void> {
+  const cover = await readCover(userId, groupId, txHash);
+  if (!cover) return;
+  await tell(cover.debtorUserId, groupId, {
+    key: `covered:${txHash}`,
+    title: `${cover.coveredBy} covered your debt`,
+    body: `${cover.amount} of what you owed in ${cover.groupName} is paid off.`,
+    url: `/groups/${groupId}/transactions`,
+  }, now);
+}
+
+/** A member joined a group that isn't on Base yet (on Base, joining is a vote, and its result is the news). */
+export async function tellAboutJoin(groupId: string, joinerId: string, now: Date = new Date()): Promise<void> {
+  // Read as the joiner, who is a member now: the group and everyone else in it.
+  const [group, members] = await Promise.all([getGroupDetail(groupId, joinerId), listMembers(groupId, joinerId)]);
+  const joiner = members?.find((member) => member.userId === joinerId);
+  if (!group || !members || !joiner || group.safeAddress) return;
+  const joined = { name: joiner.displayName, groupName: group.name };
+  for (const { userId } of members.filter((member) => member.userId !== joinerId)) {
+    await tell(userId, groupId, {
+      key: `joined:${groupId}:${joinerId}`,
+      title: `${joined.name} joined ${joined.groupName}`,
+      body: "They're in the group now.",
+      url: `/groups/${groupId}/members`,
+    }, now);
+  }
+}
+
+async function tell(userId: string, groupId: string, notice: Notice, now: Date): Promise<void> {
+  const fresh = await record(userId, groupId, [notice]);
+  await alert(userId, fresh, now);
 }

@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { tellAboutCover } from "@/modules/notifications/service";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/session";
 import { chainActionLimit } from "@/lib/rate-limit";
@@ -30,9 +32,18 @@ export async function prepareCoverDebtAction(
   return { ok: true, calls: prepared.calls, wallet: prepared.wallet };
 }
 
-/** After the wallet confirm: the group's screens read Base again. */
-export async function coveredAction(groupId: string): Promise<void> {
-  await requireUser();
+const txHash = z.string().regex(/^0x[0-9a-fA-F]{64}$/);
+
+/**
+ * After the wallet confirm: the group's screens read Base again, and the
+ * member whose debt it was hears who covered it (checked against the
+ * transaction itself, after the reply).
+ */
+export async function coveredAction(groupId: string, hash: string): Promise<void> {
+  const user = await requireUser();
   const group = id.safeParse(groupId);
-  if (group.success) revalidatePath(`/groups/${group.data}`, "layout");
+  if (!group.success) return;
+  revalidatePath(`/groups/${group.data}`, "layout");
+  const tx = txHash.safeParse(hash);
+  if (tx.success) after(() => tellAboutCover(user.id, group.data, tx.data as `0x${string}`));
 }
