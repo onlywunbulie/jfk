@@ -60,7 +60,7 @@ import {SafeOps} from "./SafeOps.sol";
  *  - Everything a successor module would need to take a group over can be
  *    read from outside, including who each unpaid shortfall is owed to.
  *
- * Still to come before an audit: an independent review of all of the above.
+ * Audit scope and notes for reviewers: AUDIT.md.
  */
 contract JfkModule is ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -85,7 +85,7 @@ contract JfkModule is ReentrancyGuard {
     /// Safe's linked-list head for owners and modules.
     address internal constant SENTINEL = address(0x1);
 
-    string public constant VERSION = "3";
+    string public constant VERSION = "4";
 
     /// What a helper may do for its member. Combine with bitwise or.
     uint8 public constant POWER_PROPOSE = 1;
