@@ -99,7 +99,7 @@ async function summarise(safe: Address, me: Address | null, rotating: boolean): 
 
   // The round is extra: if Base can't say, the frame still shows the vault and the votes.
   const round =
-    rotating && contract.version === 3
+    rotating && contract.version >= 3
       ? await readRound(contract.address, safe, group[1]).catch((cause) => {
           console.error("[summary] couldn't read the round", cause);
           return undefined;

@@ -5,7 +5,8 @@ vi.mock("server-only", () => ({}));
 
 // Which modules each fake vault has switched on.
 const enabled = new Map<string, string[]>([
-  ["0x00000000000000000000000000000000000000a3", [CONTRACTS.jfkModule]],
+  ["0x00000000000000000000000000000000000000a4", [CONTRACTS.jfkModule]],
+  ["0x00000000000000000000000000000000000000a3", [CONTRACTS.jfkModuleV3]],
   ["0x00000000000000000000000000000000000000a2", [CONTRACTS.jfkModuleV2]],
   ["0x00000000000000000000000000000000000000a1", []],
 ]);
@@ -19,8 +20,12 @@ vi.mock("@/lib/chain/client", () => ({
 const { moduleFor } = await import("@/lib/chain/module");
 
 describe("which Rallied contract runs a vault", () => {
-  it("finds v3 for a group started from now on", async () => {
-    expect(await moduleFor("0x00000000000000000000000000000000000000A3")).toEqual({ address: CONTRACTS.jfkModule, version: 3 });
+  it("finds v4 for a group started from now on", async () => {
+    expect(await moduleFor("0x00000000000000000000000000000000000000A4")).toEqual({ address: CONTRACTS.jfkModule, version: 4 });
+  });
+
+  it("finds v3 for a group started from 20 to 26 November", async () => {
+    expect(await moduleFor("0x00000000000000000000000000000000000000A3")).toEqual({ address: CONTRACTS.jfkModuleV3, version: 3 });
   });
 
   it("finds v2 for a group started before", async () => {

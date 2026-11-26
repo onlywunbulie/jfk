@@ -13,11 +13,17 @@ export const chain = baseSepolia;
 
 export const CONTRACTS = {
   /**
-   * Version 3 (2026-11-20): rotating savings. Every group started on Base
-   * from now on uses it, shared pots included (they behave as in v2).
+   * Version 4 (2026-11-26): no human-only voting, automatic dues required to
+   * collect a turn, every shortfall readable. Every group started on Base
+   * from now on uses it, shared pots included.
    */
-  jfkModule: "0x48bB48799153c1a420B8476EaC663C396E291655",
-  jfkSetup: "0xF44DF78ba5BaA9a3F836E446af99930389196f10",
+  jfkModule: "0xd3E740d6ec186be9e4073367dd9f54caae175Db0",
+  jfkSetup: "0x6D418561efABD8270500aD7EA1a2f0079fCA61bE",
+  /**
+   * Version 3 (2026-11-20): rotating savings. Groups started on Base from
+   * 2026-11-20 to 2026-11-26 keep running on it.
+   */
+  jfkModuleV3: "0x48bB48799153c1a420B8476EaC663C396E291655",
   /**
    * Version 2 (2026-11-16): helpers and collected dues. Groups started on
    * Base before v3 keep running on it; `moduleFor` tells them apart.
@@ -31,10 +37,16 @@ export const CONTRACTS = {
 } as const satisfies Record<string, Address>;
 
 /**
- * Rallied's contracts that a group's vault may run on, newest first. Groups
- * started on Base from 2026-11-20 use v3; earlier ones stay on v2.
+ * Rallied's contracts that a group's vault may run on, newest first, with the
+ * version each one is. Groups stay on the version they started on.
  */
-export const RALLIED_MODULES: readonly Address[] = [CONTRACTS.jfkModule, CONTRACTS.jfkModuleV2];
+export const RALLIED_MODULE_VERSIONS = [
+  { address: CONTRACTS.jfkModule, version: 4 },
+  { address: CONTRACTS.jfkModuleV3, version: 3 },
+  { address: CONTRACTS.jfkModuleV2, version: 2 },
+] as const;
+
+export const RALLIED_MODULES: readonly Address[] = RALLIED_MODULE_VERSIONS.map((module) => module.address);
 
 /** Whether an address is one of Rallied's contracts. */
 export function isRalliedModule(address: string): boolean {

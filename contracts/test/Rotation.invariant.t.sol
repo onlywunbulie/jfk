@@ -11,7 +11,8 @@ import {JfkBase, MockUSDC} from "./JfkBase.sol";
 /**
  * Drives one rotating group through random sequences of what really happens:
  * people pay or don't, time passes, payouts go out, friends cover debts,
- * people leave. It counts every dollar in and out.
+ * people leave, automatic dues go on and off (version 4: no automatic dues,
+ * no collecting). It counts every dollar in and out.
  */
 contract RotationHandler is Test {
     JfkModule internal module;
@@ -63,6 +64,17 @@ contract RotationHandler is Test {
         covers++;
     }
 
+    /// Turns a member's automatic dues on (a helper that may collect) or off.
+    function autoDues(uint256 who, bool on) external {
+        address member = people[who % people.length];
+        vm.prank(member);
+        if (on) {
+            try module.setHelper(safe, makeAddr("rallied"), 4, uint64(block.timestamp + 300 days)) {} catch {}
+        } else {
+            try module.revokeHelper(safe) {} catch {}
+        }
+    }
+
     function leave(uint256 who) external {
         address member = people[who % people.length];
         vm.prank(member);
@@ -108,13 +120,26 @@ contract RotationInvariantTest is JfkBase {
         console2.log("payouts", handler.payouts(), "debts covered", handler.covers());
     }
 
-    /// Money owed is always owed to someone: every debt matches a shortfall.
+    /// Money owed is always owed to someone: every debt matches a shortfall, as getShortfalls lists them.
     function invariant_debtsEqualWhatIsOwed() public view {
         uint256 debts;
         for (uint256 i = 0; i < people.length; i++) {
             debts += module.debtOf(safe, people[i]);
         }
-        assertEq(debts, module.totalShort(safe));
+        assertEq(debts, totalShortOf(safe));
+    }
+
+    /// Skipping people to the back never loses or duplicates a seat.
+    function invariant_everyoneHasAtMostOneSeat() public view {
+        (address[] memory order, address[] memory joining) = module.getOrder(safe);
+        for (uint256 i = 0; i < order.length; i++) {
+            for (uint256 j = i + 1; j < order.length; j++) {
+                assertTrue(order[i] != order[j]);
+            }
+            for (uint256 j = 0; j < joining.length; j++) {
+                assertTrue(order[i] != joining[j]);
+            }
+        }
     }
 
     /// Between payouts, the vault holds exactly this round's payments: nothing more, nothing less.

@@ -126,4 +126,20 @@ abstract contract JfkBase is Test {
     function balanceOf(address safe) internal view returns (uint256) {
         return usdc.balanceOf(safe);
     }
+
+    /// Everything owed to members still short, read the way a successor module would (version 4).
+    function totalShortOf(address safe) internal view returns (uint256 total) {
+        (, uint256[] memory amounts) = module.getShortfalls(safe);
+        for (uint256 i = 0; i < amounts.length; i++) {
+            total += amounts[i];
+        }
+    }
+
+    /// The total paid in by everyone in the group, from the public `paidIn` of each owner.
+    function totalPaidInOf(address safe) internal view returns (uint256 total) {
+        address[] memory owners = Safe(payable(safe)).getOwners();
+        for (uint256 i = 0; i < owners.length; i++) {
+            total += module.paidIn(safe, owners[i]);
+        }
+    }
 }

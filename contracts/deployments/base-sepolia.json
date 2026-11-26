@@ -1,22 +1,22 @@
 {
   "chainId": 84532,
   "network": "Base Sepolia",
-  "deployedAt": "2026-11-20",
-  "version": "3",
-  "note": "Rotating savings (Ajo): turns paid out on schedule, public debts, cycles. Shared-pot groups behave as in v2.",
+  "deployedAt": "2026-11-26",
+  "version": "4",
+  "note": "No group can make voting human-only; in a rotating group, no automatic dues means no collecting your turn (it goes to the next member in line who has them); every shortfall readable for a successor. Shared-pot groups behave as in v3.",
   "contracts": {
-    "JfkModule": "0x48bB48799153c1a420B8476EaC663C396E291655",
-    "JfkSetup": "0xF44DF78ba5BaA9a3F836E446af99930389196f10"
+    "JfkModule": "0xd3E740d6ec186be9e4073367dd9f54caae175Db0",
+    "JfkSetup": "0x6D418561efABD8270500aD7EA1a2f0079fCA61bE"
   },
   "libraries": {
-    "RotationLib": "0x7C635fa531b5cCA8597Fb6E5E48CAEB21c3b5a2b",
-    "SafeOps": "0xE911b9Dc5eD417339B18eEef2Be169AE5ECE5fD5"
+    "RotationLib": "0x880D762c726155f9bB24fa2758432bF0Eb836A5F",
+    "SafeOps": "0xa228d3b3D1D2140572d9e42b245971Bb35356fCc"
   },
   "transactions": {
-    "JfkModule": "0x522069646d8063527095166006d7b1be5ff04b3166d75d26b9babe0c184119f1",
-    "JfkSetup": "0x66a9297cfed2e1d00183b6445b9aa2a7ebfd666f521d6b0d994b58c1be79cb60",
-    "RotationLib": "0x6e19ce637f94f19df9de3ef87bf7ba0dfa29bf9e6be87814f566bf9241a1ada1",
-    "SafeOps": "0x4d4cfbe34a88ed8259ed734f562cc535f09c20b95f5681c44392d4c60b221446"
+    "JfkModule": "0xc48718dbfc2f142849d8477c00ec51a32ced8f5b01e5f1c1728dac262cd37e97",
+    "JfkSetup": "0x2b094a2ca0cf871daef40ba3f8540094ac32fc12edbe49ab10de38ba60744bbc",
+    "RotationLib": "0xe5e986920832c32110b3779d005449239928d77d5bf224820022fd8ad954886e",
+    "SafeOps": "0x656993475d4c9587719eced6ac9b14f23491201da555a567cb85b950eb33cec0"
   },
   "dependencies": {
     "SafeL2_v1_4_1": "0x29fcB43b46531BcA003ddC8FCB67FFE91900C762",
@@ -24,6 +24,19 @@
     "USDC": "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
   },
   "previous": [
+    {
+      "version": "3",
+      "deployedAt": "2026-11-20",
+      "note": "Rotating savings (Ajo). Groups started on Base from 2026-11-20 to 2026-11-26 run on it; Rallied reads each vault to tell which version it uses.",
+      "contracts": {
+        "JfkModule": "0x48bB48799153c1a420B8476EaC663C396E291655",
+        "JfkSetup": "0xF44DF78ba5BaA9a3F836E446af99930389196f10"
+      },
+      "libraries": {
+        "RotationLib": "0x7C635fa531b5cCA8597Fb6E5E48CAEB21c3b5a2b",
+        "SafeOps": "0xE911b9Dc5eD417339B18eEef2Be169AE5ECE5fD5"
+      }
+    },
     {
       "version": "2",
       "deployedAt": "2026-11-16",

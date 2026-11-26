@@ -313,6 +313,6 @@ contract MoneyInvariantTest is JfkBase {
     /// What members are recorded as having paid in never exceeds the pot's
     /// total takings, so refunds and the closing split are always backed.
     function invariant_paidInIsBackedByWhatCameIn() public view {
-        assertLe(module.totalPaidIn(safe), handler.moneyIn());
+        assertLe(totalPaidInOf(safe), handler.moneyIn());
     }
 }

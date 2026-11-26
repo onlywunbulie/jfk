@@ -34,8 +34,7 @@ import {SafeOps} from "./SafeOps.sol";
  * a key that acts for them (Rallied holds it, on behalf of the member's AI),
  * with powers the member picks (propose, vote, collect dues) and an expiry.
  * A helper counts exactly as its member, can never move money itself, and is
- * wiped the moment its member leaves, is removed or changes wallet. A group
- * can vote "every vote needs a human", which turns helper votes off.
+ * wiped the moment its member leaves, is removed or changes wallet.
  *
  * Collected dues: a member's helper can pull exactly the group's
  * contribution from the member (through the member's own capped approval)
@@ -47,6 +46,19 @@ import {SafeOps} from "./SafeOps.sol";
  * for missed payments, debts, the order and cycles live in RotationLib,
  * which runs in this contract's context. A shared-pot group behaves exactly
  * as in version 2. Anyone may also cover a member's debt (cover-a-friend).
+ *
+ * Version 4:
+ *  - No "every vote needs a human". A member can always vote either directly
+ *    or through their helper; no group setting can take that away. The rules
+ *    payload keeps its old shape (the last field is ignored) so callers that
+ *    encode it for version 3 still work.
+ *  - In a rotating group, automatic dues are what keep every turn whole, so
+ *    they're required to collect: when the turn comes, anyone in line without
+ *    a live helper holding the collect power goes to the back, and the pot
+ *    goes to the next member who has one. If nobody in line has one, the
+ *    turn is paid as in version 3.
+ *  - Everything a successor module would need to take a group over can be
+ *    read from outside, including who each unpaid shortfall is owed to.
  *
  * Still to come before an audit: an independent review of all of the above.
  */
@@ -144,8 +156,6 @@ contract JfkModule is ReentrancyGuard {
         uint32 votingPeriod;
         uint8 quorumPct;
         bool closed;
-        /// "Every vote needs a human": helpers may not vote. Changed by CHANGE_RULES.
-        bool humanVotesOnly;
         /// The least time between two collected payments from one member.
         uint32 payGap;
         uint16[RULE_COUNT] thresholds;
@@ -259,7 +269,6 @@ contract JfkModule is ReentrancyGuard {
     error NotHelper();
     error HelperExpired();
     error HelperLacksPower();
-    error HumanVotesOnly();
     error TooSoon();
     error NotForRotatingGroups();
     error OnlyRotatingGroups();
@@ -402,10 +411,13 @@ contract JfkModule is ReentrancyGuard {
         Group storage group = _liveGroup(safe);
         RotationLib.State storage rotation = _rotations[safe];
         if (!rotation.on) revert OnlyRotatingGroups();
+        // Version 4: no automatic dues, no collecting. If the payout below isn't due, this is undone with it.
+        RotationLib.skipToAutoDues(rotation, _helpers[safe], safe);
         (address[] memory leavers, uint256 nextContribution) =
             RotationLib.payTurn(rotation, safe, group.token, group.contribution);
         _afterCycle(safe, group, leavers, nextContribution);
     }
+
 
     /**
      * Pay off a member's debt for them, in full or in part: a friend
@@ -499,11 +511,10 @@ contract JfkModule is ReentrancyGuard {
 
     /**
      * A member's helper casts the member's vote. It is the member's one vote,
-     * not an extra one: if either has voted, the other can't. Refused when the
-     * group has voted that every vote needs a human.
+     * not an extra one: if either has voted, the other can't. No group setting
+     * can turn this off (version 4).
      */
     function voteFor(address safe, address member, uint256 id, Choice choice) external {
-        if (_groups[safe].humanVotesOnly) revert HumanVotesOnly();
         _requireHelper(safe, member, POWER_VOTE);
         _vote(safe, id, member, choice);
         emit HelperActed(safe, member, msg.sender, POWER_VOTE, id);
@@ -641,12 +652,12 @@ contract JfkModule is ReentrancyGuard {
             address[] memory rest = abi.decode(payload, (address[]));
             RotationLib.setOrder(_rotations[safe], safe, rest);
         } else if (action == Action.CHANGE_RULES) {
-            (uint16[RULE_COUNT] memory thresholds, uint8 quorumPct, uint32 votingPeriod, bool humanVotesOnly) =
+            // The last field was "every vote needs a human" (version 3); it's ignored now.
+            (uint16[RULE_COUNT] memory thresholds, uint8 quorumPct, uint32 votingPeriod,) =
                 abi.decode(payload, (uint16[9], uint8, uint32, bool)); // 9 == RULE_COUNT: abi.decode needs a literal
             group.thresholds = thresholds;
             group.quorumPct = quorumPct;
             group.votingPeriod = votingPeriod;
-            group.humanVotesOnly = humanVotesOnly;
             emit RulesChanged(safe);
         } else if (action == Action.CLOSE_GROUP) {
             // Rotating: whoever paid into the unfinished round gets it back first.
@@ -753,9 +764,10 @@ contract JfkModule is ReentrancyGuard {
     }
 
     /// The version-2 settings: whether every vote needs a human, and the gap between collections.
+    /// `humanVotesOnly` is always false from version 4; kept so readers built for version 3 still work.
     function getGroupSettings(address safe) external view returns (bool humanVotesOnly, uint32 payGap) {
         Group storage g = _groups[safe];
-        return (g.humanVotesOnly, g.payGap);
+        return (false, g.payGap);
     }
 
     /// A rotating group's state: where it is in the cycle, what's in this round, and when the next payout is due.
@@ -799,16 +811,17 @@ contract JfkModule is ReentrancyGuard {
     }
 
     /// Everything still owed to members who were short, in total.
-    function totalShort(address safe) external view returns (uint256) {
-        return RotationLib.totalShort(_rotations[safe]);
+    /// Every unpaid shortfall, oldest first: who is owed, and how much. What a successor module needs to carry debts over.
+    function getShortfalls(address safe) external view returns (address[] memory creditors, uint256[] memory amounts) {
+        return RotationLib.shortfalls(_rotations[safe]);
     }
 
     function getProposal(address safe, uint256 id) external view returns (Proposal memory) {
         return _proposals[safe][id];
     }
 
-    /// The total paid in by everyone currently in the group.
-    function totalPaidIn(address safe) public view returns (uint256 total) {
+    /// The total paid in by everyone currently in the group (from outside: add up `paidIn` over the Safe's owners).
+    function _totalPaidIn(address safe) internal view returns (uint256 total) {
         address[] memory owners = ISafe(safe).getOwners();
         for (uint256 i = 0; i < owners.length; i++) {
             total += paidIn[safe][owners[i]];
@@ -822,7 +835,7 @@ contract JfkModule is ReentrancyGuard {
      */
     function refundFor(address safe, address member) public view returns (uint256) {
         uint256 paid = paidIn[safe][member];
-        uint256 total = totalPaidIn(safe);
+        uint256 total = _totalPaidIn(safe);
         if (paid == 0 || total == 0) return 0;
         uint256 share = (_groups[safe].token.balanceOf(safe) * paid) / total;
         return share < paid ? share : paid;
@@ -913,26 +926,7 @@ contract JfkModule is ReentrancyGuard {
      */
     function _closeGroup(address safe, Group storage group) internal {
         group.closed = true;
-
-        address[] memory owners = ISafe(safe).getOwners();
-        uint256 balance = group.token.balanceOf(safe);
-        uint256 total = totalPaidIn(safe);
-        uint256 distributed;
-
-        for (uint256 i = 0; i < owners.length; i++) {
-            uint256 share;
-            if (i == owners.length - 1) {
-                share = balance - distributed;
-            } else if (total == 0) {
-                share = balance / owners.length;
-            } else {
-                share = (balance * paidIn[safe][owners[i]]) / total;
-            }
-            paidIn[safe][owners[i]] = 0;
-            distributed += share;
-            if (share > 0) _pay(safe, group.token, owners[i], share);
-        }
-
+        uint256 distributed = SafeOps.closeOut(safe, group.token, paidIn[safe]);
         emit GroupClosed(safe, distributed);
     }
 

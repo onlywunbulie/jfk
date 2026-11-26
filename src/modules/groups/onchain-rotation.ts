@@ -55,7 +55,7 @@ async function payTurnFor(safe: Address, groupId: string, now: Date): Promise<Tu
   const client = publicClient();
   try {
     const contract = await moduleFor(safe);
-    if (!contract || contract.version !== 3) return "not_rotating";
+    if (!contract || contract.version < 3) return "not_rotating";
     const [on, , , , nextPayoutAt] = await client.readContract({
       address: contract.address,
       abi: jfkRotationAbi,
@@ -196,7 +196,7 @@ export async function readRotation(
   const client = publicClient();
   try {
     const contract = await moduleFor(safe);
-    if (!contract || contract.version !== 3) return { ok: false, reason: "not_rotating" };
+    if (!contract || contract.version < 3) return { ok: false, reason: "not_rotating" };
     const jfk = { address: contract.address, abi: jfkRotationAbi } as const;
     const [rotation, orders, group] = await Promise.all([
       client.readContract({ ...jfk, functionName: "getRotation", args: [safe] }),
@@ -406,7 +406,7 @@ export async function owedElsewhere(wallet: string, exceptGroupId: string): Prom
       try {
         const safe = getAddress(safeAddress);
         const contract = await moduleFor(safe);
-        if (!contract || contract.version !== 3) return 0n;
+        if (!contract || contract.version < 3) return 0n;
         return await publicClient().readContract({ address: contract.address, abi: jfkRotationAbi, functionName: "debtOf", args: [safe, getAddress(wallet)] });
       } catch {
         return 0n;

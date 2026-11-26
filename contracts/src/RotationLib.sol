@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ISafe} from "./interfaces/ISafe.sol";
+import {JfkModule} from "./JfkModule.sol";
 import {SafeOps} from "./SafeOps.sol";
 
 /**
@@ -73,6 +74,8 @@ library RotationLib {
         mapping(address => bool) leaving;
     }
 
+    /// JfkModule.POWER_COLLECT: the power that lets a helper collect dues, i.e. automatic dues.
+    uint8 internal constant COLLECT = 4;
     uint32 internal constant MIN_ROUND_GAP = 1 hours;
     uint32 internal constant MAX_ROUND_GAP = 92 days;
     uint32 internal constant MAX_GRACE = 7 days;
@@ -401,6 +404,18 @@ library RotationLib {
     // Views
     // -------------------------------------------------------------------
 
+    /// Every unpaid shortfall, oldest first.
+    function shortfalls(State storage s) external view returns (address[] memory creditors, uint256[] memory amounts) {
+        uint256 count = s.shortfalls.length - s.shortfallHead;
+        creditors = new address[](count);
+        amounts = new uint256[](count);
+        for (uint256 i = 0; i < count; i++) {
+            Shortfall storage sf = s.shortfalls[s.shortfallHead + i];
+            creditors[i] = sf.creditor;
+            amounts[i] = sf.amount;
+        }
+    }
+
     /// What's owed in total, to everyone still short.
     function totalShort(State storage s) external view returns (uint256 total) {
         for (uint256 i = s.shortfallHead; i < s.shortfalls.length; i++) {
@@ -423,6 +438,41 @@ library RotationLib {
             if (sf.amount == 0) s.shortfallHead++;
             _pay(safe, token, sf.creditor, part);
             emit DebtRepaid(safe, debtor, sf.creditor, part);
+        }
+    }
+
+    /**
+     * Version 4, run just before a payout: puts the first member in line who
+     * has automatic dues (a live helper that may collect) at the current
+     * turn. Everyone before
+     * them in line keeps their order and goes behind everyone after them.
+     * Nothing changes if the member up already has them, or if nobody in line
+     * does (the turn is then paid as it stands).
+     */
+    function skipToAutoDues(State storage s, mapping(address => JfkModule.Helper) storage helpers, address safe) external {
+        if (s.turn >= s.order.length) revert NotInRotation();
+        uint256 first = type(uint256).max;
+        for (uint256 i = s.turn; i < s.order.length; i++) {
+            JfkModule.Helper storage helper = helpers[s.order[i]];
+            if (helper.key != address(0) && helper.powers & COLLECT != 0 && block.timestamp < helper.expiresAt) {
+                first = i - s.turn;
+                break;
+            }
+        }
+        if (first == 0 || first == type(uint256).max) return;
+
+        uint256 from = s.turn;
+        uint256 n = s.order.length;
+        address[] memory skipped = new address[](first);
+        for (uint256 i = 0; i < first; i++) {
+            skipped[i] = s.order[from + i];
+        }
+        for (uint256 i = from; i + first < n; i++) {
+            s.order[i] = s.order[i + first];
+        }
+        for (uint256 i = 0; i < first; i++) {
+            s.order[n - first + i] = skipped[i];
+            emit MovedToBack(safe, skipped[i]);
         }
     }
 

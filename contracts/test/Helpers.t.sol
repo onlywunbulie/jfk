@@ -180,26 +180,24 @@ contract HelpersTest is JfkBase {
     }
 
     // ---------------------------------------------------------------------
-    // Every vote needs a human
+    // No group can make voting human-only (version 4)
     // ---------------------------------------------------------------------
 
-    function test_aGroupCanTurnHelperVotesOff() public {
+    function test_noRulesChangeCanTurnHelperVotesOff() public {
+        // A rules change still carries the old "every vote needs a human" flag; it's ignored.
         uint256 change = proposeAs(
             five[0], safe, JfkModule.Action.CHANGE_RULES, abi.encode(defaultThresholds(), QUORUM, VOTING_PERIOD, true)
         );
         voteYes(five, safe, change, 5);
         module.execute(safe, change);
         (bool humanVotesOnly,) = module.getGroupSettings(safe);
-        assertTrue(humanVotesOnly);
+        assertFalse(humanVotesOnly);
 
         nameHelper(five[0], PROPOSE | VOTE);
-        uint256 id = proposeSpendFor(five[0]); // proposing still works
+        uint256 id = proposeSpendFor(five[0]);
         vm.prank(helperKey);
-        vm.expectRevert(JfkModule.HumanVotesOnly.selector);
         module.voteFor(safe, five[0], id, JfkModule.Choice.YES);
-
-        // The member's own vote is untouched.
-        voteAs(five[0], safe, id, JfkModule.Choice.YES);
+        assertEq(uint8(module.voteOf(safe, id, five[0])), uint8(JfkModule.Choice.YES));
     }
 
     // ---------------------------------------------------------------------

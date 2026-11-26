@@ -1,15 +1,21 @@
-# What the next contract version (v4) changes
+# What the next contract version (v5) changes
 
-Decisions already made that need a contract change. Each groups' move to v4
-is by its own vote (MIGRATE_MODULE), as for every version.
+Nothing decided yet. Each group's move to a new version is by its own vote
+(MIGRATE_MODULE), as for every version.
 
-1. **Drop "every vote needs a human"** (`humanVotesOnly`, set by CHANGE_RULES).
-   Members must always be able to vote either in Rallied or through their
-   AI, never only in Rallied. Until then, Rallied never offers the setting
-   and sends it off in every rules change (`src/modules/agents/send.ts`).
+## Done in v4 (2026-11-26, Base Sepolia)
 
-2. **Enforce automatic dues in rotating groups: no automatic dues, no
-   collecting your turn.** When a member's turn comes and they have no live
-   helper with the collect power, they move to the back, as if they'd
-   missed. v3 can't check it, so for now Rallied requires it in the app
-   (#about, #payout order, Claude, the join page).
+1. **No "every vote needs a human".** A member can always vote either directly
+   or through their helper (their AI). The rules payload keeps its old shape;
+   the last field is ignored.
+2. **No automatic dues, no collecting your turn** (rotating groups). When a
+   turn is paid, anyone in line without a live helper holding the collect
+   power goes to the back, keeping their order, and the pot goes to the next
+   member who has one. If nobody in line has one, the turn is paid as before.
+3. **Everything a successor module needs is readable**: `getShortfalls` lists
+   who each unpaid shortfall is owed to. (`totalShort` and `totalPaidIn` are
+   gone from the outside: add up `getShortfalls` and `paidIn` instead.)
+
+Groups started on v3 or v2 stay there; v4 is for groups started from
+2026-11-26, and for mainnet. A v5 that takes groups over would read their
+state through v4's views.

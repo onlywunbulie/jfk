@@ -50,7 +50,7 @@ const smartWalletAbi = [
   },
 ] as const;
 
-/** The only contracts Rallied pays for: its modules (v3 and v2), and USDC (only to approve one of them). */
+/** The only contracts Rallied pays for: its modules (v4, v3 and v2), and USDC (only to approve one of them). Coinbase's paymaster allowlist must list the same. */
 export const SPONSORED_CONTRACTS: readonly Address[] = [...RALLIED_MODULES, CONTRACTS.usdc];
 
 /** The member-side functions of Rallied's contract, the only ones a member's wallet sends. */

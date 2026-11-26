@@ -1,12 +1,12 @@
 import "server-only";
 import type { Address } from "viem";
-import { RALLIED_MODULES } from "./addresses";
+import { RALLIED_MODULES, RALLIED_MODULE_VERSIONS } from "./addresses";
 import { safeAbi } from "./abis";
 import { publicClient } from "./client";
 
 export { RALLIED_MODULES };
 
-export type ModuleVersion = 2 | 3;
+export type ModuleVersion = (typeof RALLIED_MODULE_VERSIONS)[number]["version"];
 
 export interface GroupModule {
   address: Address;
@@ -34,7 +34,7 @@ export async function moduleFor(safe: Address): Promise<GroupModule | null> {
   );
   const index = enabled.findIndex(Boolean);
   if (index === -1) return null;
-  const found: GroupModule = { address: RALLIED_MODULES[index], version: index === 0 ? 3 : 2 };
+  const found: GroupModule = { address: RALLIED_MODULE_VERSIONS[index].address, version: RALLIED_MODULE_VERSIONS[index].version };
   // Not remembered in tests, where one fake vault address plays many groups.
   if (process.env.NODE_ENV !== "test") known.set(key, found);
   return found;

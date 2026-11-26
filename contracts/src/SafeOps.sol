@@ -35,6 +35,40 @@ library SafeOps {
      * exactly the amount.
      */
     function pay(address safe, IERC20 token, address recipient, uint256 amount) external {
+        _pay(safe, token, recipient, amount);
+    }
+
+    /**
+     * Closing a group: everything in the Safe goes to its members, split by
+     * what each paid in (equally if nobody has), the last member taking any
+     * rounding remainder so the Safe ends empty. Clears what each paid in.
+     */
+    function closeOut(address safe, IERC20 token, mapping(address => uint256) storage paidIn)
+        external
+        returns (uint256 distributed)
+    {
+        address[] memory owners = ISafe(safe).getOwners();
+        uint256 balance = token.balanceOf(safe);
+        uint256 total;
+        for (uint256 i = 0; i < owners.length; i++) {
+            total += paidIn[owners[i]];
+        }
+        for (uint256 i = 0; i < owners.length; i++) {
+            uint256 share;
+            if (i == owners.length - 1) {
+                share = balance - distributed;
+            } else if (total == 0) {
+                share = balance / owners.length;
+            } else {
+                share = (balance * paidIn[owners[i]]) / total;
+            }
+            paidIn[owners[i]] = 0;
+            distributed += share;
+            if (share > 0) _pay(safe, token, owners[i], share);
+        }
+    }
+
+    function _pay(address safe, IERC20 token, address recipient, uint256 amount) private {
         uint256 before = token.balanceOf(safe);
         (bool success, bytes memory returnData) = ISafe(safe).execTransactionFromModuleReturnData(
             address(token), 0, abi.encodeCall(IERC20.transfer, (recipient, amount)), ISafe.Operation.Call

@@ -10,10 +10,10 @@ _Last updated: 2026-11-25._
 
 - **Site:** https://getrallied.vercel.app (Vercel + Neon), deploys on push to `master`.
 - **Network:** Base Sepolia (test money only).
-- **Contracts:** v3 `JfkModule` 0x48bB48799153c1a420B8476EaC663C396E291655 and
-  `JfkSetup` 0xF44DF78ba5BaA9a3F836E446af99930389196f10 (record:
-  `contracts/deployments/base-sepolia.json`). New groups start on v3; groups
-  started before 2026-11-20 stay on v2, and `src/lib/chain/module.ts` reads
+- **Contracts:** v4 `JfkModule` 0xd3E740d6ec186be9e4073367dd9f54caae175Db0 and
+  `JfkSetup` 0x6D418561efABD8270500aD7EA1a2f0079fCA61bE (record:
+  `contracts/deployments/base-sepolia.json`). New groups start on v4; groups
+  started earlier stay on v3 or v2, and `src/lib/chain/module.ts` reads
   which contract each vault uses.
 
 ## Working
@@ -66,8 +66,9 @@ _Last updated: 2026-11-25._
 
 ## Next up
 
-1. Before real money: see Claude memory `before-real-money` (collector key,
-   v3 audit, backups), then contract v4 (`contracts/NEXT-VERSION.md`), then mainnet.
+1. Before real money: the v4 audit (outside help), Neon backups, then mainnet.
+   v4 is done (`contracts/NEXT-VERSION.md`). The v4 address must be in
+   Coinbase's paymaster allowlist (the user's CDP dashboard).
 2. The user's own to-do: a free uptime monitor on `/api/health`.
 
 ## How to work here

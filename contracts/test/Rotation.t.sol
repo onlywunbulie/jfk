@@ -143,7 +143,7 @@ contract RotationTest is JfkBase {
 
         assertEq(usdc.balanceOf(people[0]), 3 * CONTRIBUTION, "what came in");
         assertEq(module.debtOf(safe, people[3]), CONTRIBUTION, "the miss is owed");
-        assertEq(module.totalShort(safe), CONTRIBUTION, "and owed to the holder");
+        assertEq(totalShortOf(safe), CONTRIBUTION, "and owed to the holder");
     }
 
     function test_aDebtorsPaymentGoesStraightToWhoeverWasShort() public {
@@ -153,7 +153,7 @@ contract RotationTest is JfkBase {
 
         assertEq(usdc.balanceOf(people[0]) - before, CONTRIBUTION, "the short holder is made whole");
         assertEq(module.debtOf(safe, people[3]), 0);
-        assertEq(module.totalShort(safe), 0);
+        assertEq(totalShortOf(safe), 0);
         (, bool paid,,) = module.rotationStatus(safe, people[3]);
         assertFalse(paid, "settling a debt isn't this round's dues");
     }
@@ -209,7 +209,7 @@ contract RotationTest is JfkBase {
         // They get what the others paid, and owe nothing: they simply didn't pay themselves.
         assertEq(usdc.balanceOf(people[0]), 3 * CONTRIBUTION);
         assertEq(module.debtOf(safe, people[0]), 0);
-        assertEq(module.totalShort(safe), 0);
+        assertEq(totalShortOf(safe), 0);
     }
 
     // --- rule 4: automatic dues stay on after your turn -----------------
@@ -398,5 +398,95 @@ contract RotationTest is JfkBase {
         assertEq(module.debtOf(safe, people[3]), 0);
         address[] memory list = order();
         assertEq(list[list.length - 1], newWallet);
+    }
+
+    // --- automatic dues are required to collect (version 4) ---------------
+
+    uint8 internal constant COLLECT_POWER = 4;
+    uint8 internal constant VOTE_POWER = 2;
+
+    function autoDuesOn(address member) internal {
+        vm.prank(member);
+        module.setHelper(safe, makeAddr("rallied"), COLLECT_POWER, uint64(block.timestamp + 300 days));
+    }
+
+    function test_withoutAutoDuesYourTurnGoesToTheNextWhoHasThem() public {
+        autoDuesOn(people[1]);
+        autoDuesOn(people[2]);
+        everyonePays();
+        dueNow();
+        module.payTurn(safe);
+
+        // people[0] had no automatic dues: people[1] collects, people[0] goes behind everyone.
+        assertEq(usdc.balanceOf(people[1]), 4 * CONTRIBUTION);
+        assertEq(usdc.balanceOf(people[0]), 0);
+        address[] memory list = order();
+        assertEq(list[0], people[1]);
+        assertEq(list[1], people[2]);
+        assertEq(list[2], people[3]);
+        assertEq(list[3], people[0]);
+        (,, bool collected,) = module.rotationStatus(safe, people[0]);
+        assertFalse(collected);
+    }
+
+    function test_everyoneSkippedKeepsTheirOrderAtTheBack() public {
+        autoDuesOn(people[2]);
+        everyonePays();
+        dueNow();
+        module.payTurn(safe);
+
+        assertEq(usdc.balanceOf(people[2]), 4 * CONTRIBUTION);
+        address[] memory list = order();
+        assertEq(list[0], people[2]);
+        assertEq(list[1], people[3]);
+        assertEq(list[2], people[0]);
+        assertEq(list[3], people[1]);
+    }
+
+    function test_whenNobodyHasAutoDuesTheTurnIsPaidAsItStands() public {
+        everyonePays();
+        dueNow();
+        module.payTurn(safe);
+        assertEq(usdc.balanceOf(people[0]), 4 * CONTRIBUTION);
+        assertEq(order()[0], people[0]);
+    }
+
+    function test_anExpiredHelperOrOneThatCantCollectDoesntCount() public {
+        vm.prank(people[0]);
+        module.setHelper(safe, makeAddr("rallied"), VOTE_POWER, uint64(block.timestamp + 300 days));
+        vm.prank(people[1]);
+        module.setHelper(safe, makeAddr("rallied"), COLLECT_POWER, uint64(block.timestamp + 1 days));
+        autoDuesOn(people[2]);
+        everyonePays();
+        dueNow(); // a round later: people[1]'s helper has expired
+
+        module.payTurn(safe);
+        assertEq(usdc.balanceOf(people[2]), 4 * CONTRIBUTION);
+    }
+
+    function test_theHolderWithAutoDuesCollectsAsBefore() public {
+        autoDuesOn(people[0]);
+        everyonePays();
+        dueNow();
+        module.payTurn(safe);
+        assertEq(usdc.balanceOf(people[0]), 4 * CONTRIBUTION);
+        assertEq(order()[3], people[3]);
+    }
+
+    // --- everything a successor needs can be read (version 4) ------------
+
+    function test_shortfallsSayWhoIsOwedAndHowMuch() public {
+        contributeAs(safe, people[0]);
+        contributeAs(safe, people[1]);
+        contributeAs(safe, people[2]);
+        dueNow();
+        vm.warp(block.timestamp + GRACE);
+        module.payTurn(safe);
+
+        (address[] memory creditors, uint256[] memory amounts) = module.getShortfalls(safe);
+        assertEq(creditors.length, 1);
+        assertEq(creditors[0], people[0]);
+        assertEq(amounts[0], CONTRIBUTION);
+        assertEq(totalShortOf(safe), CONTRIBUTION);
     }
 }

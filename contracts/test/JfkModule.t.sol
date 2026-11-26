@@ -85,7 +85,7 @@ contract JfkModuleTest is JfkBase {
         contributeAs(safe, five[0]);
         assertEq(balanceOf(safe), CONTRIBUTION);
         assertEq(module.paidIn(safe, five[0]), CONTRIBUTION);
-        assertEq(module.totalPaidIn(safe), CONTRIBUTION);
+        assertEq(totalPaidInOf(safe), CONTRIBUTION);
     }
 
     function test_onlyMembersCanPayIn() public {
@@ -325,7 +325,7 @@ contract JfkModuleTest is JfkBase {
         assertEq(usdc.balanceOf(five[4]), 0, "nothing comes back");
         assertEq(balanceOf(safe), 250 * USD, "it stays with the group");
         assertEq(module.paidIn(safe, five[4]), 0);
-        assertEq(module.totalPaidIn(safe), 200 * USD);
+        assertEq(totalPaidInOf(safe), 200 * USD);
     }
 
     function test_theLastMemberCannotLeave() public {
