@@ -18,6 +18,7 @@
     "webhook:replay": "tsx scripts/replay-webhook.mts",
     "simulate": "node --conditions=react-server --import tsx scripts/simulate.mts",
     "jobs": "node --conditions=react-server --import tsx scripts/jobs.mts",
+    "exit:plan": "node --conditions=react-server --import tsx scripts/emergency-exit.mts",
     "illustrations": "tsx scripts/illustrations.mts"
   },
   "dependencies": {

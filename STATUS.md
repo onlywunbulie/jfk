@@ -48,6 +48,11 @@ _Last updated: 2026-11-25._
   #about dues, #transactions, Claude's list_groups), not a balance.
 - A vote to add someone who owes in another rotating group warns how much
   (never which group), on the vote card and in Claude's list_proposals.
+- **Emergency exit** (`/groups/<id>/exit`, linked from #rules): every member
+  approves one payout on Base from their own wallet (`approveHash`; they pay
+  the tiny fee), then anyone pays everyone out, without Rallied's contract or
+  database. `pnpm exit:plan <vault>` and `EMERGENCY-EXIT.md` do it with no
+  Rallied at all. Tested with smart-wallet owners (`EmergencyExit.t.sol`).
 - A separate helper key (`HELPER_PRIVATE_KEY`, `src/lib/chain/helper-key.ts`)
   collects automatic dues and casts AI votes; the fee wallet only pays fees,
   starts groups, carries out votes and pays turns. Setups on the old key keep

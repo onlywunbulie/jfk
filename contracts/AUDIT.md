@@ -79,6 +79,7 @@ proxy factory, the L2 singleton and `JfkSetup`, exactly as on chain.
 | `test/Money.invariant.t.sol` | Shared pots under random sequences of everything members can do |
 | `test/Rotation.invariant.t.sol` | Rotating groups under random paying, waiting, payouts, covers, leaving and helpers going on and off |
 | `test/Tally.fuzz.t.sol` | The vote maths against a port of the app's TypeScript (`src/modules/governance/threshold.ts`) |
+| `test/EmergencyExit.t.sol` | The emergency exit with smart-contract-wallet members: every owner `approveHash`es one MultiSend payout, then anyone executes it; one missing approval or a changed payout fails; works with the module switched off |
 
 ## 4. Who can do what
 

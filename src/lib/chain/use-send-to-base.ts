@@ -70,6 +70,11 @@ export function useSendToBase() {
     /** The wallet this account signed in with; any other is refused. */
     wallet: string;
     onStage?: (stage: SendStage, wallet: Wallet) => void;
+    /**
+     * Ask Rallied to pay the network fee (the default). The emergency exit
+     * doesn't: it must work even when Rallied can't, so the member's wallet pays.
+     */
+    sponsored?: boolean;
   }): Promise<SendResult> {
     let wallet: Wallet = "base";
     try {
@@ -89,7 +94,7 @@ export function useSendToBase() {
           calls: input.calls,
           chainId: chain.id,
           // Rallied pays the network fee. The wallet calls this address itself.
-          capabilities: { paymasterService: { url: `${window.location.origin}/api/paymaster` } },
+          ...(input.sponsored === false ? {} : { capabilities: { paymasterService: { url: `${window.location.origin}/api/paymaster` } } }),
         });
         input.onStage?.("sending", wallet);
         // The last receipt is the one that did the work (the proposal, the vote, the payment).

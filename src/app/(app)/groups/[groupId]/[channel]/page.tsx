@@ -268,10 +268,21 @@ export default async function ChannelPage({ params, searchParams }: PageProps<"/
               ))}
             </ul>
           </Detail>
-          <Detail label="Members' AIs">Can read and draft, and pay their member&rsquo;s dues if allowed. Only members vote and spend.</Detail>
+          <Detail label="Members' AIs">Can read and draft, pay their member&rsquo;s dues, and vote the way their member says, if allowed. Only members spend.</Detail>
           <Detail label="Leaving">You give up what you&rsquo;ve paid in</Detail>
           <Detail label="Voted out">You get back what you paid in</Detail>
           <Detail label="Closing">The pot is split by how much each person paid in</Detail>
+          {group.safeAddress && (
+            <Detail label="Emergency exit">
+              If Rallied ever stops working, all of you together can pay the vault out to yourselves. Nobody can do it alone.{" "}
+              <Link
+                href={`/groups/${group.id}/exit` as Route}
+                className="text-ink underline decoration-ink-faint underline-offset-4 hover:decoration-ink"
+              >
+                Emergency exit
+              </Link>
+            </Detail>
+          )}
         </RallMessage>
       </div>
     );

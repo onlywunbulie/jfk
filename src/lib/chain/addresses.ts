@@ -32,6 +32,8 @@ export const CONTRACTS = {
   /** Safe v1.4.1, the L2 flavour that emits events for indexing. */
   safeL2Singleton: "0x29fcB43b46531BcA003ddC8FCB67FFE91900C762",
   safeProxyFactory: "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67",
+  /** Safe v1.4.1's MultiSendCallOnly (the canonical deployment): one emergency-exit transaction pays every member. */
+  multiSendCallOnly: "0x9641d764fc13c8B624c04430C7356C1C7C8102e2",
   /** Circle's USDC on Base Sepolia. Six decimals. */
   usdc: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
 } as const satisfies Record<string, Address>;
