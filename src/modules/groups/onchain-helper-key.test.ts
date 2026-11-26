@@ -112,7 +112,7 @@ describe("the helper key", () => {
     const { amaka, groupId } = await setupWithDues(FEE_WALLET, 4 | 2);
     const prepared = await prepareAutopay(amaka, groupId);
     if (!prepared.ok) throw new Error(prepared.reason);
-    const [, key, powers] = decodeFunctionData({ abi: jfkHelperAbi, data: prepared.calls[0].data }).args as [string, string, number];
+    const [, key, powers] = decodeFunctionData({ abi: jfkHelperAbi, data: prepared.calls[0].data }).args as [string, string, number, bigint];
     expect(key).toBe(HELPER);
     expect(powers).toBe(4 | 2);
   });
